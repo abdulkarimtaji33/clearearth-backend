@@ -1,0 +1,2449 @@
+{
+  "info": {
+    "_postman_id": "clearearth-erp-v2",
+    "name": "ClearEarth ERP API - Complete",
+    "description": "Complete API Collection - All 186 Endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/v1"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Authentication",
+      "item": [
+        {
+          "name": "Register Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantName\": \"Test Company\",\n  \"companyName\": \"Test LLC\",\n  \"email\": \"admin@test.com\",\n  \"password\": \"Test123456\",\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\",\n  \"phone\": \"+971501234567\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.environment.set('access_token', data.accessToken);",
+                  "  pm.environment.set('refresh_token', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"Test123456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.environment.set('access_token', data.accessToken);",
+                  "  pm.environment.set('refresh_token', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/auth/me"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/refresh-token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/change-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Test123456\",\n  \"newPassword\": \"NewPass123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/forgot-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset_token\",\n  \"newPassword\": \"NewPass123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/1"
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@test.com\",\n  \"password\": \"User123456\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"phone\": \"+971501234567\",\n  \"roleId\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/users/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Name\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/users/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Roles & Permissions",
+      "item": [
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/roles"
+          }
+        },
+        {
+          "name": "Get Role by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/roles/1"
+          }
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/roles",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Manager\",\n  \"description\": \"Manager role\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/roles/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/roles/1"
+          }
+        },
+        {
+          "name": "Get All Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/roles/permissions/all"
+          }
+        },
+        {
+          "name": "Assign Permissions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/roles/1/permissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    1,\n    2,\n    3\n  ]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Clients",
+      "item": [
+        {
+          "name": "List Clients",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/clients?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Client by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/clients/1"
+          }
+        },
+        {
+          "name": "Get Client Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/clients/1/statistics"
+          }
+        },
+        {
+          "name": "Create Client",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/clients",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_type\": \"company\",\n  \"company_name\": \"ABC Corp\",\n  \"email\": \"contact@abc.com\",\n  \"phone\": \"+971501234567\",\n  \"service_category\": \"recycling\",\n  \"address\": \"Dubai, UAE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Client",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/clients/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"ABC Corporation\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Client",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/clients/1/approve"
+          }
+        },
+        {
+          "name": "Activate Client",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/clients/1/activate"
+          }
+        },
+        {
+          "name": "Deactivate Client",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/clients/1/deactivate"
+          }
+        },
+        {
+          "name": "Delete Client",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/clients/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Vendors",
+      "item": [
+        {
+          "name": "List Vendors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/vendors?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Vendor by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/vendors/1"
+          }
+        },
+        {
+          "name": "Create Vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/vendors",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendor_type\": \"company\",\n  \"company_name\": \"XYZ Suppliers\",\n  \"email\": \"vendor@xyz.com\",\n  \"phone\": \"+971501234567\",\n  \"vendor_category\": \"material_supplier\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Vendor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/vendors/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"XYZ Suppliers Ltd\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Vendor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/vendors/1/approve"
+          }
+        },
+        {
+          "name": "Activate Vendor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/vendors/1/activate"
+          }
+        },
+        {
+          "name": "Deactivate Vendor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/vendors/1/deactivate"
+          }
+        },
+        {
+          "name": "Delete Vendor",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/vendors/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Leads",
+      "item": [
+        {
+          "name": "List Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/leads?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/leads/1"
+          }
+        },
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/leads",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead_source\": \"website\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john@example.com\",\n  \"phone\": \"+971501234567\",\n  \"service_interest\": \"recycling\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Lead",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/leads/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"contacted\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Qualify Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/leads/1/qualify",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Qualified lead\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Disqualify Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/leads/1/disqualify",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Not interested\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Convert to Deal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/leads/1/convert"
+          }
+        },
+        {
+          "name": "Delete Lead",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/leads/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Deals",
+      "item": [
+        {
+          "name": "List Deals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/deals?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Deal Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/deals/statistics"
+          }
+        },
+        {
+          "name": "Get Deal by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/deals/1"
+          }
+        },
+        {
+          "name": "Create Deal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/deals",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deal_name\": \"Recycling Contract\",\n  \"client_id\": 1,\n  \"service_type\": \"recycling\",\n  \"expected_value\": 50000,\n  \"expected_close_date\": \"2024-12-31\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Deal",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/deals/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_value\": 55000\n}"
+            }
+          }
+        },
+        {
+          "name": "Move Deal Stage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/deals/1/move-stage",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"proposal\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Finalize Deal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/deals/1/finalize",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"won\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Deal",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/deals/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Products",
+      "item": [
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/products?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/products/1"
+          }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/products",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_code\": \"PROD001\",\n  \"product_name\": \"Recycled Plastic\",\n  \"category\": \"materials\",\n  \"unit_price\": 100,\n  \"unit_of_measure\": \"kg\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/products/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unit_price\": 110\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Product",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/products/1/approve"
+          }
+        },
+        {
+          "name": "Activate Product",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/products/1/activate"
+          }
+        },
+        {
+          "name": "Deactivate Product",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/products/1/deactivate"
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/products/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Services",
+      "item": [
+        {
+          "name": "List Services",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/services?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Service by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/services/1"
+          }
+        },
+        {
+          "name": "Create Service",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/services",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_code\": \"SRV001\",\n  \"service_name\": \"Waste Collection\",\n  \"category\": \"collection\",\n  \"unit_price\": 500\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Service",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/services/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unit_price\": 550\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Service",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/services/1/approve"
+          }
+        },
+        {
+          "name": "Activate Service",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/services/1/activate"
+          }
+        },
+        {
+          "name": "Deactivate Service",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/services/1/deactivate"
+          }
+        },
+        {
+          "name": "Delete Service",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/services/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Warehouses",
+      "item": [
+        {
+          "name": "List Warehouses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/warehouses?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Warehouse by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/warehouses/1"
+          }
+        },
+        {
+          "name": "Create Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/warehouses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouse_code\": \"WH001\",\n  \"warehouse_name\": \"Main Warehouse\",\n  \"location\": \"Dubai\",\n  \"capacity\": 10000\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Warehouse",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/warehouses/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capacity\": 12000\n}"
+            }
+          }
+        },
+        {
+          "name": "Activate Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/warehouses/1/activate"
+          }
+        },
+        {
+          "name": "Deactivate Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/warehouses/1/deactivate"
+          }
+        },
+        {
+          "name": "Delete Warehouse",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/warehouses/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Inventory",
+      "item": [
+        {
+          "name": "Get Inventory Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inventory?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Inventory Valuation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inventory/valuation"
+          }
+        },
+        {
+          "name": "List Lots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inventory/lots?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Lot by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inventory/lots/1"
+          }
+        },
+        {
+          "name": "Create Lot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/inventory/lots",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lot_number\": \"LOT001\",\n  \"material_type_id\": 1,\n  \"warehouse_id\": 1,\n  \"quantity\": 1000,\n  \"unit_cost\": 50\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Lot",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/inventory/lots/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1100\n}"
+            }
+          }
+        },
+        {
+          "name": "Adjust Lot Quantity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/inventory/lots/1/adjust",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adjustment_quantity\": 100,\n  \"reason\": \"Reconciliation\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Close Lot",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/inventory/lots/1/close"
+          }
+        },
+        {
+          "name": "Get Stock Movements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inventory/movements?page=1&pageSize=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 - Jobs",
+      "item": [
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/jobs?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Job by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/jobs/1"
+          }
+        },
+        {
+          "name": "Create Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/jobs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deal_id\": 1,\n  \"job_type\": \"collection\",\n  \"start_date\": \"2024-01-01\",\n  \"description\": \"Waste collection job\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Job",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/jobs/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Job Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/jobs/1/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Job",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/jobs/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 - Invoices",
+      "item": [
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/invoices?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Invoice Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/invoices/statistics"
+          }
+        },
+        {
+          "name": "Get Invoice by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/invoices/1"
+          }
+        },
+        {
+          "name": "Create Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/invoices",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": 1,\n  \"invoice_type\": \"sales\",\n  \"invoice_date\": \"2024-01-01\",\n  \"due_date\": \"2024-01-31\",\n  \"items\": [\n    {\n      \"description\": \"Service\",\n      \"quantity\": 1,\n      \"unit_price\": 1000\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Invoice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/invoices/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"due_date\": \"2024-02-15\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Invoice",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/invoices/1/approve"
+          }
+        },
+        {
+          "name": "Record Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/invoices/1/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000,\n  \"payment_date\": \"2024-01-15\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Cancel Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/invoices/1/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer request\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/invoices/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 - Payments",
+      "item": [
+        {
+          "name": "List Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payments?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Post-Dated Cheques",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payments/cheques/postdated"
+          }
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payments/1"
+          }
+        },
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/payments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": 1,\n  \"payment_date\": \"2024-01-15\",\n  \"amount\": 1000,\n  \"payment_mode\": \"bank_transfer\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Cheque Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/payments/cheques/1/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"cleared\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Payment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/payments/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 - Employees",
+      "item": [
+        {
+          "name": "List Employees",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/employees?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/employees/1"
+          }
+        },
+        {
+          "name": "Create Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/employees",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Ahmed\",\n  \"last_name\": \"Ali\",\n  \"email\": \"ahmed@company.com\",\n  \"phone\": \"+971501234567\",\n  \"job_title\": \"Driver\",\n  \"hire_date\": \"2024-01-01\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Employee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/employees/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_title\": \"Senior Driver\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Terminate Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/employees/1/terminate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"termination_date\": \"2024-12-31\",\n  \"reason\": \"Resignation\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Employee",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/employees/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 - Vehicles",
+      "item": [
+        {
+          "name": "List Vehicles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/vehicles?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Vehicle by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/vehicles/1"
+          }
+        },
+        {
+          "name": "Create Vehicle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/vehicles",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_number\": \"DXB-12345\",\n  \"make\": \"Mercedes\",\n  \"model\": \"Actros\",\n  \"year\": 2023,\n  \"vehicle_type\": \"truck\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Vehicle",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/vehicles/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_mileage\": 50000\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Vehicle Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/vehicles/1/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Add Fuel Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/vehicles/1/fuel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"liters\": 100,\n  \"cost\": 300,\n  \"date\": \"2024-01-01\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Add Maintenance Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/vehicles/1/maintenance",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_type\": \"Oil Change\",\n  \"cost\": 500,\n  \"date\": \"2024-01-01\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Vehicle",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/vehicles/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 - Documents",
+      "item": [
+        {
+          "name": "List Documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/documents?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Document by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/documents/1"
+          }
+        },
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/documents",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_name\": \"Contract\",\n  \"document_type\": \"contract\",\n  \"related_module\": \"deals\",\n  \"related_id\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Document Version",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/documents/1/version"
+          }
+        },
+        {
+          "name": "Update Document",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/documents/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_name\": \"Updated Contract\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deactivate Document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/documents/1/deactivate"
+          }
+        },
+        {
+          "name": "Delete Document",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/documents/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 - Certificates",
+      "item": [
+        {
+          "name": "List Certificates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/certificates?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Certificate by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/certificates/1"
+          }
+        },
+        {
+          "name": "Create Certificate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/certificates",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"certificate_type\": \"destruction\",\n  \"client_id\": 1,\n  \"job_id\": 1,\n  \"issue_date\": \"2024-01-01\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verify Certificate",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/certificates/1/verify"
+          }
+        },
+        {
+          "name": "Delete Certificate",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/certificates/1"
+          }
+        },
+        {
+          "name": "List Certificate Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/certificates/templates/all"
+          }
+        },
+        {
+          "name": "Get Template by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/certificates/templates/1"
+          }
+        },
+        {
+          "name": "Create Certificate Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/certificates/templates",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_name\": \"Destruction Certificate\",\n  \"template_content\": \"Template content here\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Certificate Template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/certificates/templates/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_content\": \"Updated content\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 - Commissions",
+      "item": [
+        {
+          "name": "List Commissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/commissions?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Commission Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/commissions/summary"
+          }
+        },
+        {
+          "name": "Get Commission by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/commissions/1"
+          }
+        },
+        {
+          "name": "Calculate Commission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/commissions/calculate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": 1,\n  \"sales_person_id\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Commission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/commissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sales_person_id\": 1,\n  \"invoice_id\": 1,\n  \"commission_amount\": 500,\n  \"commission_rate\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Commission",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/commissions/1/approve"
+          }
+        },
+        {
+          "name": "Process Commission Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/commissions/1/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_date\": \"2024-01-31\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reverse Commission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/commissions/1/reverse",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Invoice cancelled\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 - Inbound (GRN)",
+      "item": [
+        {
+          "name": "List GRNs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inbound/grn?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get GRN by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inbound/grn/1"
+          }
+        },
+        {
+          "name": "Create GRN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/inbound/grn",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deal_id\": 1,\n  \"grn_type\": \"purchase\",\n  \"received_date\": \"2024-01-01\",\n  \"items\": [\n    {\n      \"material_type_id\": 1,\n      \"quantity\": 1000,\n      \"unit_cost\": 50\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve GRN",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/inbound/grn/1/approve"
+          }
+        },
+        {
+          "name": "Reject GRN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/inbound/grn/1/reject",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Quality issues\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 - Outbound",
+      "item": [
+        {
+          "name": "List Outbound Records",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/outbound?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Outbound by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/outbound/1"
+          }
+        },
+        {
+          "name": "Create Outbound",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/outbound",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deal_id\": 1,\n  \"dispatch_date\": \"2024-01-01\",\n  \"items\": [\n    {\n      \"lot_id\": 1,\n      \"quantity\": 500\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Confirm Dispatch",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/outbound/1/dispatch"
+          }
+        },
+        {
+          "name": "Complete Delivery",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/outbound/1/delivery",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delivery_date\": \"2024-01-02\",\n  \"received_by\": \"Customer\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 - Accounting",
+      "item": [
+        {
+          "name": "List Journal Entries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounting/journal-entries?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Journal Entry by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounting/journal-entries/1"
+          }
+        },
+        {
+          "name": "Create Journal Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/accounting/journal-entries",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entry_date\": \"2024-01-01\",\n  \"description\": \"Sales entry\",\n  \"line_items\": [\n    {\n      \"account_id\": 1,\n      \"debit\": 1000,\n      \"credit\": 0\n    },\n    {\n      \"account_id\": 2,\n      \"debit\": 0,\n      \"credit\": 1000\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "List Expenses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounting/expenses?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/accounting/expenses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expense_date\": \"2024-01-01\",\n  \"expense_category_id\": 1,\n  \"amount\": 500,\n  \"description\": \"Office supplies\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Expense",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/accounting/expenses/1/approve"
+          }
+        },
+        {
+          "name": "List Fixed Assets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounting/fixed-assets?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Fixed Asset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/accounting/fixed-assets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset_name\": \"Truck\",\n  \"acquisition_cost\": 100000,\n  \"acquisition_date\": \"2024-01-01\",\n  \"useful_life_years\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "Calculate Depreciation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/accounting/depreciation/calculate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fixed_asset_id\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "List Bank Accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounting/bank-accounts"
+          }
+        },
+        {
+          "name": "Create Bank Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/accounting/bank-accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_name\": \"Operating Account\",\n  \"bank_name\": \"Emirates NBD\",\n  \"account_number\": \"1234567890\",\n  \"currency\": \"AED\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 - Dashboard",
+      "item": [
+        {
+          "name": "Get Overview KPIs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/dashboard/overview"
+          }
+        },
+        {
+          "name": "Get Sales Trends",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/dashboard/sales-trends"
+          }
+        },
+        {
+          "name": "Get Material Breakdown",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/dashboard/material-breakdown"
+          }
+        },
+        {
+          "name": "Get Top Clients",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/dashboard/top-clients"
+          }
+        },
+        {
+          "name": "Get Recent Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/dashboard/recent-activities"
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 - Reports",
+      "item": [
+        {
+          "name": "Deal Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/deals"
+          }
+        },
+        {
+          "name": "Invoice Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/invoices"
+          }
+        },
+        {
+          "name": "Inventory Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/inventory"
+          }
+        },
+        {
+          "name": "Sales Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/sales"
+          }
+        },
+        {
+          "name": "VAT Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/vat"
+          }
+        },
+        {
+          "name": "Customer Ageing Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/customer-ageing"
+          }
+        },
+        {
+          "name": "Commission Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/commissions"
+          }
+        },
+        {
+          "name": "Expense Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/expenses"
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 - Settings",
+      "item": [
+        {
+          "name": "Get Tenant Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/settings"
+          }
+        },
+        {
+          "name": "Update Tenant Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"Updated Company Name\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Currencies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/settings/currencies"
+          }
+        },
+        {
+          "name": "Create Currency",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/currencies",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"AED\",\n  \"name\": \"UAE Dirham\",\n  \"symbol\": \"\\u062f.\\u0625\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Currency",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/currencies/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Taxes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/settings/taxes"
+          }
+        },
+        {
+          "name": "Create Tax",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/taxes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"VAT\",\n  \"rate\": 5,\n  \"type\": \"percentage\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Tax",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/taxes/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rate\": 5.5\n}"
+            }
+          }
+        },
+        {
+          "name": "List Payment Modes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/settings/payment-modes"
+          }
+        },
+        {
+          "name": "Create Payment Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/payment-modes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bank Transfer\",\n  \"code\": \"BANK\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Payment Mode",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/payment-modes/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Expense Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/settings/expense-categories"
+          }
+        },
+        {
+          "name": "Create Expense Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/expense-categories",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Office Supplies\",\n  \"code\": \"OFFICE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Expense Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/expense-categories/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Material Types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/settings/material-types"
+          }
+        },
+        {
+          "name": "Create Material Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/material-types",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Plastic\",\n  \"category\": \"recyclable\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Material Type",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/settings/material-types/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
