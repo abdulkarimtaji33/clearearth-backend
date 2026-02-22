@@ -10,6 +10,9 @@ const userRoutes = require('./user.routes');
 const roleRoutes = require('./role.routes');
 const clientRoutes = require('./client.routes');
 const vendorRoutes = require('./vendor.routes');
+const contactRoutes = require('./contact.routes');
+const companyRoutes = require('./company.routes');
+const supplierRoutes = require('./supplier.routes');
 const leadRoutes = require('./lead.routes');
 const dealRoutes = require('./deal.routes');
 const productRoutes = require('./product.routes');
@@ -42,6 +45,9 @@ router.get('/', (req, res) => {
       roles: '/roles',
       clients: '/clients',
       vendors: '/vendors',
+      contacts: '/contacts',
+      companies: '/companies',
+      suppliers: '/suppliers',
       leads: '/leads',
       deals: '/deals',
       products: '/products',
@@ -72,6 +78,9 @@ router.use('/users', userRoutes);
 router.use('/roles', roleRoutes);
 router.use('/clients', clientRoutes);
 router.use('/vendors', vendorRoutes);
+router.use('/contacts', contactRoutes);
+router.use('/companies', companyRoutes);
+router.use('/suppliers', supplierRoutes);
 router.use('/leads', leadRoutes);
 router.use('/deals', dealRoutes);
 router.use('/products', productRoutes);

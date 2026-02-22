@@ -12,9 +12,16 @@ const Permission = require('./Permission')(sequelize, DataTypes);
 const RolePermission = require('./RolePermission')(sequelize, DataTypes);
 const AuditLog = require('./AuditLog')(sequelize, DataTypes);
 
-// Clients & Vendors
+// Clients & Vendors (legacy)
 const Client = require('./Client')(sequelize, DataTypes);
 const Vendor = require('./Vendor')(sequelize, DataTypes);
+
+// Contacts, Companies & Suppliers
+const Contact = require('./Contact')(sequelize, DataTypes);
+const CompanyContact = require('./CompanyContact')(sequelize, DataTypes);
+const Company = require('./Company')(sequelize, DataTypes);
+const SupplierContact = require('./SupplierContact')(sequelize, DataTypes);
+const Supplier = require('./Supplier')(sequelize, DataTypes);
 
 // CRM
 const Lead = require('./Lead')(sequelize, DataTypes);
@@ -92,6 +99,11 @@ const db = {
   AuditLog,
   Client,
   Vendor,
+  Contact,
+  CompanyContact,
+  Company,
+  SupplierContact,
+  Supplier,
   Lead,
   Deal,
   DealStage,
