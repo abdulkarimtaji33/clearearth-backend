@@ -267,8 +267,8 @@ module.exports = {
       },
     });
 
-    // Create contacts table
-    await queryInterface.createTable('contacts', {
+    // Create companies table FIRST (before contacts)
+    await queryInterface.createTable('companies', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
