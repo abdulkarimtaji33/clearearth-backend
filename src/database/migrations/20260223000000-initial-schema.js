@@ -610,9 +610,6 @@ module.exports = {
       },
       converted_to_deal_id: {
         type: Sequelize.INTEGER,
-        references: { model: 'deals', key: 'id' },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
       },
       converted_at: {
         type: Sequelize.DATE,
