@@ -62,6 +62,12 @@ const getById = async (tenantId, companyId) => {
         ...contactInclude,
         required: false,
       },
+      {
+        model: db.Deal,
+        as: 'deals',
+        attributes: ['id', 'deal_number', 'title', 'description', 'subtotal', 'vat_amount', 'total', 'currency', 'deal_date', 'status', 'payment_status'],
+        required: false,
+      },
     ],
   });
   if (!company) throw ApiError.notFound('Company not found');
@@ -101,6 +107,21 @@ const create = async (tenantId, data) => {
     await _upsertContactLinks(company.id, contacts);
   }
 
+  // Always ensure primary contact is in company_contacts after linked contacts are created
+  if (primaryContactId) {
+    await db.Contact.update(
+      { company_id: company.id },
+      { where: { id: primaryContactId, tenant_id: tenantId } }
+    );
+    const [link, created] = await db.CompanyContact.findOrCreate({
+      where: { company_id: company.id, contact_id: primaryContactId },
+      defaults: { role: null, is_primary: true },
+    });
+    if (!created) {
+      await link.update({ is_primary: true });
+    }
+  }
+
   return getById(tenantId, company.id);
 };
 
@@ -113,9 +134,12 @@ const update = async (tenantId, companyId, data) => {
     if (existing) throw ApiError.conflict('Email already exists');
   }
 
+  const oldPrimaryContactId = company.primary_contact_id;
+  const newPrimaryContactId = data.primaryContactId !== undefined ? data.primaryContactId : company.primary_contact_id;
+
   await company.update({
     company_name: data.companyName !== undefined ? data.companyName : company.company_name,
-    primary_contact_id: data.primaryContactId !== undefined ? data.primaryContactId : company.primary_contact_id,
+    primary_contact_id: newPrimaryContactId,
     industry_type: data.industryType !== undefined ? data.industryType : company.industry_type,
     website: data.website !== undefined ? data.website : company.website,
     email: data.email !== undefined ? data.email : company.email,
@@ -127,10 +151,34 @@ const update = async (tenantId, companyId, data) => {
     status: data.status !== undefined ? data.status : company.status,
   });
 
+  // Clear old primary contact's company_id if changed
+  if (oldPrimaryContactId && oldPrimaryContactId !== newPrimaryContactId) {
+    await db.Contact.update(
+      { company_id: null },
+      { where: { id: oldPrimaryContactId, tenant_id: tenantId } }
+    );
+  }
+
+  // Rebuild linked contacts (destroy all, re-insert from form)
   if (data.contacts !== undefined) {
     await db.CompanyContact.destroy({ where: { company_id: companyId }, force: true });
     if (data.contacts.length > 0) {
       await _upsertContactLinks(companyId, data.contacts);
+    }
+  }
+
+  // Always ensure primary contact is in company_contacts with is_primary=true
+  if (newPrimaryContactId) {
+    await db.Contact.update(
+      { company_id: companyId },
+      { where: { id: newPrimaryContactId, tenant_id: tenantId } }
+    );
+    const [link, created] = await db.CompanyContact.findOrCreate({
+      where: { company_id: companyId, contact_id: newPrimaryContactId },
+      defaults: { role: null, is_primary: true },
+    });
+    if (!created) {
+      await link.update({ is_primary: true });
     }
   }
 

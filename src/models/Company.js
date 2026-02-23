@@ -82,6 +82,7 @@ module.exports = (sequelize, DataTypes) => {
       otherKey: 'contact_id',
       as: 'contacts',
     });
+    Company.hasMany(models.Deal, { foreignKey: 'company_id', as: 'deals' });
   };
 
   return Company;
