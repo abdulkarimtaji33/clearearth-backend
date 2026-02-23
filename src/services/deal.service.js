@@ -129,6 +129,14 @@ const create = async (tenantId, data) => {
       await db.DealItem.bulkCreate(itemsToCreate, { transaction });
     }
 
+    // Mark lead as converted if connected
+    if (data.leadId) {
+      await db.Lead.update(
+        { status: 'converted' },
+        { where: { id: data.leadId, tenant_id: tenantId }, transaction }
+      );
+    }
+
     await transaction.commit();
     return await getById(tenantId, deal.id);
   } catch (error) {
