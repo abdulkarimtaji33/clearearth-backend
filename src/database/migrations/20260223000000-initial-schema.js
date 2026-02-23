@@ -281,63 +281,6 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE',
       },
-      first_name: {
-        type: Sequelize.STRING(100),
-        allowNull: false,
-      },
-      last_name: {
-        type: Sequelize.STRING(100),
-        allowNull: false,
-      },
-      email: {
-        type: Sequelize.STRING(100),
-      },
-      phone: {
-        type: Sequelize.STRING(20),
-        allowNull: false,
-      },
-      mobile: {
-        type: Sequelize.STRING(20),
-      },
-      designation: {
-        type: Sequelize.STRING(150),
-      },
-      company_id: {
-        type: Sequelize.INTEGER,
-        references: { model: 'companies', key: 'id' },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
-      },
-      notes: {
-        type: Sequelize.TEXT,
-      },
-      created_at: {
-        type: Sequelize.DATE,
-        allowNull: false,
-      },
-      updated_at: {
-        type: Sequelize.DATE,
-        allowNull: false,
-      },
-      deleted_at: {
-        type: Sequelize.DATE,
-      },
-    });
-
-    // Create companies table
-    await queryInterface.createTable('companies', {
-      id: {
-        type: Sequelize.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-      },
-      tenant_id: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        references: { model: 'tenants', key: 'id' },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-      },
       company_name: {
         type: Sequelize.STRING(200),
         allowNull: false,
@@ -377,7 +320,61 @@ module.exports = {
       },
       primary_contact_id: {
         type: Sequelize.INTEGER,
-        references: { model: 'contacts', key: 'id' },
+      },
+      notes: {
+        type: Sequelize.TEXT,
+      },
+      created_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+      },
+      updated_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+      },
+      deleted_at: {
+        type: Sequelize.DATE,
+      },
+    });
+
+    // Create contacts table (after companies)
+    await queryInterface.createTable('contacts', {
+      id: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+      },
+      tenant_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: 'tenants', key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      first_name: {
+        type: Sequelize.STRING(100),
+        allowNull: false,
+      },
+      last_name: {
+        type: Sequelize.STRING(100),
+        allowNull: false,
+      },
+      email: {
+        type: Sequelize.STRING(100),
+      },
+      phone: {
+        type: Sequelize.STRING(20),
+        allowNull: false,
+      },
+      mobile: {
+        type: Sequelize.STRING(20),
+      },
+      designation: {
+        type: Sequelize.STRING(150),
+      },
+      company_id: {
+        type: Sequelize.INTEGER,
+        references: { model: 'companies', key: 'id' },
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL',
       },
