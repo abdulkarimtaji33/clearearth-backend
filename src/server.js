@@ -19,9 +19,10 @@ const startServer = async () => {
     }
 
     // Sync database (only in development)
-    if (config.app.env === 'development') {
-      await syncDatabase({ alter: true });
-    }
+    // Temporarily disabled to avoid index limit issues
+    // if (config.app.env === 'development') {
+    //   await syncDatabase({ alter: true });
+    // }
 
     // Start listening
     const server = app.listen(PORT, () => {

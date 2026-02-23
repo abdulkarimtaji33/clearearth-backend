@@ -21,12 +21,17 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(50),
         unique: true,
       },
-      company_name: {
-        type: DataTypes.STRING(200),
+      company_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'companies', key: 'id' },
+        comment: 'Link to company',
       },
-      contact_person: {
-        type: DataTypes.STRING(100),
-        allowNull: false,
+      contact_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'contacts', key: 'id' },
+        comment: 'Link to contact person',
       },
       email: {
         type: DataTypes.STRING(100),
@@ -42,6 +47,13 @@ module.exports = (sequelize, DataTypes) => {
       service_interest: {
         type: DataTypes.JSON,
         defaultValue: [],
+        comment: 'Legacy field, use product_service_id instead',
+      },
+      product_service_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'products_services', key: 'id' },
+        comment: 'Link to product/service',
       },
       estimated_value: {
         type: DataTypes.DECIMAL(15, 2),
@@ -63,10 +75,6 @@ module.exports = (sequelize, DataTypes) => {
       disqualification_reason: {
         type: DataTypes.TEXT,
       },
-      converted_to_deal_id: {
-        type: DataTypes.INTEGER,
-        references: { model: 'deals', key: 'id' },
-      },
       converted_at: {
         type: DataTypes.DATE,
       },
@@ -85,7 +93,9 @@ module.exports = (sequelize, DataTypes) => {
   Lead.associate = models => {
     Lead.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
     Lead.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
-    Lead.hasOne(models.Deal, { foreignKey: 'lead_id', as: 'deal' });
+    Lead.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
+    Lead.belongsTo(models.Contact, { foreignKey: 'contact_id', as: 'contact' });
+    Lead.belongsTo(models.ProductService, { foreignKey: 'product_service_id', as: 'productService' });
   };
 
   return Lead;

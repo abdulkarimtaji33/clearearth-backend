@@ -10,13 +10,17 @@ router.use(authenticate);
 const createValidation = [
   body('firstName').notEmpty().withMessage('First name is required'),
   body('lastName').notEmpty().withMessage('Last name is required'),
+  body('phone').notEmpty().withMessage('Phone is required'),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
+  body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   validate,
 ];
 
 const updateValidation = [
   param('id').isInt().withMessage('Valid contact ID is required'),
+  body('phone').optional({ values: 'falsy' }).notEmpty().withMessage('Phone is required'),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
+  body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   validate,
 ];
 

@@ -128,11 +128,6 @@ module.exports = (sequelize, DataTypes) => {
       as: 'role',
     });
 
-    User.belongsTo(models.Employee, {
-      foreignKey: 'employee_id',
-      as: 'employee',
-    });
-
     User.hasMany(models.AuditLog, {
       foreignKey: 'user_id',
       as: 'auditLogs',

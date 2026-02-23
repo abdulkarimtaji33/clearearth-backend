@@ -36,8 +36,8 @@ const disqualify = asyncHandler(async (req, res) => {
 });
 
 const convertToDeal = asyncHandler(async (req, res) => {
-  const deal = await leadService.convertToDeal(req.tenant.id, req.params.id, req.body);
-  return ApiResponse.created(res, deal, 'Lead converted to deal successfully');
+  const lead = await leadService.convertToDeal(req.tenant.id, req.params.id, req.body);
+  return ApiResponse.success(res, lead, 'Lead marked as converted successfully');
 });
 
 const remove = asyncHandler(async (req, res) => {

@@ -4,10 +4,21 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, dealType, assignedTo } = req.query;
+  const { page, pageSize, search, status, paymentStatus, companyId, supplierId } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const result = await dealService.getAll(req.tenant.id, { ...pagination, search, status, dealType, assignedTo });
-  return ApiResponse.paginated(res, result.deals, { page: pagination.page, pageSize: pagination.pageSize, totalItems: result.total });
+  const result = await dealService.getAll(req.tenant.id, { 
+    ...pagination, 
+    search, 
+    status, 
+    paymentStatus, 
+    companyId, 
+    supplierId 
+  });
+  return ApiResponse.paginated(res, result.deals, { 
+    page: pagination.page, 
+    pageSize: pagination.pageSize, 
+    totalItems: result.total 
+  });
 });
 
 const getById = asyncHandler(async (req, res) => {
@@ -16,7 +27,7 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const deal = await dealService.create(req.tenant.id, req.user.id, req.body);
+  const deal = await dealService.create(req.tenant.id, req.body);
   return ApiResponse.created(res, deal, 'Deal created successfully');
 });
 
@@ -25,16 +36,9 @@ const update = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, deal, 'Deal updated successfully');
 });
 
-const moveToStage = asyncHandler(async (req, res) => {
-  const { stage, department, handlerUserId, notes } = req.body;
-  const deal = await dealService.moveToStage(req.tenant.id, req.params.id, stage, department, handlerUserId, notes);
-  return ApiResponse.success(res, deal, 'Deal moved to next stage');
-});
-
-const finalize = asyncHandler(async (req, res) => {
-  const { finalStatus, reason } = req.body;
-  const deal = await dealService.finalize(req.tenant.id, req.params.id, finalStatus, reason, req.user.id);
-  return ApiResponse.success(res, deal, 'Deal finalized successfully');
+const updatePayment = asyncHandler(async (req, res) => {
+  const deal = await dealService.updatePayment(req.tenant.id, req.params.id, req.body.paidAmount);
+  return ApiResponse.success(res, deal, 'Payment updated successfully');
 });
 
 const remove = asyncHandler(async (req, res) => {
@@ -42,9 +46,4 @@ const remove = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'Deal deleted');
 });
 
-const getStatistics = asyncHandler(async (req, res) => {
-  const stats = await dealService.getStatistics(req.tenant.id);
-  return ApiResponse.success(res, stats);
-});
-
-module.exports = { getAll, getById, create, update, moveToStage, finalize, remove, getStatistics };
+module.exports = { getAll, getById, create, update, updatePayment, remove };

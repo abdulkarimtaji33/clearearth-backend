@@ -37,11 +37,21 @@ module.exports = (sequelize, DataTypes) => {
       mobile: {
         type: DataTypes.STRING(20),
       },
+      designation: {
+        type: DataTypes.STRING(150),
+        comment: 'Job title or designation',
+      },
       job_title: {
         type: DataTypes.STRING(150),
       },
       department: {
         type: DataTypes.STRING(100),
+      },
+      company_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'companies', key: 'id' },
+        comment: 'Optional company association',
       },
       notes: {
         type: DataTypes.TEXT,
@@ -67,6 +77,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Contact.associate = models => {
     Contact.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
+    Contact.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
     Contact.hasMany(models.CompanyContact, { foreignKey: 'contact_id', as: 'companyLinks' });
     Contact.hasMany(models.SupplierContact, { foreignKey: 'contact_id', as: 'supplierLinks' });
   };

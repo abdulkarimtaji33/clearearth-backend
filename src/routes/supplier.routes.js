@@ -9,6 +9,7 @@ router.use(authenticate);
 
 const createValidation = [
   body('companyName').notEmpty().withMessage('Company name is required'),
+  body('phone').notEmpty().withMessage('Phone is required'),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
   validate,
 ];
@@ -16,6 +17,7 @@ const createValidation = [
 const updateValidation = [
   param('id').isInt().withMessage('Valid supplier ID is required'),
   body('companyName').optional().notEmpty().withMessage('Company name cannot be empty'),
+  body('phone').optional({ values: 'falsy' }).notEmpty().withMessage('Phone is required'),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
   validate,
 ];

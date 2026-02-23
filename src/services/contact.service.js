@@ -24,9 +24,18 @@ const getAll = async (tenantId, filters) => {
 
   const { count, rows } = await db.Contact.findAndCountAll({
     where,
+    include: [
+      {
+        model: db.Company,
+        as: 'company',
+        attributes: ['id', 'company_name'],
+        required: false,
+      },
+    ],
     offset,
     limit,
     order: [['created_at', 'DESC']],
+    distinct: true,
   });
 
   return { contacts: rows, total: count };
@@ -35,17 +44,31 @@ const getAll = async (tenantId, filters) => {
 const getById = async (tenantId, contactId) => {
   const contact = await db.Contact.findOne({
     where: { id: contactId, tenant_id: tenantId },
+    include: [
+      {
+        model: db.Company,
+        as: 'company',
+        attributes: ['id', 'company_name'],
+        required: false,
+      },
+    ],
   });
   if (!contact) throw ApiError.notFound('Contact not found');
   return contact;
 };
 
 const create = async (tenantId, data) => {
-  const { firstName, lastName, email, phone, mobile, jobTitle, department, notes } = data;
+  const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, notes } = data;
 
   if (email) {
     const existing = await db.Contact.findOne({ where: { tenant_id: tenantId, email } });
     if (existing) throw ApiError.conflict('Email already exists');
+  }
+
+  // Validate company if provided
+  if (companyId) {
+    const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+    if (!company) throw ApiError.notFound('Company not found');
   }
 
   const contactCode = generateReferenceNumber('CON');
@@ -58,13 +81,15 @@ const create = async (tenantId, data) => {
     email: email || null,
     phone: phone || null,
     mobile: mobile || null,
+    designation: designation || null,
     job_title: jobTitle || null,
     department: department || null,
+    company_id: companyId || null,
     notes: notes || null,
     status: 'active',
   });
 
-  return contact;
+  return getById(tenantId, contact.id);
 };
 
 const update = async (tenantId, contactId, data) => {
@@ -76,19 +101,27 @@ const update = async (tenantId, contactId, data) => {
     if (existing) throw ApiError.conflict('Email already exists');
   }
 
+  // Validate company if provided
+  if (data.companyId !== undefined && data.companyId !== null) {
+    const company = await db.Company.findOne({ where: { id: data.companyId, tenant_id: tenantId } });
+    if (!company) throw ApiError.notFound('Company not found');
+  }
+
   await contact.update({
     first_name: data.firstName !== undefined ? data.firstName : contact.first_name,
     last_name: data.lastName !== undefined ? data.lastName : contact.last_name,
     email: data.email !== undefined ? data.email : contact.email,
     phone: data.phone !== undefined ? data.phone : contact.phone,
     mobile: data.mobile !== undefined ? data.mobile : contact.mobile,
+    designation: data.designation !== undefined ? data.designation : contact.designation,
     job_title: data.jobTitle !== undefined ? data.jobTitle : contact.job_title,
     department: data.department !== undefined ? data.department : contact.department,
+    company_id: data.companyId !== undefined ? data.companyId : contact.company_id,
     notes: data.notes !== undefined ? data.notes : contact.notes,
     status: data.status !== undefined ? data.status : contact.status,
   });
 
-  return contact.reload();
+  return getById(tenantId, contact.id);
 };
 
 const remove = async (tenantId, contactId) => {

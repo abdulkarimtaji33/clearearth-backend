@@ -1,7 +1,7 @@
 /**
  * Permission Model
  */
-const { MODULE, PERMISSION_ACTION } = require('../constants');
+const { MODULES, ACTIONS } = require('../constants');
 
 module.exports = (sequelize, DataTypes) => {
   const Permission = sequelize.define(
@@ -16,18 +16,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: false,
         unique: true,
-        comment: 'e.g., clients.create, deals.update, invoices.delete',
+        comment: 'e.g., contacts.create, companies.update, leads.delete',
       },
       display_name: {
         type: DataTypes.STRING(100),
         allowNull: false,
       },
       module: {
-        type: DataTypes.ENUM(...Object.values(MODULE)),
+        type: DataTypes.ENUM(...Object.values(MODULES)),
         allowNull: false,
       },
       action: {
-        type: DataTypes.ENUM(...Object.values(PERMISSION_ACTION)),
+        type: DataTypes.ENUM(...Object.values(ACTIONS)),
         allowNull: false,
       },
       description: {

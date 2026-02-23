@@ -1,7 +1,6 @@
 /**
  * Deal Model
  */
-const { DEAL_STATUS, DEAL_TYPE } = require('../constants');
 
 module.exports = (sequelize, DataTypes) => {
   const Deal = sequelize.define(
@@ -23,91 +22,87 @@ module.exports = (sequelize, DataTypes) => {
       },
       lead_id: {
         type: DataTypes.INTEGER,
+        allowNull: true,
         references: { model: 'leads', key: 'id' },
       },
-      client_id: {
+      company_id: {
         type: DataTypes.INTEGER,
-        references: { model: 'clients', key: 'id' },
+        allowNull: true,
+        references: { model: 'companies', key: 'id' },
       },
-      deal_type: {
-        type: DataTypes.ENUM(...Object.values(DEAL_TYPE)),
-        allowNull: false,
+      contact_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'contacts', key: 'id' },
+      },
+      supplier_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'suppliers', key: 'id' },
       },
       title: {
-        type: DataTypes.STRING(200),
+        type: DataTypes.STRING(255),
         allowNull: false,
       },
       description: {
         type: DataTypes.TEXT,
       },
-      service_type: {
-        type: DataTypes.JSON,
-        defaultValue: [],
+      deal_date: {
+        type: DataTypes.DATE,
+        allowNull: false,
       },
-      expected_value: {
+      subtotal: {
         type: DataTypes.DECIMAL(15, 2),
+        defaultValue: 0.00,
+      },
+      vat_percentage: {
+        type: DataTypes.DECIMAL(5, 2),
+        defaultValue: 5.00,
+      },
+      vat_amount: {
+        type: DataTypes.DECIMAL(15, 2),
+        defaultValue: 0.00,
+      },
+      total: {
+        type: DataTypes.DECIMAL(15, 2),
+        defaultValue: 0.00,
       },
       currency: {
-        type: DataTypes.STRING(3),
+        type: DataTypes.STRING(10),
         defaultValue: 'AED',
       },
-      expected_closure_date: {
-        type: DataTypes.DATE,
+      status: {
+        type: DataTypes.ENUM('draft', 'pending', 'approved', 'in_progress', 'completed', 'cancelled'),
+        defaultValue: 'draft',
       },
-      actual_closure_date: {
-        type: DataTypes.DATE,
+      payment_status: {
+        type: DataTypes.ENUM('unpaid', 'partial', 'paid'),
+        defaultValue: 'unpaid',
       },
-      probability: {
-        type: DataTypes.INTEGER,
-        defaultValue: 50,
-        validate: { min: 0, max: 100 },
+      paid_amount: {
+        type: DataTypes.DECIMAL(15, 2),
+        defaultValue: 0.00,
       },
       assigned_to: {
         type: DataTypes.INTEGER,
         references: { model: 'users', key: 'id' },
       },
-      current_stage: {
-        type: DataTypes.STRING(50),
-        defaultValue: 'sales',
-      },
-      current_department: {
-        type: DataTypes.STRING(50),
-        defaultValue: 'sales',
-      },
-      handler_user_id: {
-        type: DataTypes.INTEGER,
-        references: { model: 'users', key: 'id' },
-      },
-      status: {
-        type: DataTypes.ENUM(...Object.values(DEAL_STATUS)),
-        defaultValue: DEAL_STATUS.DRAFT,
-      },
-      won_reason: {
-        type: DataTypes.TEXT,
-      },
-      lost_reason: {
-        type: DataTypes.TEXT,
-      },
       notes: {
         type: DataTypes.TEXT,
-      },
-      finalized_at: {
-        type: DataTypes.DATE,
-      },
-      finalized_by: {
-        type: DataTypes.INTEGER,
-        references: { model: 'users', key: 'id' },
       },
     },
     {
       tableName: 'deals',
+      paranoid: true,
       indexes: [
         { fields: ['tenant_id'] },
         { fields: ['deal_number'], unique: true },
-        { fields: ['client_id'] },
-        { fields: ['assigned_to'] },
+        { fields: ['lead_id'] },
+        { fields: ['company_id'] },
+        { fields: ['supplier_id'] },
         { fields: ['status'] },
-        { fields: ['deal_type'] },
+        { fields: ['payment_status'] },
+        { fields: ['assigned_to'] },
       ],
     }
   );
@@ -115,11 +110,11 @@ module.exports = (sequelize, DataTypes) => {
   Deal.associate = models => {
     Deal.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
     Deal.belongsTo(models.Lead, { foreignKey: 'lead_id', as: 'lead' });
-    Deal.belongsTo(models.Client, { foreignKey: 'client_id', as: 'client' });
+    Deal.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
+    Deal.belongsTo(models.Contact, { foreignKey: 'contact_id', as: 'contact' });
+    Deal.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     Deal.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
-    Deal.belongsTo(models.User, { foreignKey: 'handler_user_id', as: 'currentHandler' });
-    Deal.hasMany(models.DealStage, { foreignKey: 'deal_id', as: 'stages' });
-    Deal.hasMany(models.Job, { foreignKey: 'deal_id', as: 'jobs' });
+    Deal.hasMany(models.DealItem, { foreignKey: 'deal_id', as: 'items' });
   };
 
   return Deal;

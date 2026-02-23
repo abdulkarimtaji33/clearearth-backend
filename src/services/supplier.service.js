@@ -128,7 +128,7 @@ const update = async (tenantId, supplierId, data) => {
   });
 
   if (data.contacts !== undefined) {
-    await db.SupplierContact.destroy({ where: { supplier_id: supplierId } });
+    await db.SupplierContact.destroy({ where: { supplier_id: supplierId }, force: true });
     if (data.contacts.length > 0) {
       await _upsertContactLinks(supplierId, data.contacts);
     }
@@ -179,12 +179,14 @@ const removeContact = async (tenantId, supplierId, contactId) => {
 
 async function _upsertContactLinks(supplierId, contacts) {
   for (const c of contacts) {
-    await db.SupplierContact.findOrCreate({
+    const [link, created] = await db.SupplierContact.findOrCreate({
       where: { supplier_id: supplierId, contact_id: c.contactId },
       defaults: { role: c.role || null, is_primary: c.isPrimary || false },
-    }).then(([link]) => {
-      return link.update({ role: c.role || null, is_primary: c.isPrimary || false });
     });
+    
+    if (!created) {
+      await link.update({ role: c.role || null, is_primary: c.isPrimary || false });
+    }
   }
 }
 

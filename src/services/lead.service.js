@@ -10,9 +10,8 @@ const getAll = async (tenantId, filters) => {
 
   if (search) {
     where[Op.or] = [
-      { company_name: { [Op.like]: `%${search}%` } },
-      { contact_person: { [Op.like]: `%${search}%` } },
       { email: { [Op.like]: `%${search}%` } },
+      { phone: { [Op.like]: `%${search}%` } },
       { lead_number: { [Op.like]: `%${search}%` } },
     ];
   }
@@ -22,7 +21,10 @@ const getAll = async (tenantId, filters) => {
   const { count, rows } = await db.Lead.findAndCountAll({
     where,
     include: [
-      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'] },
+      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
+      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
+      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category'], required: false },
     ],
     offset,
     limit,
@@ -36,8 +38,10 @@ const getById = async (tenantId, leadId) => {
   const lead = await db.Lead.findOne({
     where: { id: leadId, tenant_id: tenantId },
     include: [
-      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'] },
-      { model: db.Deal, as: 'deal' },
+      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
+      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
+      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category'], required: false },
     ],
   });
   if (!lead) throw ApiError.notFound('Lead not found');
@@ -47,15 +51,27 @@ const getById = async (tenantId, leadId) => {
 const create = async (tenantId, data) => {
   const leadNumber = generateReferenceNumber('LEAD');
 
+  // Validate company and contact if provided
+  if (data.companyId) {
+    const company = await db.Company.findOne({ where: { id: data.companyId, tenant_id: tenantId } });
+    if (!company) throw ApiError.notFound('Company not found');
+  }
+
+  if (data.contactId) {
+    const contact = await db.Contact.findOne({ where: { id: data.contactId, tenant_id: tenantId } });
+    if (!contact) throw ApiError.notFound('Contact not found');
+  }
+
   const lead = await db.Lead.create({
     tenant_id: tenantId,
     lead_number: leadNumber,
-    company_name: data.companyName,
-    contact_person: data.contactPerson,
+    company_id: data.companyId || null,
+    contact_id: data.contactId || null,
     email: data.email,
     phone: data.phone,
     source: data.source,
     service_interest: data.serviceInterest || [],
+    product_service_id: data.productServiceId || null,
     estimated_value: data.estimatedValue,
     notes: data.notes,
     assigned_to: data.assignedTo,
@@ -75,16 +91,28 @@ const update = async (tenantId, leadId, data) => {
     throw ApiError.badRequest('Cannot update converted lead');
   }
 
+  // Validate company and contact if provided
+  if (data.companyId !== undefined && data.companyId !== null) {
+    const company = await db.Company.findOne({ where: { id: data.companyId, tenant_id: tenantId } });
+    if (!company) throw ApiError.notFound('Company not found');
+  }
+
+  if (data.contactId !== undefined && data.contactId !== null) {
+    const contact = await db.Contact.findOne({ where: { id: data.contactId, tenant_id: tenantId } });
+    if (!contact) throw ApiError.notFound('Contact not found');
+  }
+
   await lead.update({
-    company_name: data.companyName || lead.company_name,
-    contact_person: data.contactPerson || lead.contact_person,
-    email: data.email || lead.email,
-    phone: data.phone || lead.phone,
-    source: data.source || lead.source,
-    service_interest: data.serviceInterest || lead.service_interest,
-    estimated_value: data.estimatedValue ?? lead.estimated_value,
-    notes: data.notes || lead.notes,
-    assigned_to: data.assignedTo ?? lead.assigned_to,
+    company_id: data.companyId !== undefined ? data.companyId : lead.company_id,
+    contact_id: data.contactId !== undefined ? data.contactId : lead.contact_id,
+    email: data.email !== undefined ? data.email : lead.email,
+    phone: data.phone !== undefined ? data.phone : lead.phone,
+    source: data.source !== undefined ? data.source : lead.source,
+    service_interest: data.serviceInterest !== undefined ? data.serviceInterest : lead.service_interest,
+    product_service_id: data.productServiceId !== undefined ? data.productServiceId : lead.product_service_id,
+    estimated_value: data.estimatedValue !== undefined ? data.estimatedValue : lead.estimated_value,
+    notes: data.notes !== undefined ? data.notes : lead.notes,
+    assigned_to: data.assignedTo !== undefined ? data.assignedTo : lead.assigned_to,
   });
 
   return await getById(tenantId, leadId);
@@ -127,100 +155,23 @@ const disqualify = async (tenantId, leadId, reason) => {
 };
 
 const convertToDeal = async (tenantId, leadId, dealData) => {
-  const transaction = await db.sequelize.transaction();
+  // Deals module has been removed
+  // This function now simply marks the lead as converted
+  const lead = await db.Lead.findOne({
+    where: { id: leadId, tenant_id: tenantId },
+  });
 
-  try {
-    const lead = await db.Lead.findOne({
-      where: { id: leadId, tenant_id: tenantId },
-      transaction,
-    });
-
-    if (!lead) throw ApiError.notFound('Lead not found');
-    if (lead.status === LEAD_STATUS.CONVERTED) {
-      throw ApiError.badRequest('Lead already converted');
-    }
-
-    // Create or get client
-    let clientId = dealData.clientId;
-    if (!clientId) {
-      const client = await db.Client.create(
-        {
-          tenant_id: tenantId,
-          client_code: generateReferenceNumber('CLT'),
-          client_type: 'company',
-          company_name: lead.company_name,
-          email: lead.email,
-          phone: lead.phone,
-          contact_person_name: lead.contact_person,
-          status: 'pending',
-        },
-        { transaction }
-      );
-      clientId = client.id;
-    }
-
-    // Create deal
-    const dealNumber = generateReferenceNumber('DEAL');
-    const deal = await db.Deal.create(
-      {
-        tenant_id: tenantId,
-        deal_number: dealNumber,
-        lead_id: leadId,
-        client_id: clientId,
-        deal_type: dealData.dealType,
-        title: dealData.title || `Deal from ${lead.company_name}`,
-        description: dealData.description || lead.notes,
-        service_type: lead.service_interest,
-        expected_value: dealData.expectedValue || lead.estimated_value,
-        currency: dealData.currency || 'AED',
-        expected_closure_date: dealData.expectedClosureDate,
-        probability: dealData.probability || 50,
-        assigned_to: dealData.assignedTo || lead.assigned_to,
-        current_stage: 'sales',
-        current_department: 'sales',
-        handler_user_id: dealData.assignedTo || lead.assigned_to,
-        status: 'draft',
-      },
-      { transaction }
-    );
-
-    // Create initial deal stage
-    await db.DealStage.create(
-      {
-        tenant_id: tenantId,
-        deal_id: deal.id,
-        stage_name: 'sales',
-        department: 'sales',
-        handler_user_id: deal.handler_user_id,
-        started_at: new Date(),
-        is_completed: false,
-      },
-      { transaction }
-    );
-
-    // Update lead
-    await lead.update(
-      {
-        status: LEAD_STATUS.CONVERTED,
-        converted_to_deal_id: deal.id,
-        converted_at: new Date(),
-      },
-      { transaction }
-    );
-
-    await transaction.commit();
-
-    return await db.Deal.findByPk(deal.id, {
-      include: [
-        { model: db.Client, as: 'client' },
-        { model: db.Lead, as: 'lead' },
-        { model: db.User, as: 'assignedUser' },
-      ],
-    });
-  } catch (error) {
-    await transaction.rollback();
-    throw error;
+  if (!lead) throw ApiError.notFound('Lead not found');
+  if (lead.status === LEAD_STATUS.CONVERTED) {
+    throw ApiError.badRequest('Lead already converted');
   }
+
+  await lead.update({
+    status: LEAD_STATUS.CONVERTED,
+    converted_at: new Date(),
+  });
+
+  return await getById(tenantId, leadId);
 };
 
 const remove = async (tenantId, leadId) => {

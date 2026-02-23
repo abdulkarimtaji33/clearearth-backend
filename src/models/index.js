@@ -12,10 +12,6 @@ const Permission = require('./Permission')(sequelize, DataTypes);
 const RolePermission = require('./RolePermission')(sequelize, DataTypes);
 const AuditLog = require('./AuditLog')(sequelize, DataTypes);
 
-// Clients & Vendors (legacy)
-const Client = require('./Client')(sequelize, DataTypes);
-const Vendor = require('./Vendor')(sequelize, DataTypes);
-
 // Contacts, Companies & Suppliers
 const Contact = require('./Contact')(sequelize, DataTypes);
 const CompanyContact = require('./CompanyContact')(sequelize, DataTypes);
@@ -25,67 +21,27 @@ const Supplier = require('./Supplier')(sequelize, DataTypes);
 
 // CRM
 const Lead = require('./Lead')(sequelize, DataTypes);
-const Deal = require('./Deal')(sequelize, DataTypes);
-const DealStage = require('./DealStage')(sequelize, DataTypes);
 
 // Products & Services
-const Product = require('./Product')(sequelize, DataTypes);
-const Service = require('./Service')(sequelize, DataTypes);
+const ProductService = require('./ProductService')(sequelize, DataTypes);
 
-// Masters/Configuration
-const Currency = require('./Currency')(sequelize, DataTypes);
-const Tax = require('./Tax')(sequelize, DataTypes);
-const PaymentMode = require('./PaymentMode')(sequelize, DataTypes);
-const ExpenseCategory = require('./ExpenseCategory')(sequelize, DataTypes);
-const MaterialType = require('./MaterialType')(sequelize, DataTypes);
+// Deals
+const Deal = require('./Deal')(sequelize, DataTypes);
+const DealItem = require('./DealItem')(sequelize, DataTypes);
 
-// Inventory
-const Warehouse = require('./Warehouse')(sequelize, DataTypes);
-const Lot = require('./Lot')(sequelize, DataTypes);
-const Inventory = require('./Inventory')(sequelize, DataTypes);
-const StockMovement = require('./StockMovement')(sequelize, DataTypes);
-
-// Operations
-const Job = require('./Job')(sequelize, DataTypes);
-const Inspection = require('./Inspection')(sequelize, DataTypes);
-const GoodsReceiptNote = require('./GoodsReceiptNote')(sequelize, DataTypes);
-
-// Accounting & Finance
-const ChartOfAccount = require('./ChartOfAccount')(sequelize, DataTypes);
-const JournalEntry = require('./JournalEntry')(sequelize, DataTypes);
-const JournalEntryLine = require('./JournalEntryLine')(sequelize, DataTypes);
-const Invoice = require('./Invoice')(sequelize, DataTypes);
-const InvoiceLine = require('./InvoiceLine')(sequelize, DataTypes);
-const Payment = require('./Payment')(sequelize, DataTypes);
-const Cheque = require('./Cheque')(sequelize, DataTypes);
-const FixedAsset = require('./FixedAsset')(sequelize, DataTypes);
-const Depreciation = require('./Depreciation')(sequelize, DataTypes);
-
-// Commission
-const Commission = require('./Commission')(sequelize, DataTypes);
-const CommissionPolicy = require('./CommissionPolicy')(sequelize, DataTypes);
-
-// Documents
-const Document = require('./Document')(sequelize, DataTypes);
-
-// Certificates
-const Certificate = require('./Certificate')(sequelize, DataTypes);
-const CertificateTemplate = require('./CertificateTemplate')(sequelize, DataTypes);
-
-// Fleet & Logistics
-const Vehicle = require('./Vehicle')(sequelize, DataTypes);
-const Driver = require('./Driver')(sequelize, DataTypes);
-const Trip = require('./Trip')(sequelize, DataTypes);
-const FuelLog = require('./FuelLog')(sequelize, DataTypes);
-const MaintenanceLog = require('./MaintenanceLog')(sequelize, DataTypes);
-
-// HR & Payroll
-const Employee = require('./Employee')(sequelize, DataTypes);
-const Leave = require('./Leave')(sequelize, DataTypes);
-const Attendance = require('./Attendance')(sequelize, DataTypes);
-const Payroll = require('./Payroll')(sequelize, DataTypes);
-const PayrollLine = require('./PayrollLine')(sequelize, DataTypes);
-const AssetCustody = require('./AssetCustody')(sequelize, DataTypes);
+// Dropdown Tables
+const Designation = require('./Designation')(sequelize, DataTypes);
+const IndustryType = require('./IndustryType')(sequelize, DataTypes);
+const UaeCity = require('./UaeCity')(sequelize, DataTypes);
+const Country = require('./Country')(sequelize, DataTypes);
+const LeadSource = require('./LeadSource')(sequelize, DataTypes);
+const ContactRole = require('./ContactRole')(sequelize, DataTypes);
+const ServiceInterest = require('./ServiceInterest')(sequelize, DataTypes);
+const ProductCategory = require('./ProductCategory')(sequelize, DataTypes);
+const UnitOfMeasure = require('./UnitOfMeasure')(sequelize, DataTypes);
+const DealStatus = require('./DealStatus')(sequelize, DataTypes);
+const PaymentStatus = require('./PaymentStatus')(sequelize, DataTypes);
+const Status = require('./Status')(sequelize, DataTypes);
 
 // Create db object with all models
 const db = {
@@ -97,55 +53,27 @@ const db = {
   Permission,
   RolePermission,
   AuditLog,
-  Client,
-  Vendor,
   Contact,
   CompanyContact,
   Company,
   SupplierContact,
   Supplier,
   Lead,
+  ProductService,
   Deal,
-  DealStage,
-  Product,
-  Service,
-  Currency,
-  Tax,
-  PaymentMode,
-  ExpenseCategory,
-  MaterialType,
-  Warehouse,
-  Lot,
-  Inventory,
-  StockMovement,
-  Job,
-  Inspection,
-  GoodsReceiptNote,
-  ChartOfAccount,
-  JournalEntry,
-  JournalEntryLine,
-  Invoice,
-  InvoiceLine,
-  Payment,
-  Cheque,
-  FixedAsset,
-  Depreciation,
-  Commission,
-  CommissionPolicy,
-  Document,
-  Certificate,
-  CertificateTemplate,
-  Vehicle,
-  Driver,
-  Trip,
-  FuelLog,
-  MaintenanceLog,
-  Employee,
-  Leave,
-  Attendance,
-  Payroll,
-  PayrollLine,
-  AssetCustody,
+  DealItem,
+  Designation,
+  IndustryType,
+  UaeCity,
+  Country,
+  LeadSource,
+  ContactRole,
+  ServiceInterest,
+  ProductCategory,
+  UnitOfMeasure,
+  DealStatus,
+  PaymentStatus,
+  Status,
 };
 
 // Define Associations

@@ -2,23 +2,53 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { generateReferenceNumber } = require('../utils/helpers');
 const { Op } = db.Sequelize;
-const { DEAL_STATUS, DEPARTMENT_STAGE } = require('../constants');
+
+const calculateDealTotals = (items, vatPercentage = 5) => {
+  const subtotal = items.reduce((sum, item) => {
+    return sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice));
+  }, 0);
+  
+  const vatAmount = (subtotal * parseFloat(vatPercentage)) / 100;
+  const total = subtotal + vatAmount;
+  
+  return {
+    subtotal: subtotal.toFixed(2),
+    vatAmount: vatAmount.toFixed(2),
+    total: total.toFixed(2),
+  };
+};
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, dealType, assignedTo } = filters;
+  const { offset, limit, search, status, paymentStatus, companyId, supplierId } = filters;
   const where = { tenant_id: tenantId };
 
-  if (search) where[Op.or] = [{ title: { [Op.like]: `%${search}%` } }, { deal_number: { [Op.like]: `%${search}%` } }];
+  if (search) {
+    where[Op.or] = [
+      { title: { [Op.like]: `%${search}%` } },
+      { deal_number: { [Op.like]: `%${search}%` } },
+      { description: { [Op.like]: `%${search}%` } },
+    ];
+  }
   if (status) where.status = status;
-  if (dealType) where.deal_type = dealType;
-  if (assignedTo) where.assigned_to = assignedTo;
+  if (paymentStatus) where.payment_status = paymentStatus;
+  if (companyId) where.company_id = companyId;
+  if (supplierId) where.supplier_id = supplierId;
 
   const { count, rows } = await db.Deal.findAndCountAll({
     where,
     include: [
-      { model: db.Client, as: 'client', attributes: ['id', 'company_name', 'email'] },
-      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'] },
-      { model: db.User, as: 'currentHandler', attributes: ['id', 'first_name', 'last_name'] },
+      { model: db.Lead, as: 'lead', attributes: ['id', 'lead_number'], required: false },
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
+      { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+      {
+        model: db.DealItem,
+        as: 'items',
+        include: [
+          { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category'] },
+        ],
+      },
     ],
     offset,
     limit,
@@ -32,60 +62,72 @@ const getById = async (tenantId, dealId) => {
   const deal = await db.Deal.findOne({
     where: { id: dealId, tenant_id: tenantId },
     include: [
-      { model: db.Client, as: 'client' },
-      { model: db.Lead, as: 'lead' },
-      { model: db.User, as: 'assignedUser' },
-      { model: db.User, as: 'currentHandler' },
-      { model: db.DealStage, as: 'stages', order: [['started_at', 'ASC']] },
-      { model: db.Job, as: 'jobs' },
+      { model: db.Lead, as: 'lead', required: false },
+      { model: db.Company, as: 'company', required: false },
+      { model: db.Contact, as: 'contact', required: false },
+      { model: db.Supplier, as: 'supplier', required: false },
+      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+      {
+        model: db.DealItem,
+        as: 'items',
+        include: [
+          { model: db.ProductService, as: 'productService' },
+        ],
+      },
     ],
   });
   if (!deal) throw ApiError.notFound('Deal not found');
   return deal;
 };
 
-const create = async (tenantId, userId, data) => {
+const create = async (tenantId, data) => {
   const transaction = await db.sequelize.transaction();
 
   try {
     const dealNumber = generateReferenceNumber('DEAL');
 
+    // Calculate totals
+    const totals = calculateDealTotals(data.items || [], data.vatPercentage || 5);
+
+    // Create deal
     const deal = await db.Deal.create(
       {
         tenant_id: tenantId,
         deal_number: dealNumber,
-        client_id: data.clientId,
-        deal_type: data.dealType,
+        lead_id: data.leadId || null,
+        company_id: data.companyId || null,
+        contact_id: data.contactId || null,
+        supplier_id: data.supplierId || null,
         title: data.title,
         description: data.description,
-        service_type: data.serviceType || [],
-        expected_value: data.expectedValue,
+        deal_date: data.dealDate || new Date(),
+        subtotal: totals.subtotal,
+        vat_percentage: data.vatPercentage || 5,
+        vat_amount: totals.vatAmount,
+        total: totals.total,
         currency: data.currency || 'AED',
-        expected_closure_date: data.expectedClosureDate,
-        probability: data.probability || 50,
-        assigned_to: data.assignedTo || userId,
-        current_stage: 'sales',
-        current_department: 'sales',
-        handler_user_id: data.assignedTo || userId,
-        status: DEAL_STATUS.DRAFT,
+        status: data.status || 'draft',
+        payment_status: 'unpaid',
+        paid_amount: 0,
+        assigned_to: data.assignedTo || null,
         notes: data.notes,
       },
       { transaction }
     );
 
-    // Create initial stage
-    await db.DealStage.create(
-      {
-        tenant_id: tenantId,
+    // Create deal items
+    if (data.items && data.items.length > 0) {
+      const itemsToCreate = data.items.map(item => ({
         deal_id: deal.id,
-        stage_name: 'sales',
-        department: 'sales',
-        handler_user_id: deal.handler_user_id,
-        started_at: new Date(),
-        is_completed: false,
-      },
-      { transaction }
-    );
+        product_service_id: item.productServiceId,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        line_total: (parseFloat(item.quantity) * parseFloat(item.unitPrice)).toFixed(2),
+        notes: item.notes || null,
+      }));
+
+      await db.DealItem.bulkCreate(itemsToCreate, { transaction });
+    }
 
     await transaction.commit();
     return await getById(tenantId, deal.id);
@@ -96,162 +138,104 @@ const create = async (tenantId, userId, data) => {
 };
 
 const update = async (tenantId, dealId, data) => {
-  const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+  const transaction = await db.sequelize.transaction();
+
+  try {
+    const deal = await db.Deal.findOne({
+      where: { id: dealId, tenant_id: tenantId },
+      transaction,
+    });
+    if (!deal) throw ApiError.notFound('Deal not found');
+
+    // Calculate new totals if items provided
+    let totals = null;
+    if (data.items) {
+      totals = calculateDealTotals(data.items, data.vatPercentage || deal.vat_percentage);
+    }
+
+    // Update deal
+    await deal.update(
+      {
+        lead_id: data.leadId !== undefined ? data.leadId : deal.lead_id,
+        company_id: data.companyId !== undefined ? data.companyId : deal.company_id,
+        contact_id: data.contactId !== undefined ? data.contactId : deal.contact_id,
+        supplier_id: data.supplierId !== undefined ? data.supplierId : deal.supplier_id,
+        title: data.title !== undefined ? data.title : deal.title,
+        description: data.description !== undefined ? data.description : deal.description,
+        deal_date: data.dealDate !== undefined ? data.dealDate : deal.deal_date,
+        subtotal: totals ? totals.subtotal : deal.subtotal,
+        vat_percentage: data.vatPercentage !== undefined ? data.vatPercentage : deal.vat_percentage,
+        vat_amount: totals ? totals.vatAmount : deal.vat_amount,
+        total: totals ? totals.total : deal.total,
+        currency: data.currency !== undefined ? data.currency : deal.currency,
+        status: data.status !== undefined ? data.status : deal.status,
+        payment_status: data.paymentStatus !== undefined ? data.paymentStatus : deal.payment_status,
+        paid_amount: data.paidAmount !== undefined ? data.paidAmount : deal.paid_amount,
+        assigned_to: data.assignedTo !== undefined ? data.assignedTo : deal.assigned_to,
+        notes: data.notes !== undefined ? data.notes : deal.notes,
+      },
+      { transaction }
+    );
+
+    // Update deal items if provided
+    if (data.items) {
+      // Delete existing items
+      await db.DealItem.destroy({ where: { deal_id: dealId }, transaction });
+
+      // Create new items
+      if (data.items.length > 0) {
+        const itemsToCreate = data.items.map(item => ({
+          deal_id: dealId,
+          product_service_id: item.productServiceId,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          line_total: (parseFloat(item.quantity) * parseFloat(item.unitPrice)).toFixed(2),
+          notes: item.notes || null,
+        }));
+
+        await db.DealItem.bulkCreate(itemsToCreate, { transaction });
+      }
+    }
+
+    await transaction.commit();
+    return await getById(tenantId, dealId);
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const updatePayment = async (tenantId, dealId, paidAmount) => {
+  const deal = await db.Deal.findOne({
+    where: { id: dealId, tenant_id: tenantId },
+  });
   if (!deal) throw ApiError.notFound('Deal not found');
 
-  if ([DEAL_STATUS.WON, DEAL_STATUS.LOST, DEAL_STATUS.CANCELLED].includes(deal.status)) {
-    throw ApiError.badRequest('Cannot update finalized deal');
+  const totalPaid = parseFloat(paidAmount);
+  const totalAmount = parseFloat(deal.total);
+
+  let paymentStatus = 'unpaid';
+  if (totalPaid >= totalAmount) {
+    paymentStatus = 'paid';
+  } else if (totalPaid > 0) {
+    paymentStatus = 'partial';
   }
 
   await deal.update({
-    title: data.title || deal.title,
-    description: data.description || deal.description,
-    service_type: data.serviceType || deal.service_type,
-    expected_value: data.expectedValue ?? deal.expected_value,
-    expected_closure_date: data.expectedClosureDate || deal.expected_closure_date,
-    probability: data.probability ?? deal.probability,
-    notes: data.notes || deal.notes,
+    paid_amount: totalPaid,
+    payment_status: paymentStatus,
   });
 
   return await getById(tenantId, dealId);
 };
 
-const moveToStage = async (tenantId, dealId, newStage, newDepartment, handlerUserId, notes) => {
-  const transaction = await db.sequelize.transaction();
-
-  try {
-    const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId }, transaction });
-    if (!deal) throw ApiError.notFound('Deal not found');
-
-    if ([DEAL_STATUS.WON, DEAL_STATUS.LOST, DEAL_STATUS.CANCELLED].includes(deal.status)) {
-      throw ApiError.badRequest('Cannot move finalized deal');
-    }
-
-    // Complete current stage
-    const currentStage = await db.DealStage.findOne({
-      where: { deal_id: dealId, is_completed: false },
-      transaction,
-    });
-
-    if (currentStage) {
-      await currentStage.update(
-        {
-          completed_at: new Date(),
-          is_completed: true,
-          notes: notes || currentStage.notes,
-        },
-        { transaction }
-      );
-    }
-
-    // Create new stage
-    await db.DealStage.create(
-      {
-        tenant_id: tenantId,
-        deal_id: dealId,
-        stage_name: newStage,
-        department: newDepartment,
-        handler_user_id: handlerUserId,
-        started_at: new Date(),
-        is_completed: false,
-      },
-      { transaction }
-    );
-
-    // Update deal
-    await deal.update(
-      {
-        current_stage: newStage,
-        current_department: newDepartment,
-        handler_user_id: handlerUserId,
-        status: DEAL_STATUS.NEGOTIATION,
-      },
-      { transaction }
-    );
-
-    await transaction.commit();
-    return await getById(tenantId, dealId);
-  } catch (error) {
-    await transaction.rollback();
-    throw error;
-  }
-};
-
-const finalize = async (tenantId, dealId, finalStatus, reason, userId) => {
-  const transaction = await db.sequelize.transaction();
-
-  try {
-    const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId }, transaction });
-    if (!deal) throw ApiError.notFound('Deal not found');
-
-    if ([DEAL_STATUS.WON, DEAL_STATUS.LOST, DEAL_STATUS.CANCELLED].includes(deal.status)) {
-      throw ApiError.badRequest('Deal already finalized');
-    }
-
-    // Complete current stage
-    const currentStage = await db.DealStage.findOne({
-      where: { deal_id: dealId, is_completed: false },
-      transaction,
-    });
-
-    if (currentStage) {
-      await currentStage.update({ completed_at: new Date(), is_completed: true }, { transaction });
-    }
-
-    // Update deal
-    const updateData = {
-      status: finalStatus,
-      actual_closure_date: new Date(),
-      finalized_at: new Date(),
-      finalized_by: userId,
-    };
-
-    if (finalStatus === DEAL_STATUS.WON) {
-      updateData.won_reason = reason;
-    } else if (finalStatus === DEAL_STATUS.LOST) {
-      updateData.lost_reason = reason;
-    }
-
-    await deal.update(updateData, { transaction });
-
-    await transaction.commit();
-    return await getById(tenantId, dealId);
-  } catch (error) {
-    await transaction.rollback();
-    throw error;
-  }
-};
-
 const remove = async (tenantId, dealId) => {
-  const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+  const deal = await db.Deal.findOne({
+    where: { id: dealId, tenant_id: tenantId },
+  });
   if (!deal) throw ApiError.notFound('Deal not found');
 
-  if (deal.status === DEAL_STATUS.WON) {
-    throw ApiError.badRequest('Cannot delete won deal');
-  }
-
   await deal.destroy();
-};
-
-const getStatistics = async (tenantId) => {
-  const [totalDeals, wonDeals, lostDeals, activeDeals, totalValue, wonValue] = await Promise.all([
-    db.Deal.count({ where: { tenant_id: tenantId } }),
-    db.Deal.count({ where: { tenant_id: tenantId, status: DEAL_STATUS.WON } }),
-    db.Deal.count({ where: { tenant_id: tenantId, status: DEAL_STATUS.LOST } }),
-    db.Deal.count({ where: { tenant_id: tenantId, status: { [Op.notIn]: [DEAL_STATUS.WON, DEAL_STATUS.LOST, DEAL_STATUS.CANCELLED] } } }),
-    db.Deal.sum('expected_value', { where: { tenant_id: tenantId } }),
-    db.Deal.sum('expected_value', { where: { tenant_id: tenantId, status: DEAL_STATUS.WON } }),
-  ]);
-
-  return {
-    totalDeals: totalDeals || 0,
-    wonDeals: wonDeals || 0,
-    lostDeals: lostDeals || 0,
-    activeDeals: activeDeals || 0,
-    totalValue: totalValue || 0,
-    wonValue: wonValue || 0,
-    conversionRate: totalDeals > 0 ? ((wonDeals / totalDeals) * 100).toFixed(2) : 0,
-  };
 };
 
 module.exports = {
@@ -259,8 +243,6 @@ module.exports = {
   getById,
   create,
   update,
-  moveToStage,
-  finalize,
+  updatePayment,
   remove,
-  getStatistics,
 };
