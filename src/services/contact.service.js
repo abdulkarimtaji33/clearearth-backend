@@ -61,16 +61,16 @@ const getById = async (tenantId, contactId) => {
 };
 
 const create = async (tenantId, data) => {
-  const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, notes } = data;
+  const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, notes, setAsPrimaryContact } = data;
 
   if (email) {
     const existing = await db.Contact.findOne({ where: { tenant_id: tenantId, email } });
     if (existing) throw ApiError.conflict('Email already exists');
   }
 
-  // Validate company if provided
+  let company = null;
   if (companyId) {
-    const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+    company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
     if (!company) throw ApiError.notFound('Company not found');
   }
 
@@ -91,6 +91,18 @@ const create = async (tenantId, data) => {
     notes: notes || null,
     status: 'active',
   });
+
+  if (company && (setAsPrimaryContact || !company.primary_contact_id)) {
+    await company.update({ primary_contact_id: contact.id });
+    
+    const [link, created] = await db.CompanyContact.findOrCreate({
+      where: { company_id: company.id, contact_id: contact.id },
+      defaults: { role: null, is_primary: true },
+    });
+    if (!created) {
+      await link.update({ is_primary: true });
+    }
+  }
 
   return getById(tenantId, contact.id);
 };

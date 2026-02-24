@@ -11,7 +11,7 @@ const createValidation = [
   body('phone').notEmpty().withMessage('Phone is required'),
   body('email').notEmpty().isEmail().withMessage('Valid email is required'),
   body('source').notEmpty().withMessage('Lead source is required'),
-  body('serviceInterest').notEmpty().withMessage('Service interest is required'),
+  body('productServiceId').optional({ values: 'falsy' }).isInt().withMessage('Valid product/service ID is required'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   body('contactId').optional({ values: 'falsy' }).isInt().withMessage('Valid contact ID is required'),
   validate,
