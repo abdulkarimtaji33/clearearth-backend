@@ -87,6 +87,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         references: { model: 'users', key: 'id' },
       },
+      terms_and_conditions_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'terms_and_conditions', key: 'id' },
+      },
       notes: {
         type: DataTypes.TEXT,
       },
@@ -114,6 +119,7 @@ module.exports = (sequelize, DataTypes) => {
     Deal.belongsTo(models.Contact, { foreignKey: 'contact_id', as: 'contact' });
     Deal.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     Deal.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
+    Deal.belongsTo(models.TermsAndConditions, { foreignKey: 'terms_and_conditions_id', as: 'termsAndConditions' });
     Deal.hasMany(models.DealItem, { foreignKey: 'deal_id', as: 'items' });
   };
 

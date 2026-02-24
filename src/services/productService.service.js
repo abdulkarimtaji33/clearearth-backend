@@ -4,7 +4,7 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, category, status } = filters;
+  const { offset, limit, search, category, status, type, unitOfMeasure, minPrice, maxPrice } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -15,6 +15,14 @@ const getAll = async (tenantId, filters) => {
   }
   if (category) where.category = category;
   if (status) where.status = status;
+  if (type) where.type = type;
+  if (unitOfMeasure) where.unit_of_measure = unitOfMeasure;
+  
+  if (minPrice || maxPrice) {
+    where.price = {};
+    if (minPrice) where.price[Op.gte] = parseFloat(minPrice);
+    if (maxPrice) where.price[Op.lte] = parseFloat(maxPrice);
+  }
 
   const { count, rows } = await db.ProductService.findAndCountAll({
     where,

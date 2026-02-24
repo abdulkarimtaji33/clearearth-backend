@@ -5,7 +5,7 @@ const { Op } = db.Sequelize;
 const { LEAD_STATUS } = require('../constants');
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, assignedTo } = filters;
+  const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -17,6 +17,10 @@ const getAll = async (tenantId, filters) => {
   }
   if (status) where.status = status;
   if (assignedTo) where.assigned_to = assignedTo;
+  if (source) where.source = source;
+  if (companyId) where.company_id = companyId;
+  if (contactId) where.contact_id = contactId;
+  if (productServiceId) where.product_service_id = productServiceId;
 
   const { count, rows } = await db.Lead.findAndCountAll({
     where,

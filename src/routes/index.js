@@ -15,6 +15,7 @@ const leadRoutes = require('./lead.routes');
 const productServiceRoutes = require('./productService.routes');
 const dealRoutes = require('./deal.routes');
 const dropdownRoutes = require('./dropdown.routes');
+const termsRoutes = require('./termsAndConditions.routes');
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -32,6 +33,7 @@ router.get('/', (req, res) => {
       products: '/products',
       deals: '/deals',
       dropdowns: '/dropdowns',
+      terms: '/terms',
     },
   });
 });
@@ -47,5 +49,6 @@ router.use('/leads', leadRoutes);
 router.use('/products', productServiceRoutes);
 router.use('/deals', dealRoutes);
 router.use('/dropdowns', dropdownRoutes);
+router.use('/terms', termsRoutes);
 
 module.exports = router;

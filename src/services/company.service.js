@@ -14,7 +14,7 @@ const contactInclude = {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status } = filters;
+  const { offset, limit, search, status, industryType, country, city, contactId } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -28,6 +28,10 @@ const getAll = async (tenantId, filters) => {
   }
 
   if (status) where.status = status;
+  if (industryType) where.industry_type = industryType;
+  if (country) where.country = country;
+  if (city) where.city = city;
+  if (contactId) where.primary_contact_id = contactId;
 
   const { count, rows } = await db.Company.findAndCountAll({
     where,

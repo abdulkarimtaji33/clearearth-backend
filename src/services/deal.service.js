@@ -19,7 +19,7 @@ const calculateDealTotals = (items, vatPercentage = 5) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, paymentStatus, companyId, supplierId } = filters;
+  const { offset, limit, search, status, paymentStatus, companyId, supplierId, contactId, assignedTo, productServiceId, minAmount, maxAmount } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -33,26 +33,50 @@ const getAll = async (tenantId, filters) => {
   if (paymentStatus) where.payment_status = paymentStatus;
   if (companyId) where.company_id = companyId;
   if (supplierId) where.supplier_id = supplierId;
+  if (contactId) where.contact_id = contactId;
+  if (assignedTo) where.assigned_to = assignedTo;
+  
+  if (minAmount || maxAmount) {
+    where.total = {};
+    if (minAmount) where.total[Op.gte] = parseFloat(minAmount);
+    if (maxAmount) where.total[Op.lte] = parseFloat(maxAmount);
+  }
+
+  let includeClause = [
+    { model: db.Lead, as: 'lead', attributes: ['id', 'lead_number'], required: false },
+    { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+    { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
+    { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+    { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+    {
+      model: db.DealItem,
+      as: 'items',
+      include: [
+        { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category'] },
+      ],
+      required: !!productServiceId,
+    },
+  ];
+
+  if (productServiceId) {
+    includeClause = includeClause.map(inc => {
+      if (inc.as === 'items') {
+        return {
+          ...inc,
+          where: { product_service_id: productServiceId },
+        };
+      }
+      return inc;
+    });
+  }
 
   const { count, rows } = await db.Deal.findAndCountAll({
     where,
-    include: [
-      { model: db.Lead, as: 'lead', attributes: ['id', 'lead_number'], required: false },
-      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
-      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
-      { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
-      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
-      {
-        model: db.DealItem,
-        as: 'items',
-        include: [
-          { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category'] },
-        ],
-      },
-    ],
+    include: includeClause,
     offset,
     limit,
     order: [['created_at', 'DESC']],
+    distinct: true,
   });
 
   return { deals: rows, total: count };
@@ -67,6 +91,7 @@ const getById = async (tenantId, dealId) => {
       { model: db.Contact, as: 'contact', required: false },
       { model: db.Supplier, as: 'supplier', required: false },
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+      { model: db.TermsAndConditions, as: 'termsAndConditions', attributes: ['id', 'title', 'content'], required: false },
       {
         model: db.DealItem,
         as: 'items',
@@ -106,6 +131,7 @@ const create = async (tenantId, data) => {
         vat_amount: totals.vatAmount,
         total: totals.total,
         currency: data.currency || 'AED',
+        terms_and_conditions_id: data.termsAndConditionsId || null,
         status: data.status || 'draft',
         payment_status: 'unpaid',
         paid_amount: 0,
@@ -180,6 +206,7 @@ const update = async (tenantId, dealId, data) => {
         payment_status: data.paymentStatus !== undefined ? data.paymentStatus : deal.payment_status,
         paid_amount: data.paidAmount !== undefined ? data.paidAmount : deal.paid_amount,
         assigned_to: data.assignedTo !== undefined ? data.assignedTo : deal.assigned_to,
+        terms_and_conditions_id: data.termsAndConditionsId !== undefined ? data.termsAndConditionsId : deal.terms_and_conditions_id,
         notes: data.notes !== undefined ? data.notes : deal.notes,
       },
       { transaction }

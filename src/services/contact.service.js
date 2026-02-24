@@ -7,7 +7,7 @@ const { generateReferenceNumber } = require('../utils/helpers');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status } = filters;
+  const { offset, limit, search, status, designation, department, companyId } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -21,6 +21,9 @@ const getAll = async (tenantId, filters) => {
   }
 
   if (status) where.status = status;
+  if (designation) where.designation = designation;
+  if (department) where.department = { [Op.like]: `%${department}%` };
+  if (companyId) where.company_id = companyId;
 
   const { count, rows } = await db.Contact.findAndCountAll({
     where,
