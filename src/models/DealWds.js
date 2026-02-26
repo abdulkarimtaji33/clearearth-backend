@@ -72,6 +72,10 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'deal_wds',
       timestamps: true,
       underscored: true,
+      paranoid: false,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      deletedAt: false,
       indexes: [
         { fields: ['deal_id'] },
         { fields: ['ref_no'] },

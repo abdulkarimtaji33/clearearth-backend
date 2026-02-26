@@ -152,6 +152,10 @@ const create = async (tenantId, data) => {
 
     // Create WDS details if provided
     if (data.wdsRequired && data.wdsDetails) {
+      const w = data.wdsDetails;
+      if (!w.refNo?.trim() || !w.date || !w.companyName?.trim() || !w.licenseNo?.trim() || !w.wasteDescription?.trim() || !w.containerNo?.trim()) {
+        throw ApiError.badRequest('WDS required fields missing: Ref No, Date, Company Name, License No, Waste Description, Container No');
+      }
       await db.DealWds.create(
         {
           deal_id: deal.id,
@@ -175,6 +179,10 @@ const create = async (tenantId, data) => {
 
     // Create deal items
     if (data.items && data.items.length > 0) {
+      const invalidItems = data.items.filter((item) => !item.productServiceId);
+      if (invalidItems.length > 0) {
+        throw ApiError.badRequest('Each line item must have a product/service selected');
+      }
       const itemsToCreate = data.items.map(item => ({
         deal_id: deal.id,
         product_service_id: item.productServiceId,
@@ -198,7 +206,9 @@ const create = async (tenantId, data) => {
     await transaction.commit();
     return await getById(tenantId, deal.id);
   } catch (error) {
-    await transaction.rollback();
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     throw error;
   }
 };
@@ -254,6 +264,10 @@ const update = async (tenantId, dealId, data) => {
 
     // Handle WDS details
     if (data.wdsRequired && data.wdsDetails) {
+      const w = data.wdsDetails;
+      if (!w.refNo?.trim() || !w.date || !w.companyName?.trim() || !w.licenseNo?.trim() || !w.wasteDescription?.trim() || !w.containerNo?.trim()) {
+        throw ApiError.badRequest('WDS required fields missing: Ref No, Date, Company Name, License No, Waste Description, Container No');
+      }
       const existingWds = await db.DealWds.findOne({ where: { deal_id: dealId }, transaction });
       
       if (existingWds) {
@@ -307,6 +321,10 @@ const update = async (tenantId, dealId, data) => {
 
       // Create new items
       if (data.items.length > 0) {
+        const invalidItems = data.items.filter((item) => !item.productServiceId);
+        if (invalidItems.length > 0) {
+          throw ApiError.badRequest('Each line item must have a product/service selected');
+        }
         const itemsToCreate = data.items.map(item => ({
           deal_id: dealId,
           product_service_id: item.productServiceId,
@@ -323,7 +341,9 @@ const update = async (tenantId, dealId, data) => {
     await transaction.commit();
     return await getById(tenantId, dealId);
   } catch (error) {
-    await transaction.rollback();
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     throw error;
   }
 };
