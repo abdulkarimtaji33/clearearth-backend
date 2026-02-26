@@ -92,6 +92,39 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         references: { model: 'terms_and_conditions', key: 'id' },
       },
+      deal_type: {
+        type: DataTypes.ENUM('offer_to_charge', 'offer_to_purchase', 'free_of_charge'),
+        allowNull: false,
+        defaultValue: 'offer_to_purchase',
+      },
+      container_type: {
+        type: DataTypes.ENUM('LCL', 'FCL'),
+        allowNull: true,
+      },
+      location_type: {
+        type: DataTypes.ENUM('Main Land', 'Free Zone'),
+        allowNull: true,
+      },
+      wds_required: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      inspection_required: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      custom_inspection: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      trakhees_inspection: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      dubai_municipality_inspection: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
       notes: {
         type: DataTypes.TEXT,
       },
@@ -121,6 +154,7 @@ module.exports = (sequelize, DataTypes) => {
     Deal.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
     Deal.belongsTo(models.TermsAndConditions, { foreignKey: 'terms_and_conditions_id', as: 'termsAndConditions' });
     Deal.hasMany(models.DealItem, { foreignKey: 'deal_id', as: 'items' });
+    Deal.hasOne(models.DealWds, { foreignKey: 'deal_id', as: 'wdsDetails' });
   };
 
   return Deal;

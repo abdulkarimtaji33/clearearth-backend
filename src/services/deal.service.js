@@ -92,6 +92,7 @@ const getById = async (tenantId, dealId) => {
       { model: db.Supplier, as: 'supplier', required: false },
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.TermsAndConditions, as: 'termsAndConditions', attributes: ['id', 'title', 'content'], required: false },
+      { model: db.DealWds, as: 'wdsDetails', required: false },
       {
         model: db.DealItem,
         as: 'items',
@@ -132,6 +133,14 @@ const create = async (tenantId, data) => {
         total: totals.total,
         currency: data.currency || 'AED',
         terms_and_conditions_id: data.termsAndConditionsId || null,
+        deal_type: data.dealType || 'offer_to_purchase',
+        container_type: data.containerType || null,
+        location_type: data.locationType || null,
+        wds_required: data.wdsRequired || false,
+        inspection_required: data.inspectionRequired || false,
+        custom_inspection: data.customInspection || false,
+        trakhees_inspection: data.trakheesInspection || false,
+        dubai_municipality_inspection: data.dubaiMunicipalityInspection || false,
         status: data.status || 'draft',
         payment_status: 'unpaid',
         paid_amount: 0,
@@ -140,6 +149,29 @@ const create = async (tenantId, data) => {
       },
       { transaction }
     );
+
+    // Create WDS details if provided
+    if (data.wdsRequired && data.wdsDetails) {
+      await db.DealWds.create(
+        {
+          deal_id: deal.id,
+          ref_no: data.wdsDetails.refNo,
+          date: data.wdsDetails.date,
+          company_name: data.wdsDetails.companyName,
+          license_no: data.wdsDetails.licenseNo,
+          waste_description: data.wdsDetails.wasteDescription,
+          source_process: data.wdsDetails.sourceProcess || null,
+          package_type: data.wdsDetails.packageType || null,
+          quantity_per_package: data.wdsDetails.quantityPerPackage || null,
+          total_weight: data.wdsDetails.totalWeight || null,
+          container_no: data.wdsDetails.containerNo,
+          purpose: data.wdsDetails.purpose || null,
+          bl_no: data.wdsDetails.blNo || null,
+          bor_no: data.wdsDetails.borNo || null,
+        },
+        { transaction }
+      );
+    }
 
     // Create deal items
     if (data.items && data.items.length > 0) {
@@ -202,6 +234,14 @@ const update = async (tenantId, dealId, data) => {
         vat_amount: totals ? totals.vatAmount : deal.vat_amount,
         total: totals ? totals.total : deal.total,
         currency: data.currency !== undefined ? data.currency : deal.currency,
+        deal_type: data.dealType !== undefined ? data.dealType : deal.deal_type,
+        container_type: data.containerType !== undefined ? data.containerType : deal.container_type,
+        location_type: data.locationType !== undefined ? data.locationType : deal.location_type,
+        wds_required: data.wdsRequired !== undefined ? data.wdsRequired : deal.wds_required,
+        inspection_required: data.inspectionRequired !== undefined ? data.inspectionRequired : deal.inspection_required,
+        custom_inspection: data.customInspection !== undefined ? data.customInspection : deal.custom_inspection,
+        trakhees_inspection: data.trakheesInspection !== undefined ? data.trakheesInspection : deal.trakhees_inspection,
+        dubai_municipality_inspection: data.dubaiMunicipalityInspection !== undefined ? data.dubaiMunicipalityInspection : deal.dubai_municipality_inspection,
         status: data.status !== undefined ? data.status : deal.status,
         payment_status: data.paymentStatus !== undefined ? data.paymentStatus : deal.payment_status,
         paid_amount: data.paidAmount !== undefined ? data.paidAmount : deal.paid_amount,
@@ -211,6 +251,54 @@ const update = async (tenantId, dealId, data) => {
       },
       { transaction }
     );
+
+    // Handle WDS details
+    if (data.wdsRequired && data.wdsDetails) {
+      const existingWds = await db.DealWds.findOne({ where: { deal_id: dealId }, transaction });
+      
+      if (existingWds) {
+        await existingWds.update(
+          {
+            ref_no: data.wdsDetails.refNo,
+            date: data.wdsDetails.date,
+            company_name: data.wdsDetails.companyName,
+            license_no: data.wdsDetails.licenseNo,
+            waste_description: data.wdsDetails.wasteDescription,
+            source_process: data.wdsDetails.sourceProcess || null,
+            package_type: data.wdsDetails.packageType || null,
+            quantity_per_package: data.wdsDetails.quantityPerPackage || null,
+            total_weight: data.wdsDetails.totalWeight || null,
+            container_no: data.wdsDetails.containerNo,
+            purpose: data.wdsDetails.purpose || null,
+            bl_no: data.wdsDetails.blNo || null,
+            bor_no: data.wdsDetails.borNo || null,
+          },
+          { transaction }
+        );
+      } else {
+        await db.DealWds.create(
+          {
+            deal_id: dealId,
+            ref_no: data.wdsDetails.refNo,
+            date: data.wdsDetails.date,
+            company_name: data.wdsDetails.companyName,
+            license_no: data.wdsDetails.licenseNo,
+            waste_description: data.wdsDetails.wasteDescription,
+            source_process: data.wdsDetails.sourceProcess || null,
+            package_type: data.wdsDetails.packageType || null,
+            quantity_per_package: data.wdsDetails.quantityPerPackage || null,
+            total_weight: data.wdsDetails.totalWeight || null,
+            container_no: data.wdsDetails.containerNo,
+            purpose: data.wdsDetails.purpose || null,
+            bl_no: data.wdsDetails.blNo || null,
+            bor_no: data.wdsDetails.borNo || null,
+          },
+          { transaction }
+        );
+      }
+    } else if (data.wdsRequired === false) {
+      await db.DealWds.destroy({ where: { deal_id: dealId }, transaction });
+    }
 
     // Update deal items if provided
     if (data.items) {
