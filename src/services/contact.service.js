@@ -7,7 +7,7 @@ const { generateReferenceNumber } = require('../utils/helpers');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, designation, department, companyId } = filters;
+  const { offset, limit, search, status, designation, department, companyId, contactType } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -21,6 +21,7 @@ const getAll = async (tenantId, filters) => {
   }
 
   if (status) where.status = status;
+  if (contactType) where.contact_type = contactType;
   if (designation) where.designation = designation;
   if (department) where.department = { [Op.like]: `%${department}%` };
   if (companyId) where.company_id = companyId;
@@ -61,7 +62,7 @@ const getById = async (tenantId, contactId) => {
 };
 
 const create = async (tenantId, data) => {
-  const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, notes, setAsPrimaryContact } = data;
+  const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, notes, contactType, setAsPrimaryContact } = data;
 
   if (email) {
     const existing = await db.Contact.findOne({ where: { tenant_id: tenantId, email } });
@@ -89,6 +90,7 @@ const create = async (tenantId, data) => {
     department: department || null,
     company_id: companyId || null,
     notes: notes || null,
+    contact_type: contactType || null,
     status: 'active',
   });
 
@@ -133,6 +135,7 @@ const update = async (tenantId, contactId, data) => {
     department: data.department !== undefined ? data.department : contact.department,
     company_id: data.companyId !== undefined ? data.companyId : contact.company_id,
     notes: data.notes !== undefined ? data.notes : contact.notes,
+    contact_type: data.contactType !== undefined ? (data.contactType || null) : contact.contact_type,
     status: data.status !== undefined ? data.status : contact.status,
   });
 

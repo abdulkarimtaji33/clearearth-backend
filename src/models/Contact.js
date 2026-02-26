@@ -60,6 +60,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('active', 'inactive'),
         defaultValue: 'active',
       },
+      contact_type: {
+        type: DataTypes.ENUM('clients', 'vendors'),
+        allowNull: true,
+      },
     },
     {
       tableName: 'contacts',
