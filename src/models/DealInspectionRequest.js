@@ -23,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
+      location_type: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
       gate_pass_requirement: {
         type: DataTypes.STRING(10),
         allowNull: true,

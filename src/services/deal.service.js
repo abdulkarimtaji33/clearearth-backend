@@ -177,6 +177,7 @@ const create = async (tenantId, data) => {
           deal_id: deal.id,
           material_type_id: insp.materialTypeId || null,
           location: insp.location || null,
+          location_type: insp.locationType || null,
           gate_pass_requirement: insp.gatePassRequirement || null,
           service_type: insp.serviceType || null,
           quantity: insp.quantity || null,
@@ -370,6 +371,7 @@ const update = async (tenantId, dealId, data) => {
       const inspPayload = {
         material_type_id: insp.materialTypeId || null,
         location: insp.location || null,
+        location_type: insp.locationType || null,
         gate_pass_requirement: insp.gatePassRequirement || null,
         service_type: insp.serviceType || null,
         quantity: insp.quantity || null,
