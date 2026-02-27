@@ -176,6 +176,9 @@ const create = async (tenantId, data) => {
         {
           deal_id: deal.id,
           material_type_id: insp.materialTypeId || null,
+          location: insp.location || null,
+          gate_pass_requirement: insp.gatePassRequirement || null,
+          service_type: insp.serviceType || null,
           quantity: insp.quantity || null,
           safety_tools_required: insp.safetyToolsRequired || false,
           supporting_documents: insp.supportingDocuments || null,
@@ -366,6 +369,9 @@ const update = async (tenantId, dealId, data) => {
       const existingInsp = await db.DealInspectionRequest.findOne({ where: { deal_id: dealId }, transaction });
       const inspPayload = {
         material_type_id: insp.materialTypeId || null,
+        location: insp.location || null,
+        gate_pass_requirement: insp.gatePassRequirement || null,
+        service_type: insp.serviceType || null,
         quantity: insp.quantity || null,
         safety_tools_required: insp.safetyToolsRequired || false,
         supporting_documents: insp.supportingDocuments || null,

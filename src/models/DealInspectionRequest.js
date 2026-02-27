@@ -19,6 +19,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
       },
+      location: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      gate_pass_requirement: {
+        type: DataTypes.STRING(10),
+        allowNull: true,
+      },
+      service_type: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
       quantity: {
         type: DataTypes.STRING(100),
         allowNull: true,
