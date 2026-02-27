@@ -155,6 +155,9 @@ module.exports = (sequelize, DataTypes) => {
     Deal.belongsTo(models.TermsAndConditions, { foreignKey: 'terms_and_conditions_id', as: 'termsAndConditions' });
     Deal.hasMany(models.DealItem, { foreignKey: 'deal_id', as: 'items' });
     Deal.hasOne(models.DealWds, { foreignKey: 'deal_id', as: 'wdsDetails' });
+    Deal.hasOne(models.DealInspectionRequest, { foreignKey: 'deal_id', as: 'inspectionRequest' });
+    Deal.hasOne(models.DealInspectionReport, { foreignKey: 'deal_id', as: 'inspectionReport' });
+    Deal.hasMany(models.DealImage, { foreignKey: 'deal_id', as: 'images' });
   };
 
   return Deal;

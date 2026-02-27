@@ -51,4 +51,9 @@ const remove = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'Deal deleted');
 });
 
-module.exports = { getAll, getById, create, update, updatePayment, remove };
+const saveInspectionReport = asyncHandler(async (req, res) => {
+  const deal = await dealService.saveInspectionReport(req.tenant.id, req.params.id, req.body);
+  return ApiResponse.success(res, deal, 'Inspection report saved');
+});
+
+module.exports = { getAll, getById, create, update, updatePayment, remove, saveInspectionReport };

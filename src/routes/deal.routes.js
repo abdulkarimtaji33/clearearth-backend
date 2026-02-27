@@ -19,4 +19,7 @@ router.delete('/:id', dealController.remove);
 // Payment tracking
 router.post('/:id/payment', dealController.updatePayment);
 
+// Inspection report
+router.put('/:id/inspection-report', dealController.saveInspectionReport);
+
 module.exports = router;

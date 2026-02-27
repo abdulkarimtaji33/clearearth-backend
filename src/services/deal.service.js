@@ -93,6 +93,25 @@ const getById = async (tenantId, dealId) => {
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.TermsAndConditions, as: 'termsAndConditions', attributes: ['id', 'title', 'content'], required: false },
       { model: db.DealWds, as: 'wdsDetails', required: false },
+      { model: db.DealImage, as: 'images', order: [['display_order', 'ASC']], required: false },
+      {
+        model: db.DealInspectionReport,
+        as: 'inspectionReport',
+        include: [
+          { model: db.User, as: 'inspector', attributes: ['id', 'first_name', 'last_name'], required: false },
+          { model: db.User, as: 'approvedBy', attributes: ['id', 'first_name', 'last_name'], required: false },
+        ],
+        required: false,
+      },
+      {
+        model: db.DealInspectionRequest,
+        as: 'inspectionRequest',
+        include: [
+          { model: db.MaterialType, as: 'materialType', attributes: ['id', 'value', 'display_name'], required: false },
+          { model: db.User, as: 'requestedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+        ],
+        required: false,
+      },
       {
         model: db.DealItem,
         as: 'items',
@@ -150,6 +169,23 @@ const create = async (tenantId, data) => {
       { transaction }
     );
 
+    // Create inspection request if provided
+    if (data.inspectionRequired && data.inspectionDetails) {
+      const insp = data.inspectionDetails;
+      await db.DealInspectionRequest.create(
+        {
+          deal_id: deal.id,
+          material_type_id: insp.materialTypeId || null,
+          quantity: insp.quantity || null,
+          safety_tools_required: insp.safetyToolsRequired || false,
+          supporting_documents: insp.supportingDocuments || null,
+          requested_by: insp.requestedBy || null,
+          notes: insp.notes || null,
+        },
+        { transaction }
+      );
+    }
+
     // Create WDS details if provided
     if (data.wdsRequired && data.wdsDetails) {
       const w = data.wdsDetails;
@@ -193,6 +229,16 @@ const create = async (tenantId, data) => {
       }));
 
       await db.DealItem.bulkCreate(itemsToCreate, { transaction });
+    }
+
+    // Create deal images if provided
+    if (data.images && data.images.length > 0) {
+      const imagesToCreate = data.images.map((img, idx) => ({
+        deal_id: deal.id,
+        file_path: img.path || img.file_path,
+        display_order: idx,
+      }));
+      await db.DealImage.bulkCreate(imagesToCreate, { transaction });
     }
 
     // Mark lead as converted if connected
@@ -314,6 +360,27 @@ const update = async (tenantId, dealId, data) => {
       await db.DealWds.destroy({ where: { deal_id: dealId }, transaction });
     }
 
+    // Handle inspection request
+    if (data.inspectionRequired && data.inspectionDetails) {
+      const insp = data.inspectionDetails;
+      const existingInsp = await db.DealInspectionRequest.findOne({ where: { deal_id: dealId }, transaction });
+      const inspPayload = {
+        material_type_id: insp.materialTypeId || null,
+        quantity: insp.quantity || null,
+        safety_tools_required: insp.safetyToolsRequired || false,
+        supporting_documents: insp.supportingDocuments || null,
+        requested_by: insp.requestedBy || null,
+        notes: insp.notes || null,
+      };
+      if (existingInsp) {
+        await existingInsp.update(inspPayload, { transaction });
+      } else {
+        await db.DealInspectionRequest.create({ deal_id: dealId, ...inspPayload }, { transaction });
+      }
+    } else if (data.inspectionRequired === false) {
+      await db.DealInspectionRequest.destroy({ where: { deal_id: dealId }, transaction });
+    }
+
     // Update deal items if provided
     if (data.items) {
       // Delete existing items
@@ -335,6 +402,19 @@ const update = async (tenantId, dealId, data) => {
         }));
 
         await db.DealItem.bulkCreate(itemsToCreate, { transaction });
+      }
+    }
+
+    // Handle deal images if provided
+    if (data.images !== undefined) {
+      await db.DealImage.destroy({ where: { deal_id: dealId }, transaction });
+      if (data.images && data.images.length > 0) {
+        const imagesToCreate = data.images.map((img, idx) => ({
+          deal_id: dealId,
+          file_path: img.path || img.file_path,
+          display_order: idx,
+        }));
+        await db.DealImage.bulkCreate(imagesToCreate, { transaction });
       }
     }
 
@@ -381,6 +461,39 @@ const remove = async (tenantId, dealId) => {
   await deal.destroy();
 };
 
+const saveInspectionReport = async (tenantId, dealId, data) => {
+  const deal = await db.Deal.findOne({
+    where: { id: dealId, tenant_id: tenantId },
+  });
+  if (!deal) throw ApiError.notFound('Deal not found');
+
+  const existing = await db.DealInspectionReport.findOne({
+    where: { deal_id: dealId },
+  });
+
+  const payload = {
+    deal_id: dealId,
+    inspection_datetime: data.inspectionDatetime || null,
+    approximate_weight: data.approximateWeight != null ? data.approximateWeight : null,
+    weight_uom: data.weightUom || null,
+    cargo_type: data.cargoType || null,
+    transportation_arrangement: data.transportationArrangement || null,
+    approximate_value: data.approximateValue != null ? data.approximateValue : null,
+    images: data.images && data.images.length > 0 ? data.images : null,
+    inspector_id: data.inspectorId || null,
+    approved_by_id: data.approvedById || null,
+    notes: data.notes || null,
+  };
+
+  if (existing) {
+    await existing.update(payload);
+  } else {
+    await db.DealInspectionReport.create(payload);
+  }
+
+  return await getById(tenantId, dealId);
+};
+
 module.exports = {
   getAll,
   getById,
@@ -388,4 +501,5 @@ module.exports = {
   update,
   updatePayment,
   remove,
+  saveInspectionReport,
 };

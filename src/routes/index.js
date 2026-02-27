@@ -15,6 +15,8 @@ const leadRoutes = require('./lead.routes');
 const productServiceRoutes = require('./productService.routes');
 const dealRoutes = require('./deal.routes');
 const dropdownRoutes = require('./dropdown.routes');
+const materialTypeRoutes = require('./materialType.routes');
+const uploadRoutes = require('./upload.routes');
 const termsRoutes = require('./termsAndConditions.routes');
 
 // API info endpoint
@@ -49,6 +51,8 @@ router.use('/leads', leadRoutes);
 router.use('/products', productServiceRoutes);
 router.use('/deals', dealRoutes);
 router.use('/dropdowns', dropdownRoutes);
+router.use('/material-types', materialTypeRoutes);
+router.use('/upload', uploadRoutes);
 router.use('/terms', termsRoutes);
 
 module.exports = router;

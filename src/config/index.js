@@ -36,7 +36,7 @@ module.exports = {
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 10485760, // 10MB
     allowedTypes: process.env.ALLOWED_FILE_TYPES
       ? process.env.ALLOWED_FILE_TYPES.split(',')
-      : ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'],
+      : ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp', 'application/pdf'],
   },
 
   // Email
