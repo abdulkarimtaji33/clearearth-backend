@@ -153,6 +153,12 @@ module.exports = (sequelize, DataTypes) => {
     Deal.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     Deal.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
     Deal.belongsTo(models.TermsAndConditions, { foreignKey: 'terms_and_conditions_id', as: 'termsAndConditions' });
+    Deal.belongsToMany(models.TermsAndConditions, {
+      through: models.DealTerm,
+      foreignKey: 'deal_id',
+      otherKey: 'terms_and_conditions_id',
+      as: 'termsList',
+    });
     Deal.hasMany(models.DealItem, { foreignKey: 'deal_id', as: 'items' });
     Deal.hasOne(models.DealWds, { foreignKey: 'deal_id', as: 'wdsDetails' });
     Deal.hasOne(models.DealInspectionRequest, { foreignKey: 'deal_id', as: 'inspectionRequest' });

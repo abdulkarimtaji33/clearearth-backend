@@ -92,6 +92,7 @@ const getById = async (tenantId, dealId) => {
       { model: db.Supplier, as: 'supplier', required: false },
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.TermsAndConditions, as: 'termsAndConditions', attributes: ['id', 'title', 'content'], required: false },
+      { model: db.TermsAndConditions, as: 'termsList', through: { attributes: ['sort_order'] }, attributes: ['id', 'title', 'content'], required: false },
       { model: db.DealWds, as: 'wdsDetails', required: false },
       { model: db.DealImage, as: 'images', order: [['display_order', 'ASC']], required: false },
       {
@@ -151,7 +152,9 @@ const create = async (tenantId, data) => {
         vat_amount: totals.vatAmount,
         total: totals.total,
         currency: data.currency || 'AED',
-        terms_and_conditions_id: data.termsAndConditionsId || null,
+        terms_and_conditions_id: (Array.isArray(data.termsAndConditionsIds) && data.termsAndConditionsIds.length > 0)
+          ? data.termsAndConditionsIds[0]
+          : (data.termsAndConditionsId || null),
         deal_type: data.dealType || 'offer_to_purchase',
         container_type: data.containerType || null,
         location_type: data.locationType || null,
@@ -245,6 +248,20 @@ const create = async (tenantId, data) => {
       await db.DealImage.bulkCreate(imagesToCreate, { transaction });
     }
 
+    // Create deal_terms for multi-select Terms and Conditions
+    const termsIds = Array.isArray(data.termsAndConditionsIds) ? data.termsAndConditionsIds
+      : (data.termsAndConditionsId ? [data.termsAndConditionsId] : []);
+    if (termsIds.length > 0) {
+      await db.DealTerm.bulkCreate(
+        termsIds.map((tid, idx) => ({
+          deal_id: deal.id,
+          terms_and_conditions_id: tid,
+          sort_order: idx,
+        })),
+        { transaction }
+      );
+    }
+
     // Mark lead as converted if connected
     if (data.leadId) {
       await db.Lead.update(
@@ -306,7 +323,11 @@ const update = async (tenantId, dealId, data) => {
         payment_status: data.paymentStatus !== undefined ? data.paymentStatus : deal.payment_status,
         paid_amount: data.paidAmount !== undefined ? data.paidAmount : deal.paid_amount,
         assigned_to: data.assignedTo !== undefined ? data.assignedTo : deal.assigned_to,
-        terms_and_conditions_id: data.termsAndConditionsId !== undefined ? data.termsAndConditionsId : deal.terms_and_conditions_id,
+        terms_and_conditions_id: (() => {
+          if (Array.isArray(data.termsAndConditionsIds)) return data.termsAndConditionsIds.length > 0 ? data.termsAndConditionsIds[0] : null;
+          if (data.termsAndConditionsId !== undefined) return data.termsAndConditionsId;
+          return deal.terms_and_conditions_id;
+        })(),
         notes: data.notes !== undefined ? data.notes : deal.notes,
       },
       { transaction }
@@ -387,6 +408,23 @@ const update = async (tenantId, dealId, data) => {
       }
     } else if (data.inspectionRequired === false) {
       await db.DealInspectionRequest.destroy({ where: { deal_id: dealId }, transaction });
+    }
+
+    // Update deal_terms (multi-select Terms and Conditions)
+    if (data.termsAndConditionsIds !== undefined || data.termsAndConditionsId !== undefined) {
+      await db.DealTerm.destroy({ where: { deal_id: dealId }, transaction });
+      const termsIds = Array.isArray(data.termsAndConditionsIds) ? data.termsAndConditionsIds
+        : (data.termsAndConditionsId ? [data.termsAndConditionsId] : []);
+      if (termsIds.length > 0) {
+        await db.DealTerm.bulkCreate(
+          termsIds.map((tid, idx) => ({
+            deal_id: dealId,
+            terms_and_conditions_id: tid,
+            sort_order: idx,
+          })),
+          { transaction }
+        );
+      }
     }
 
     // Update deal items if provided

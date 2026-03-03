@@ -80,6 +80,40 @@ async function runMigration() {
       )
     `);
 
+    console.log('Creating deal_terms table (multi-select Terms & Conditions)...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS deal_terms (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        deal_id INT NOT NULL,
+        terms_and_conditions_id INT NOT NULL,
+        sort_order INT DEFAULT 0,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_deal_id (deal_id),
+        INDEX idx_terms_id (terms_and_conditions_id),
+        UNIQUE KEY uk_deal_terms (deal_id, terms_and_conditions_id)
+      )
+    `);
+
+    console.log('Migrating existing deal terms...');
+    try {
+      const [deals] = await db.sequelize.query(`
+        SELECT id, terms_and_conditions_id FROM deals 
+        WHERE terms_and_conditions_id IS NOT NULL AND deleted_at IS NULL
+      `);
+      if (deals && deals.length > 0) {
+        for (const d of deals) {
+          await db.sequelize.query(`
+            INSERT IGNORE INTO deal_terms (deal_id, terms_and_conditions_id, sort_order, created_at, updated_at)
+            VALUES (?, ?, 0, NOW(), NOW())
+          `, { replacements: [d.id, d.terms_and_conditions_id] });
+        }
+        console.log(`  Migrated ${deals.length} deal(s) to deal_terms`);
+      }
+    } catch (e) {
+      console.warn('  Could not migrate existing deal terms:', e.message);
+    }
+
     console.log('Inserting default material types...');
     await db.sequelize.query(`
       INSERT IGNORE INTO material_types (value, display_name, display_order, is_active, created_at, updated_at)
