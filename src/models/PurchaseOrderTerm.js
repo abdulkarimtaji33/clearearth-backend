@@ -23,6 +23,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: 'purchase_order_terms',
       timestamps: true,
+      paranoid: false,
       underscored: true,
       indexes: [
         { fields: ['purchase_order_id'] },
