@@ -5,9 +5,10 @@ const { Op } = db.Sequelize;
 const { LEAD_STATUS } = require('../constants');
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId } = filters;
+  const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
+  if (scopeUserId) where.assigned_to = scopeUserId;
   if (search) {
     where[Op.or] = [
       { email: { [Op.like]: `%${search}%` } },
@@ -38,9 +39,11 @@ const getAll = async (tenantId, filters) => {
   return { leads: rows, total: count };
 };
 
-const getById = async (tenantId, leadId) => {
+const getById = async (tenantId, leadId, scope = {}) => {
+  const where = { id: leadId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
   const lead = await db.Lead.findOne({
-    where: { id: leadId, tenant_id: tenantId },
+    where,
     include: [
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
@@ -52,8 +55,9 @@ const getById = async (tenantId, leadId) => {
   return lead;
 };
 
-const create = async (tenantId, data) => {
+const create = async (tenantId, data, scope = {}) => {
   const leadNumber = generateReferenceNumber('LEAD');
+  const assignedTo = scope.scopeUserId || data.assignedTo;
 
   // Validate company and contact if provided
   if (data.companyId) {
@@ -78,17 +82,17 @@ const create = async (tenantId, data) => {
     product_service_id: data.productServiceId || null,
     estimated_value: data.estimatedValue,
     notes: data.notes,
-    assigned_to: data.assignedTo,
+    assigned_to: assignedTo,
     status: LEAD_STATUS.NEW,
   });
 
   return await getById(tenantId, lead.id);
 };
 
-const update = async (tenantId, leadId, data) => {
-  const lead = await db.Lead.findOne({
-    where: { id: leadId, tenant_id: tenantId },
-  });
+const update = async (tenantId, leadId, data, scope = {}) => {
+  const where = { id: leadId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
   if (lead.status === LEAD_STATUS.CONVERTED) {
@@ -116,16 +120,16 @@ const update = async (tenantId, leadId, data) => {
     product_service_id: data.productServiceId !== undefined ? data.productServiceId : lead.product_service_id,
     estimated_value: data.estimatedValue !== undefined ? data.estimatedValue : lead.estimated_value,
     notes: data.notes !== undefined ? data.notes : lead.notes,
-    assigned_to: data.assignedTo !== undefined ? data.assignedTo : lead.assigned_to,
+    assigned_to: scope.scopeUserId ? scope.scopeUserId : (data.assignedTo !== undefined ? data.assignedTo : lead.assigned_to),
   });
 
   return await getById(tenantId, leadId);
 };
 
-const qualify = async (tenantId, leadId, notes) => {
-  const lead = await db.Lead.findOne({
-    where: { id: leadId, tenant_id: tenantId },
-  });
+const qualify = async (tenantId, leadId, notes, scope = {}) => {
+  const where = { id: leadId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
   if (lead.status === LEAD_STATUS.CONVERTED) {
@@ -140,10 +144,10 @@ const qualify = async (tenantId, leadId, notes) => {
   return await getById(tenantId, leadId);
 };
 
-const disqualify = async (tenantId, leadId, reason) => {
-  const lead = await db.Lead.findOne({
-    where: { id: leadId, tenant_id: tenantId },
-  });
+const disqualify = async (tenantId, leadId, reason, scope = {}) => {
+  const where = { id: leadId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
   if (lead.status === LEAD_STATUS.CONVERTED) {
@@ -158,12 +162,10 @@ const disqualify = async (tenantId, leadId, reason) => {
   return await getById(tenantId, leadId);
 };
 
-const convertToDeal = async (tenantId, leadId, dealData) => {
-  // Deals module has been removed
-  // This function now simply marks the lead as converted
-  const lead = await db.Lead.findOne({
-    where: { id: leadId, tenant_id: tenantId },
-  });
+const convertToDeal = async (tenantId, leadId, dealData, scope = {}) => {
+  const where = { id: leadId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const lead = await db.Lead.findOne({ where });
 
   if (!lead) throw ApiError.notFound('Lead not found');
   if (lead.status === LEAD_STATUS.CONVERTED) {
@@ -178,10 +180,10 @@ const convertToDeal = async (tenantId, leadId, dealData) => {
   return await getById(tenantId, leadId);
 };
 
-const remove = async (tenantId, leadId) => {
-  const lead = await db.Lead.findOne({
-    where: { id: leadId, tenant_id: tenantId },
-  });
+const remove = async (tenantId, leadId, scope = {}) => {
+  const where = { id: leadId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
   if (lead.status === LEAD_STATUS.CONVERTED) {

@@ -39,6 +39,8 @@ const MODULES = {
   LEADS: 'leads',
   PRODUCTS: 'products',
   DEALS: 'deals',
+  INSPECTION_REQUESTS: 'inspection_requests',
+  INSPECTION_REPORTS: 'inspection_reports',
 };
 
 // Permission Actions

@@ -14,9 +14,10 @@ const contactInclude = {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, industryType, country, city, contactId } = filters;
+  const { offset, limit, search, status, industryType, country, city, contactId, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
+  if (scopeUserId) where.created_by = scopeUserId;
   if (search) {
     where[Op.or] = [
       { company_name: { [Op.like]: `%${search}%` } },
@@ -52,9 +53,11 @@ const getAll = async (tenantId, filters) => {
   return { companies: rows, total: count };
 };
 
-const getById = async (tenantId, companyId) => {
+const getById = async (tenantId, companyId, scope = {}) => {
+  const where = { id: companyId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
   const company = await db.Company.findOne({
-    where: { id: companyId, tenant_id: tenantId },
+    where,
     include: [
       {
         model: db.Contact,
@@ -78,7 +81,7 @@ const getById = async (tenantId, companyId) => {
   return company;
 };
 
-const create = async (tenantId, data) => {
+const create = async (tenantId, data, scope = {}) => {
   const {
     companyName, primaryContactId, industryType, website,
     email, phone, country, city, address, notes, contacts, type,
@@ -106,6 +109,7 @@ const create = async (tenantId, data) => {
     notes: notes || null,
     status: 'active',
     type: type || 'organization',
+    created_by: scope.scopeUserId || null,
   });
 
   if (contacts && contacts.length > 0) {
@@ -130,8 +134,10 @@ const create = async (tenantId, data) => {
   return getById(tenantId, company.id);
 };
 
-const update = async (tenantId, companyId, data) => {
-  const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+const update = async (tenantId, companyId, data, scope = {}) => {
+  const where = { id: companyId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 
   if (data.email && data.email !== company.email) {
@@ -191,16 +197,20 @@ const update = async (tenantId, companyId, data) => {
   return getById(tenantId, companyId);
 };
 
-const remove = async (tenantId, companyId) => {
-  const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+const remove = async (tenantId, companyId, scope = {}) => {
+  const where = { id: companyId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 
   await db.CompanyContact.destroy({ where: { company_id: companyId } });
   await company.destroy();
 };
 
-const addContact = async (tenantId, companyId, contactId, role, isPrimary) => {
-  const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+const addContact = async (tenantId, companyId, contactId, role, isPrimary, scope = {}) => {
+  const where = { id: companyId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 
   const contact = await db.Contact.findOne({ where: { id: contactId, tenant_id: tenantId } });
@@ -218,8 +228,10 @@ const addContact = async (tenantId, companyId, contactId, role, isPrimary) => {
   return getById(tenantId, companyId);
 };
 
-const removeContact = async (tenantId, companyId, contactId) => {
-  const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+const removeContact = async (tenantId, companyId, contactId, scope = {}) => {
+  const where = { id: companyId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 
   await db.CompanyContact.destroy({ where: { company_id: companyId, contact_id: contactId } });

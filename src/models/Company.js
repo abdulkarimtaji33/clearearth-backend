@@ -62,6 +62,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: 'organization',
       },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' },
+      },
     },
     {
       tableName: 'companies',
@@ -80,6 +85,7 @@ module.exports = (sequelize, DataTypes) => {
   Company.associate = models => {
     Company.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
     Company.belongsTo(models.Contact, { foreignKey: 'primary_contact_id', as: 'primaryContact' });
+    Company.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator', attributes: [] });
     Company.hasMany(models.CompanyContact, { foreignKey: 'company_id', as: 'contactLinks' });
     Company.belongsToMany(models.Contact, {
       through: models.CompanyContact,

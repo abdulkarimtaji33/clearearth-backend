@@ -7,9 +7,10 @@ const { generateReferenceNumber } = require('../utils/helpers');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, designation, department, companyId, contactType } = filters;
+  const { offset, limit, search, status, designation, department, companyId, contactType, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
+  if (scopeUserId) where.created_by = scopeUserId;
   if (search) {
     where[Op.or] = [
       { first_name: { [Op.like]: `%${search}%` } },
@@ -45,9 +46,11 @@ const getAll = async (tenantId, filters) => {
   return { contacts: rows, total: count };
 };
 
-const getById = async (tenantId, contactId) => {
+const getById = async (tenantId, contactId, scope = {}) => {
+  const where = { id: contactId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
   const contact = await db.Contact.findOne({
-    where: { id: contactId, tenant_id: tenantId },
+    where,
     include: [
       {
         model: db.Company,
@@ -61,7 +64,7 @@ const getById = async (tenantId, contactId) => {
   return contact;
 };
 
-const create = async (tenantId, data) => {
+const create = async (tenantId, data, scope = {}) => {
   const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, notes, contactType, setAsPrimaryContact } = data;
 
   if (email) {
@@ -109,8 +112,10 @@ const create = async (tenantId, data) => {
   return getById(tenantId, contact.id);
 };
 
-const update = async (tenantId, contactId, data) => {
-  const contact = await db.Contact.findOne({ where: { id: contactId, tenant_id: tenantId } });
+const update = async (tenantId, contactId, data, scope = {}) => {
+  const where = { id: contactId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const contact = await db.Contact.findOne({ where });
   if (!contact) throw ApiError.notFound('Contact not found');
 
   if (data.email && data.email !== contact.email) {
@@ -142,8 +147,10 @@ const update = async (tenantId, contactId, data) => {
   return getById(tenantId, contact.id);
 };
 
-const remove = async (tenantId, contactId) => {
-  const contact = await db.Contact.findOne({ where: { id: contactId, tenant_id: tenantId } });
+const remove = async (tenantId, contactId, scope = {}) => {
+  const where = { id: contactId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const contact = await db.Contact.findOne({ where });
   if (!contact) throw ApiError.notFound('Contact not found');
 
   const companyLinks = await db.CompanyContact.count({ where: { contact_id: contactId } });

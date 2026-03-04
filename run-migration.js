@@ -1,4 +1,5 @@
 const db = require('./src/models');
+const bcrypt = require('bcryptjs');
 
 async function runMigration() {
   try {
@@ -245,6 +246,148 @@ async function runMigration() {
     try { await db.sequelize.query(`ALTER TABLE contacts MODIFY last_name VARCHAR(100) NULL`); } catch (e) { if (!e.message?.includes('Duplicate') && !e.message?.includes('Unknown column')) throw e; }
     try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN type ENUM('individual','organization') DEFAULT 'organization'`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
     try { await db.sequelize.query(`ALTER TABLE suppliers ADD COLUMN type ENUM('individual','organization') DEFAULT 'organization'`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
+
+    console.log('Ensuring super_admin role exists...');
+    const [existingSuperAdmin] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'super_admin' AND tenant_id IS NULL LIMIT 1`);
+    if (!existingSuperAdmin || existingSuperAdmin.length === 0) {
+      await db.sequelize.query(`
+        INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
+        VALUES (NULL, 'super_admin', 'Super Administrator', 'Full system access - manage roles, permissions, and users', 1, 'active', NOW(), NOW())
+      `);
+      console.log('  Created super_admin role');
+    } else {
+      console.log('  super_admin role already exists');
+    }
+
+    console.log('Ensuring super_admin user exists...');
+    const SUPER_ADMIN_EMAIL = 'superadmin@clearearth.com';
+    const SUPER_ADMIN_PASSWORD = 'SuperAdmin123!';
+    const [existingUser] = await db.sequelize.query(`SELECT id FROM users WHERE email = ? LIMIT 1`, {
+      replacements: [SUPER_ADMIN_EMAIL],
+    });
+    if (!existingUser || existingUser.length === 0) {
+      const [roleRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'super_admin' AND tenant_id IS NULL LIMIT 1`);
+      const [tenantRows] = await db.sequelize.query(`SELECT id FROM tenants LIMIT 1`);
+      const superAdminRoleId = roleRows?.[0]?.id;
+      const tenantId = tenantRows?.[0]?.id || 1;
+      if (superAdminRoleId) {
+        const hashedPassword = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
+        await db.sequelize.query(
+          `INSERT INTO users (tenant_id, role_id, username, email, password, first_name, last_name, status, email_verified_at, created_at, updated_at)
+           VALUES (?, ?, 'superadmin', ?, ?, 'Super', 'Admin', 'active', NOW(), NOW(), NOW())`,
+          { replacements: [tenantId, superAdminRoleId, SUPER_ADMIN_EMAIL, hashedPassword] }
+        );
+        console.log('  Created super_admin user: ' + SUPER_ADMIN_EMAIL + ' / ' + SUPER_ADMIN_PASSWORD);
+      } else {
+        console.log('  Skipped super_admin user - role not found');
+      }
+    } else {
+      console.log('  super_admin user already exists');
+    }
+
+    console.log('Adding inspection_requests and inspection_reports to permissions module enum...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE permissions MODIFY COLUMN module ENUM(
+          'users','roles','contacts','companies','suppliers','leads','products','deals',
+          'inspection_requests','inspection_reports'
+        ) NOT NULL
+      `);
+    } catch (e) {
+      if (!e.message?.includes('Duplicate') && !e.message?.includes('already exists')) console.warn('  Enum alter:', e.message);
+    }
+
+    console.log('Ensuring inspection permissions exist...');
+    const inspectionPerms = [
+      ['inspection_requests.read', 'Read Inspection Requests', 'inspection_requests', 'read'],
+      ['inspection_reports.read', 'Read Inspection Reports', 'inspection_reports', 'read'],
+      ['inspection_reports.create', 'Create Inspection Reports', 'inspection_reports', 'create'],
+      ['inspection_reports.update', 'Update Inspection Reports', 'inspection_reports', 'update'],
+    ];
+    for (const [name, displayName, mod, act] of inspectionPerms) {
+      try {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO permissions (name, display_name, module, action, description) VALUES (?, ?, ?, ?, ?)`,
+          { replacements: [name, displayName, mod, act, `Permission to ${act} ${mod.replace('_', ' ')}`] }
+        );
+      } catch (e) {
+        if (!e.message?.includes('Duplicate') && !e.message?.includes('ER_DUP_ENTRY')) console.warn('  Perm insert:', e.message);
+      }
+    }
+
+    console.log('Ensuring inspection_team role exists...');
+    const [existingInspectionTeam] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'inspection_team' AND tenant_id IS NULL LIMIT 1`);
+    if (!existingInspectionTeam || existingInspectionTeam.length === 0) {
+      await db.sequelize.query(`
+        INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
+        VALUES (NULL, 'inspection_team', 'Inspection Team', 'View inspection requests and add inspection reports', 1, 'active', NOW(), NOW())
+      `);
+      const [[roleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'inspection_team' AND tenant_id IS NULL LIMIT 1`);
+      if (roleRow?.id) {
+        const [permRows] = await db.sequelize.query(`SELECT id FROM permissions WHERE module IN ('inspection_requests','inspection_reports')`);
+        for (const p of permRows || []) {
+          try {
+            await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, {
+              replacements: [roleRow.id, p.id],
+            });
+          } catch (e) { /* ignore dupes */ }
+        }
+        console.log('  Created inspection_team role with inspection permissions');
+      }
+    } else {
+      console.log('  inspection_team role already exists');
+    }
+
+    console.log('Assigning inspection permissions to tenant_admin...');
+    const [tenantAdminRoles] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'tenant_admin'`);
+    const [inspectionPermIds] = await db.sequelize.query(`SELECT id FROM permissions WHERE module IN ('inspection_requests','inspection_reports')`);
+    for (const role of tenantAdminRoles || []) {
+      for (const perm of inspectionPermIds || []) {
+        try {
+          await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, {
+            replacements: [role.id, perm.id],
+          });
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    console.log('Adding created_by to contacts and companies...');
+    try { await db.sequelize.query(`ALTER TABLE contacts ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
+    try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
+
+    console.log('Ensuring sales_manager role exists...');
+    const [existingSalesManager] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales_manager' AND tenant_id IS NULL LIMIT 1`);
+    if (!existingSalesManager || existingSalesManager.length === 0) {
+      await db.sequelize.query(`
+        INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
+        VALUES (NULL, 'sales_manager', 'Sales Manager', 'Full access to leads, deals, contacts, quotations, inspection requests', 1, 'active', NOW(), NOW())
+      `);
+      const [smRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales_manager' AND tenant_id IS NULL LIMIT 1`);
+      if (smRows?.[0]?.id) {
+        const [permRows] = await db.sequelize.query(`SELECT id FROM permissions WHERE module IN ('leads','deals','contacts','companies','inspection_requests','inspection_reports')`);
+        for (const p of permRows || []) {
+          try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [smRows[0].id, p.id] }); } catch (e) { /* ignore */ }
+        }
+        console.log('  Created sales_manager role');
+      }
+    } else { console.log('  sales_manager role already exists'); }
+
+    console.log('Ensuring sales role exists...');
+    const [existingSales] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales' AND tenant_id IS NULL LIMIT 1`);
+    if (!existingSales || existingSales.length === 0) {
+      await db.sequelize.query(`
+        INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
+        VALUES (NULL, 'sales', 'Sales', 'Access to own leads, deals, contacts, quotations, and inspection requests only', 1, 'active', NOW(), NOW())
+      `);
+      const [sRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales' AND tenant_id IS NULL LIMIT 1`);
+      if (sRows?.[0]?.id) {
+        const [permRows] = await db.sequelize.query(`SELECT id FROM permissions WHERE module IN ('leads','deals','contacts','companies','inspection_requests','inspection_reports')`);
+        for (const p of permRows || []) {
+          try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [sRows[0].id, p.id] }); } catch (e) { /* ignore */ }
+        }
+        console.log('  Created sales role');
+      }
+    } else { console.log('  sales role already exists'); }
 
     console.log('✅ Migration completed successfully!');
     process.exit(0);

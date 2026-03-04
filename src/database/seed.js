@@ -3,7 +3,7 @@
  * Creates default permissions and assigns them to roles
  */
 const db = require('../models');
-const { MODULE, PERMISSION_ACTION } = require('../constants');
+const { MODULES, ACTIONS } = require('../constants');
 
 const createPermissions = async () => {
   console.log('Creating permissions...');
@@ -11,8 +11,8 @@ const createPermissions = async () => {
   const permissions = [];
 
   // Define modules and their actions
-  const modules = Object.values(MODULE);
-  const actions = Object.values(PERMISSION_ACTION);
+  const modules = Object.values(MODULES);
+  const actions = Object.values(ACTIONS);
 
   // Create permissions for each module and action combination
   for (const module of modules) {

@@ -19,9 +19,10 @@ const calculateDealTotals = (items, vatPercentage = 5) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, paymentStatus, companyId, supplierId, contactId, assignedTo, productServiceId, minAmount, maxAmount } = filters;
+  const { offset, limit, search, status, paymentStatus, companyId, supplierId, contactId, assignedTo, productServiceId, minAmount, maxAmount, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
+  if (scopeUserId) where.assigned_to = scopeUserId;
   if (search) {
     where[Op.or] = [
       { title: { [Op.like]: `%${search}%` } },
@@ -82,9 +83,11 @@ const getAll = async (tenantId, filters) => {
   return { deals: rows, total: count };
 };
 
-const getById = async (tenantId, dealId) => {
+const getById = async (tenantId, dealId, scope = {}) => {
+  const where = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
   const deal = await db.Deal.findOne({
-    where: { id: dealId, tenant_id: tenantId },
+    where,
     include: [
       { model: db.Lead, as: 'lead', required: false },
       { model: db.Company, as: 'company', required: false },
@@ -126,11 +129,12 @@ const getById = async (tenantId, dealId) => {
   return deal;
 };
 
-const create = async (tenantId, data) => {
+const create = async (tenantId, data, scope = {}) => {
   const transaction = await db.sequelize.transaction();
 
   try {
     const dealNumber = generateReferenceNumber('DEAL');
+    const assignedTo = scope.scopeUserId || data.assignedTo;
 
     // Calculate totals
     const totals = calculateDealTotals(data.items || [], data.vatPercentage || 5);
@@ -166,7 +170,7 @@ const create = async (tenantId, data) => {
         status: data.status || 'draft',
         payment_status: 'unpaid',
         paid_amount: 0,
-        assigned_to: data.assignedTo || null,
+        assigned_to: assignedTo || null,
         notes: data.notes,
       },
       { transaction }
@@ -280,12 +284,14 @@ const create = async (tenantId, data) => {
   }
 };
 
-const update = async (tenantId, dealId, data) => {
+const update = async (tenantId, dealId, data, scope = {}) => {
   const transaction = await db.sequelize.transaction();
 
   try {
+    const dealWhere = { id: dealId, tenant_id: tenantId };
+    if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
     const deal = await db.Deal.findOne({
-      where: { id: dealId, tenant_id: tenantId },
+      where: dealWhere,
       transaction,
     });
     if (!deal) throw ApiError.notFound('Deal not found');
@@ -322,7 +328,7 @@ const update = async (tenantId, dealId, data) => {
         status: data.status !== undefined ? data.status : deal.status,
         payment_status: data.paymentStatus !== undefined ? data.paymentStatus : deal.payment_status,
         paid_amount: data.paidAmount !== undefined ? data.paidAmount : deal.paid_amount,
-        assigned_to: data.assignedTo !== undefined ? data.assignedTo : deal.assigned_to,
+        assigned_to: scope.scopeUserId ? scope.scopeUserId : (data.assignedTo !== undefined ? data.assignedTo : deal.assigned_to),
         terms_and_conditions_id: (() => {
           if (Array.isArray(data.termsAndConditionsIds)) return data.termsAndConditionsIds.length > 0 ? data.termsAndConditionsIds[0] : null;
           if (data.termsAndConditionsId !== undefined) return data.termsAndConditionsId;
@@ -474,10 +480,10 @@ const update = async (tenantId, dealId, data) => {
   }
 };
 
-const updatePayment = async (tenantId, dealId, paidAmount) => {
-  const deal = await db.Deal.findOne({
-    where: { id: dealId, tenant_id: tenantId },
-  });
+const updatePayment = async (tenantId, dealId, paidAmount, scope = {}) => {
+  const where = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({ where });
   if (!deal) throw ApiError.notFound('Deal not found');
 
   const totalPaid = parseFloat(paidAmount);
@@ -498,19 +504,19 @@ const updatePayment = async (tenantId, dealId, paidAmount) => {
   return await getById(tenantId, dealId);
 };
 
-const remove = async (tenantId, dealId) => {
-  const deal = await db.Deal.findOne({
-    where: { id: dealId, tenant_id: tenantId },
-  });
+const remove = async (tenantId, dealId, scope = {}) => {
+  const where = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({ where });
   if (!deal) throw ApiError.notFound('Deal not found');
 
   await deal.destroy();
 };
 
-const saveInspectionReport = async (tenantId, dealId, data) => {
-  const deal = await db.Deal.findOne({
-    where: { id: dealId, tenant_id: tenantId },
-  });
+const saveInspectionReport = async (tenantId, dealId, data, scope = {}) => {
+  const where = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({ where });
   if (!deal) throw ApiError.notFound('Deal not found');
 
   const existing = await db.DealInspectionReport.findOne({

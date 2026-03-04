@@ -4,16 +4,20 @@ const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters = {}) => {
   const { offset, limit, search } = filters;
-  const where = { tenant_id: tenantId };
-
-  if (search) where.name = { [Op.like]: `%${search}%` };
+  const where = {
+    [Op.and]: [
+      { [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
+      ...(search ? [{ name: { [Op.like]: `%${search}%` } }] : []),
+    ],
+  };
 
   const { count, rows } = await db.Role.findAndCountAll({
     where,
     include: [{ model: db.Permission, as: 'permissions' }],
     offset,
     limit,
-    order: [['created_at', 'DESC']],
+    order: [['tenant_id', 'ASC'], ['created_at', 'DESC']],
+    distinct: true,
   });
 
   return { roles: rows, total: count };
@@ -21,7 +25,10 @@ const getAll = async (tenantId, filters = {}) => {
 
 const getById = async (tenantId, roleId) => {
   const role = await db.Role.findOne({
-    where: { id: roleId, tenant_id: tenantId },
+    where: {
+      id: roleId,
+      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+    },
     include: [{ model: db.Permission, as: 'permissions' }],
   });
 
@@ -40,12 +47,15 @@ const create = async (tenantId, data) => {
 
     if (existing) throw ApiError.conflict('Role name already exists');
 
+    const displayName = data.displayName || data.display_name || (data.name && data.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()));
     const role = await db.Role.create(
       {
         tenant_id: tenantId,
         name: data.name,
+        display_name: displayName || data.name,
         description: data.description,
         is_system_role: false,
+        status: 'active',
       },
       { transaction }
     );
@@ -68,7 +78,10 @@ const update = async (tenantId, roleId, data) => {
 
   try {
     const role = await db.Role.findOne({
-      where: { id: roleId, tenant_id: tenantId },
+      where: {
+        id: roleId,
+        [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+      },
       transaction,
     });
 
@@ -87,10 +100,12 @@ const update = async (tenantId, roleId, data) => {
       if (existing) throw ApiError.conflict('Role name already exists');
     }
 
+    const displayName = data.displayName || data.display_name || (data.name && data.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()));
     await role.update(
       {
         name: data.name || role.name,
-        description: data.description || role.description,
+        display_name: displayName || role.display_name,
+        description: data.description !== undefined ? data.description : role.description,
       },
       { transaction }
     );
@@ -110,7 +125,10 @@ const update = async (tenantId, roleId, data) => {
 
 const remove = async (tenantId, roleId) => {
   const role = await db.Role.findOne({
-    where: { id: roleId, tenant_id: tenantId },
+    where: {
+      id: roleId,
+      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+    },
   });
 
   if (!role) throw ApiError.notFound('Role not found');
@@ -151,7 +169,10 @@ const getAllPermissions = async () => {
 
 const assignPermissionsToRole = async (tenantId, roleId, permissionIds) => {
   const role = await db.Role.findOne({
-    where: { id: roleId, tenant_id: tenantId },
+    where: {
+      id: roleId,
+      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+    },
   });
 
   if (!role) throw ApiError.notFound('Role not found');

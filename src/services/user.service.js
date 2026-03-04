@@ -72,12 +72,24 @@ const create = async (tenantId, data) => {
 const update = async (tenantId, userId, data) => {
   const user = await getById(tenantId, userId);
 
-  await user.update({
-    first_name: data.firstName || user.first_name,
-    last_name: data.lastName || user.last_name,
-    phone: data.phone || user.phone,
-    status: data.status || user.status,
-  });
+  const updateData = {
+    first_name: data.firstName ?? user.first_name,
+    last_name: data.lastName ?? user.last_name,
+    phone: data.phone ?? user.phone,
+    status: data.status ?? user.status,
+  };
+  if (data.roleId !== undefined) {
+    const roleExists = await db.Role.findOne({
+      where: {
+        id: data.roleId,
+        [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+      },
+    });
+    if (data.roleId && !roleExists) throw ApiError.badRequest('Role not found');
+    updateData.role_id = data.roleId || null;
+  }
+
+  await user.update(updateData);
 
   return await getById(tenantId, userId);
 };

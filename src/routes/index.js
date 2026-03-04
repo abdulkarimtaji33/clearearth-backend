@@ -20,6 +20,7 @@ const uploadRoutes = require('./upload.routes');
 const termsRoutes = require('./termsAndConditions.routes');
 const quotationRoutes = require('./quotation.routes');
 const purchaseOrderRoutes = require('./purchaseOrder.routes');
+const inspectionRequestRoutes = require('./inspectionRequest.routes');
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -40,6 +41,7 @@ router.get('/', (req, res) => {
       terms: '/terms',
       quotations: '/quotations',
       'purchase-orders': '/purchase-orders',
+      'inspection-requests': '/inspection-requests',
     },
   });
 });
@@ -60,5 +62,6 @@ router.use('/upload', uploadRoutes);
 router.use('/terms', termsRoutes);
 router.use('/quotations', quotationRoutes);
 router.use('/purchase-orders', purchaseOrderRoutes);
+router.use('/inspection-requests', inspectionRequestRoutes);
 
 module.exports = router;

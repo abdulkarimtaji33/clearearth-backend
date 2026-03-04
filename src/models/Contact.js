@@ -64,6 +64,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('clients', 'vendors'),
         allowNull: true,
       },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' },
+      },
     },
     {
       tableName: 'contacts',
@@ -82,6 +87,7 @@ module.exports = (sequelize, DataTypes) => {
   Contact.associate = models => {
     Contact.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
     Contact.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
+    Contact.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator', attributes: [] });
     Contact.hasMany(models.CompanyContact, { foreignKey: 'contact_id', as: 'companyLinks' });
     Contact.hasMany(models.SupplierContact, { foreignKey: 'contact_id', as: 'supplierLinks' });
   };

@@ -6,9 +6,10 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, dealId } = filters;
+  const { offset, limit, search, status, dealId, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
+  if (scopeUserId) where.prepared_by = scopeUserId;
   if (status) where.status = status;
   if (dealId) where.deal_id = dealId;
 
@@ -36,9 +37,11 @@ const getAll = async (tenantId, filters) => {
   return { quotations: rows, total: count };
 };
 
-const getById = async (tenantId, quotationId) => {
+const getById = async (tenantId, quotationId, scope = {}) => {
+  const where = { id: quotationId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.prepared_by = scope.scopeUserId;
   const quotation = await db.Quotation.findOne({
-    where: { id: quotationId, tenant_id: tenantId },
+    where,
     include: [
       { model: db.Deal, as: 'deal' },
       { model: db.User, as: 'preparedByUser', attributes: ['id', 'first_name', 'last_name', 'email'] },
@@ -48,19 +51,22 @@ const getById = async (tenantId, quotationId) => {
   return quotation;
 };
 
-const create = async (tenantId, data) => {
+const create = async (tenantId, data, scope = {}) => {
   const { dealId, preparedBy, quotationDate, quotationAmount, status, remarks } = data;
 
-  const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+  const dealWhere = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({ where: dealWhere });
   if (!deal) throw ApiError.badRequest('Deal not found');
 
-  const user = await db.User.findOne({ where: { id: preparedBy, tenant_id: tenantId } });
+  const effectivePreparedBy = scope.scopeUserId || preparedBy;
+  const user = await db.User.findOne({ where: { id: effectivePreparedBy, tenant_id: tenantId } });
   if (!user) throw ApiError.badRequest('User not found');
 
   const quotation = await db.Quotation.create({
     tenant_id: tenantId,
     deal_id: dealId,
-    prepared_by: preparedBy,
+    prepared_by: effectivePreparedBy,
     quotation_date: quotationDate,
     quotation_amount: parseFloat(quotationAmount) || 0,
     currency: 'AED',
@@ -71,22 +77,25 @@ const create = async (tenantId, data) => {
   return getById(tenantId, quotation.id);
 };
 
-const update = async (tenantId, quotationId, data) => {
-  const quotation = await getById(tenantId, quotationId);
+const update = async (tenantId, quotationId, data, scope = {}) => {
+  const quotation = await getById(tenantId, quotationId, scope);
   const { dealId, preparedBy, quotationDate, quotationAmount, status, remarks } = data;
 
   if (dealId) {
-    const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+    const dealWhere = { id: dealId, tenant_id: tenantId };
+    if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
+    const deal = await db.Deal.findOne({ where: dealWhere });
     if (!deal) throw ApiError.badRequest('Deal not found');
   }
-  if (preparedBy) {
-    const user = await db.User.findOne({ where: { id: preparedBy, tenant_id: tenantId } });
+  const effectivePreparedBy = scope.scopeUserId || preparedBy;
+  if (effectivePreparedBy) {
+    const user = await db.User.findOne({ where: { id: effectivePreparedBy, tenant_id: tenantId } });
     if (!user) throw ApiError.badRequest('User not found');
   }
 
   await quotation.update({
     deal_id: dealId ?? quotation.deal_id,
-    prepared_by: preparedBy ?? quotation.prepared_by,
+    prepared_by: effectivePreparedBy ?? quotation.prepared_by,
     quotation_date: quotationDate ?? quotation.quotation_date,
     quotation_amount: quotationAmount !== undefined ? parseFloat(quotationAmount) : quotation.quotation_amount,
     status: status ?? quotation.status,
@@ -96,8 +105,8 @@ const update = async (tenantId, quotationId, data) => {
   return getById(tenantId, quotation.id);
 };
 
-const remove = async (tenantId, quotationId) => {
-  const quotation = await getById(tenantId, quotationId);
+const remove = async (tenantId, quotationId, scope = {}) => {
+  const quotation = await getById(tenantId, quotationId, scope);
   await quotation.destroy();
 };
 

@@ -2,15 +2,18 @@ const quotationService = require('../services/quotation.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
+const { getSalesScope } = require('../utils/scopeHelper');
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, dealId } = req.query;
   const pagination = getPaginationParams(page, pageSize);
+  const scope = getSalesScope(req);
   const result = await quotationService.getAll(req.tenant.id, {
     ...pagination,
     search,
     status,
     dealId,
+    ...scope,
   });
   return ApiResponse.paginated(res, result.quotations, {
     page: pagination.page,
@@ -20,22 +23,26 @@ const getAll = asyncHandler(async (req, res) => {
 });
 
 const getById = asyncHandler(async (req, res) => {
-  const quotation = await quotationService.getById(req.tenant.id, req.params.id);
+  const scope = getSalesScope(req);
+  const quotation = await quotationService.getById(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, quotation);
 });
 
 const create = asyncHandler(async (req, res) => {
-  const quotation = await quotationService.create(req.tenant.id, req.body);
+  const scope = getSalesScope(req);
+  const quotation = await quotationService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, quotation, 'Quotation created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
-  const quotation = await quotationService.update(req.tenant.id, req.params.id, req.body);
+  const scope = getSalesScope(req);
+  const quotation = await quotationService.update(req.tenant.id, req.params.id, req.body, scope);
   return ApiResponse.success(res, quotation, 'Quotation updated successfully');
 });
 
 const remove = asyncHandler(async (req, res) => {
-  await quotationService.remove(req.tenant.id, req.params.id);
+  const scope = getSalesScope(req);
+  await quotationService.remove(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, null, 'Quotation deleted');
 });
 

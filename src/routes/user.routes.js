@@ -26,6 +26,8 @@ const updateUserValidation = [
   body('firstName').optional().notEmpty(),
   body('lastName').optional().notEmpty(),
   body('email').optional().isEmail(),
+  body('roleId').optional().isInt(),
+  body('status').optional().isIn(['active', 'inactive', 'suspended', 'pending']),
   validate,
 ];
 
