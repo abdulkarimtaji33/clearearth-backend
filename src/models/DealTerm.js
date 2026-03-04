@@ -30,6 +30,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: 'deal_terms',
       timestamps: true,
+      paranoid: false,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
       underscored: true,
