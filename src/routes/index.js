@@ -18,6 +18,8 @@ const dropdownRoutes = require('./dropdown.routes');
 const materialTypeRoutes = require('./materialType.routes');
 const uploadRoutes = require('./upload.routes');
 const termsRoutes = require('./termsAndConditions.routes');
+const quotationRoutes = require('./quotation.routes');
+const purchaseOrderRoutes = require('./purchaseOrder.routes');
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -36,6 +38,8 @@ router.get('/', (req, res) => {
       deals: '/deals',
       dropdowns: '/dropdowns',
       terms: '/terms',
+      quotations: '/quotations',
+      'purchase-orders': '/purchase-orders',
     },
   });
 });
@@ -54,5 +58,7 @@ router.use('/dropdowns', dropdownRoutes);
 router.use('/material-types', materialTypeRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/terms', termsRoutes);
+router.use('/quotations', quotationRoutes);
+router.use('/purchase-orders', purchaseOrderRoutes);
 
 module.exports = router;

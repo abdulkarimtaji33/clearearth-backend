@@ -128,6 +128,116 @@ async function runMigration() {
         ('other', 'Other', 99, 1, NOW(), NOW())
     `);
 
+    console.log('Creating quotations table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS quotations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        deal_id INT NOT NULL,
+        prepared_by INT NOT NULL,
+        quotation_date DATE NOT NULL,
+        quotation_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        currency VARCHAR(10) DEFAULT 'AED',
+        status VARCHAR(50) NOT NULL DEFAULT 'draft',
+        remarks TEXT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_tenant_id (tenant_id),
+        INDEX idx_deal_id (deal_id),
+        INDEX idx_prepared_by (prepared_by),
+        INDEX idx_status (status)
+      )
+    `);
+
+    console.log('Creating quotation_statuses table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS quotation_statuses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        value VARCHAR(50) NOT NULL UNIQUE,
+        display_name VARCHAR(100) NOT NULL,
+        display_order INT DEFAULT 0,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL
+      )
+    `);
+    await db.sequelize.query(`
+      INSERT IGNORE INTO quotation_statuses (value, display_name, display_order, is_active, created_at, updated_at)
+      VALUES
+        ('draft', 'Draft', 1, 1, NOW(), NOW()),
+        ('sent', 'Sent', 2, 1, NOW(), NOW()),
+        ('approved', 'Approved', 3, 1, NOW(), NOW()),
+        ('rejected', 'Rejected', 4, 1, NOW(), NOW())
+    `);
+
+    console.log('Creating purchase_orders table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        supplier_id INT NOT NULL,
+        po_date DATE NOT NULL,
+        expected_delivery VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_tenant_id (tenant_id),
+        INDEX idx_supplier_id (supplier_id)
+      )
+    `);
+
+    console.log('Creating purchase_order_items table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        purchase_order_id INT NOT NULL,
+        product_service_id INT NOT NULL,
+        item_description TEXT NULL,
+        quantity VARCHAR(100) NOT NULL,
+        price VARCHAR(100) NOT NULL,
+        total VARCHAR(100) NOT NULL,
+        sort_order INT DEFAULT 0,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_purchase_order_id (purchase_order_id)
+      )
+    `);
+
+    console.log('Creating purchase_order_terms table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS purchase_order_terms (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        purchase_order_id INT NOT NULL,
+        terms_and_conditions_id INT NOT NULL,
+        sort_order INT DEFAULT 0,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_purchase_order_id (purchase_order_id),
+        UNIQUE KEY uk_po_terms (purchase_order_id, terms_and_conditions_id)
+      )
+    `);
+
+    console.log('Creating purchase_order_statuses table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS purchase_order_statuses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        value VARCHAR(50) NOT NULL UNIQUE,
+        display_name VARCHAR(100) NOT NULL,
+        display_order INT DEFAULT 0,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL
+      )
+    `);
+    await db.sequelize.query(`
+      INSERT IGNORE INTO purchase_order_statuses (value, display_name, display_order, is_active, created_at, updated_at)
+      VALUES
+        ('draft', 'Draft', 1, 1, NOW(), NOW()),
+        ('sent', 'Sent', 2, 1, NOW(), NOW()),
+        ('approved', 'Approved', 3, 1, NOW(), NOW()),
+        ('rejected', 'Rejected', 4, 1, NOW(), NOW()),
+        ('delivered', 'Delivered', 5, 1, NOW(), NOW())
+    `);
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

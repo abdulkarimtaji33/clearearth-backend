@@ -14,6 +14,8 @@ const {
   DealStatus,
   PaymentStatus,
   Status,
+  QuotationStatus,
+  PurchaseOrderStatus,
 } = require('../models');
 
 // Model mapping for all dropdown categories
@@ -94,6 +96,8 @@ exports.getAllDropdowns = async (req, res) => {
       dealStatuses,
       paymentStatuses,
       statuses,
+      quotationStatuses,
+      purchaseOrderStatuses,
     ] = await Promise.all([
       Designation.findAll({ where: whereClause, order: orderClause, attributes }),
       IndustryType.findAll({ where: whereClause, order: orderClause, attributes }),
@@ -107,6 +111,8 @@ exports.getAllDropdowns = async (req, res) => {
       DealStatus.findAll({ where: whereClause, order: orderClause, attributes }),
       PaymentStatus.findAll({ where: whereClause, order: orderClause, attributes }),
       Status.findAll({ where: whereClause, order: orderClause, attributes }),
+      QuotationStatus.findAll({ where: whereClause, order: orderClause, attributes }),
+      PurchaseOrderStatus.findAll({ where: whereClause, order: orderClause, attributes }),
     ]);
 
     res.json({
@@ -124,6 +130,8 @@ exports.getAllDropdowns = async (req, res) => {
         deal_status: dealStatuses.map(d => d.toJSON()),
         payment_status: paymentStatuses.map(d => d.toJSON()),
         status: statuses.map(d => d.toJSON()),
+        quotation_status: quotationStatuses.map(d => d.toJSON()),
+        purchase_order_status: purchaseOrderStatuses.map(d => d.toJSON()),
       },
     });
   } catch (error) {

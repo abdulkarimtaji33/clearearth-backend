@@ -258,8 +258,8 @@ const create = async (tenantId, data) => {
           terms_and_conditions_id: tid,
           sort_order: idx,
         })),
-        { transaction }
-      );
+      { transaction }
+    );
     }
 
     // Mark lead as converted if connected
@@ -274,7 +274,7 @@ const create = async (tenantId, data) => {
     return await getById(tenantId, deal.id);
   } catch (error) {
     if (!transaction.finished) {
-      await transaction.rollback();
+    await transaction.rollback();
     }
     throw error;
   }
@@ -468,7 +468,7 @@ const update = async (tenantId, dealId, data) => {
     return await getById(tenantId, dealId);
   } catch (error) {
     if (!transaction.finished) {
-      await transaction.rollback();
+    await transaction.rollback();
     }
     throw error;
   }

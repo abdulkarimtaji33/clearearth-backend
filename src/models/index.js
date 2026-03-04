@@ -51,6 +51,14 @@ const UnitOfMeasure = require('./UnitOfMeasure')(sequelize, DataTypes);
 const DealStatus = require('./DealStatus')(sequelize, DataTypes);
 const PaymentStatus = require('./PaymentStatus')(sequelize, DataTypes);
 const Status = require('./Status')(sequelize, DataTypes);
+const QuotationStatus = require('./QuotationStatus')(sequelize, DataTypes);
+const PurchaseOrderStatus = require('./PurchaseOrderStatus')(sequelize, DataTypes);
+
+// Quotations & Purchase Orders
+const Quotation = require('./Quotation')(sequelize, DataTypes);
+const PurchaseOrder = require('./PurchaseOrder')(sequelize, DataTypes);
+const PurchaseOrderItem = require('./PurchaseOrderItem')(sequelize, DataTypes);
+const PurchaseOrderTerm = require('./PurchaseOrderTerm')(sequelize, DataTypes);
 
 // Create db object with all models
 const db = {
@@ -90,6 +98,12 @@ const db = {
   DealStatus,
   PaymentStatus,
   Status,
+  QuotationStatus,
+  PurchaseOrderStatus,
+  Quotation,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  PurchaseOrderTerm,
 };
 
 // Define Associations
