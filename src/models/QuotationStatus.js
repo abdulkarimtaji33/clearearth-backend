@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       display_order: { type: DataTypes.INTEGER, defaultValue: 0 },
       is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
     },
-    { tableName: 'quotation_statuses', timestamps: true, underscored: true }
+    { tableName: 'quotation_statuses', timestamps: true, underscored: true, paranoid: false }
   );
   return QuotationStatus;
 };
