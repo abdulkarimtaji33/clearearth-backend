@@ -75,7 +75,7 @@ const getById = async (tenantId, supplierId) => {
 const create = async (tenantId, data) => {
   const {
     companyName, primaryContactId, industryType, website,
-    email, phone, country, city, address, notes, contacts,
+    email, phone, country, city, address, notes, contacts, type,
   } = data;
 
   if (email) {
@@ -99,6 +99,7 @@ const create = async (tenantId, data) => {
     address: address || null,
     notes: notes || null,
     status: 'active',
+    type: type || 'organization',
   });
 
   if (contacts && contacts.length > 0) {
@@ -129,6 +130,7 @@ const update = async (tenantId, supplierId, data) => {
     address: data.address !== undefined ? data.address : supplier.address,
     notes: data.notes !== undefined ? data.notes : supplier.notes,
     status: data.status !== undefined ? data.status : supplier.status,
+    type: data.type !== undefined ? data.type : supplier.type,
   });
 
   if (data.contacts !== undefined) {

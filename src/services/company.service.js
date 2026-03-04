@@ -81,7 +81,7 @@ const getById = async (tenantId, companyId) => {
 const create = async (tenantId, data) => {
   const {
     companyName, primaryContactId, industryType, website,
-    email, phone, country, city, address, notes, contacts,
+    email, phone, country, city, address, notes, contacts, type,
   } = data;
 
   if (email) {
@@ -105,6 +105,7 @@ const create = async (tenantId, data) => {
     address: address || null,
     notes: notes || null,
     status: 'active',
+    type: type || 'organization',
   });
 
   if (contacts && contacts.length > 0) {
@@ -153,6 +154,7 @@ const update = async (tenantId, companyId, data) => {
     address: data.address !== undefined ? data.address : company.address,
     notes: data.notes !== undefined ? data.notes : company.notes,
     status: data.status !== undefined ? data.status : company.status,
+    type: data.type !== undefined ? data.type : company.type,
   });
 
   // Clear old primary contact's company_id if changed

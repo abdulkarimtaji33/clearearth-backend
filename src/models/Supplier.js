@@ -57,6 +57,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('active', 'inactive'),
         defaultValue: 'active',
       },
+      type: {
+        type: DataTypes.ENUM('individual', 'organization'),
+        allowNull: true,
+        defaultValue: 'organization',
+      },
     },
     {
       tableName: 'suppliers',

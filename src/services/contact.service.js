@@ -81,7 +81,7 @@ const create = async (tenantId, data) => {
     tenant_id: tenantId,
     contact_code: contactCode,
     first_name: firstName,
-    last_name: lastName,
+    last_name: lastName || null,
     email: email || null,
     phone: phone || null,
     mobile: mobile || null,
