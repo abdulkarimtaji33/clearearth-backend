@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: 'quotations',
       timestamps: true,
+      paranoid: false,
       underscored: true,
       indexes: [
         { fields: ['tenant_id'] },
