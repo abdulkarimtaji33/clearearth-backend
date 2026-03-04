@@ -238,6 +238,9 @@ async function runMigration() {
         ('delivered', 'Delivered', 5, 1, NOW(), NOW())
     `);
 
+    console.log('Adding deal_id to purchase_orders...');
+    try { await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN deal_id INT NULL, ADD INDEX idx_deal_id (deal_id)`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
+
     console.log('Adding companies.type, suppliers.type, contacts.last_name...');
     try { await db.sequelize.query(`ALTER TABLE contacts MODIFY last_name VARCHAR(100) NULL`); } catch (e) { if (!e.message?.includes('Duplicate') && !e.message?.includes('Unknown column')) throw e; }
     try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN type ENUM('individual','organization') DEFAULT 'organization'`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }

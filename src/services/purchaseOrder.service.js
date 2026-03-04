@@ -6,10 +6,11 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, supplierId } = filters;
+  const { offset, limit, search, supplierId, dealId } = filters;
   const where = { tenant_id: tenantId };
 
   if (supplierId) where.supplier_id = supplierId;
+  if (dealId) where.deal_id = dealId;
 
   const supplierInclude = {
     model: db.Supplier,
@@ -22,6 +23,7 @@ const getAll = async (tenantId, filters) => {
   const { count, rows } = await db.PurchaseOrder.findAndCountAll({
     where,
     include: [
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
       supplierInclude,
       {
         model: db.PurchaseOrderItem,
@@ -44,6 +46,7 @@ const getById = async (tenantId, poId) => {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId },
     include: [
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'] },
       { model: db.Supplier, as: 'supplier' },
       {
         model: db.PurchaseOrderItem,
@@ -59,10 +62,15 @@ const getById = async (tenantId, poId) => {
 };
 
 const create = async (tenantId, data) => {
-  const { supplierId, poDate, expectedDelivery, items, termsAndConditionsIds } = data;
+  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds } = data;
 
   const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
   if (!supplier) throw ApiError.badRequest('Supplier not found');
+
+  if (dealId) {
+    const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+    if (!deal) throw ApiError.badRequest('Deal not found');
+  }
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw ApiError.badRequest('At least one item is required');
@@ -72,6 +80,7 @@ const create = async (tenantId, data) => {
     const newPo = await db.PurchaseOrder.create(
       {
         tenant_id: tenantId,
+        deal_id: dealId || null,
         supplier_id: supplierId,
         po_date: poDate,
         expected_delivery: expectedDelivery || null,
@@ -116,16 +125,24 @@ const create = async (tenantId, data) => {
 
 const update = async (tenantId, poId, data) => {
   const po = await getById(tenantId, poId);
-  const { supplierId, poDate, expectedDelivery, items, termsAndConditionsIds } = data;
+  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds } = data;
 
   if (supplierId) {
     const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
     if (!supplier) throw ApiError.badRequest('Supplier not found');
   }
 
+  if (dealId !== undefined) {
+    if (dealId) {
+      const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+      if (!deal) throw ApiError.badRequest('Deal not found');
+    }
+  }
+
   await db.sequelize.transaction(async (t) => {
     await po.update(
       {
+        deal_id: dealId !== undefined ? (dealId || null) : po.deal_id,
         supplier_id: supplierId ?? po.supplier_id,
         po_date: poDate ?? po.po_date,
         expected_delivery: expectedDelivery !== undefined ? expectedDelivery : po.expected_delivery,
