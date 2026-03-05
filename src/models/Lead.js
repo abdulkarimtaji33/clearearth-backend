@@ -65,6 +65,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         references: { model: 'users', key: 'id' },
       },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' },
+      },
       status: {
         type: DataTypes.ENUM(...Object.values(LEAD_STATUS)),
         defaultValue: LEAD_STATUS.NEW,

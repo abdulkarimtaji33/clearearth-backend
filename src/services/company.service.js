@@ -4,6 +4,7 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { generateReferenceNumber } = require('../utils/helpers');
+const { getSalesRelatedCompanyIds } = require('../utils/scopeHelper');
 const { Op } = db.Sequelize;
 
 const contactInclude = {
@@ -13,11 +14,29 @@ const contactInclude = {
   attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'department'],
 };
 
+const _buildCompanyWhereForSales = async (tenantId, companyId, scopeUserId) => {
+  const where = { id: companyId, tenant_id: tenantId };
+  if (scopeUserId) {
+    const relatedIds = await getSalesRelatedCompanyIds(db, tenantId, scopeUserId);
+    if (!relatedIds.includes(parseInt(companyId, 10))) where.created_by = scopeUserId;
+  }
+  return where;
+};
+
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, status, industryType, country, city, contactId, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
-  if (scopeUserId) where.created_by = scopeUserId;
+  if (scopeUserId) {
+    const relatedIds = await getSalesRelatedCompanyIds(db, tenantId, scopeUserId);
+    where[Op.and] = where[Op.and] || [];
+    where[Op.and].push({
+      [Op.or]: [
+        { created_by: scopeUserId },
+        ...(relatedIds.length ? [{ id: { [Op.in]: relatedIds } }] : []),
+      ],
+    });
+  }
   if (search) {
     where[Op.or] = [
       { company_name: { [Op.like]: `%${search}%` } },
@@ -54,8 +73,7 @@ const getAll = async (tenantId, filters) => {
 };
 
 const getById = async (tenantId, companyId, scope = {}) => {
-  const where = { id: companyId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const where = await _buildCompanyWhereForSales(tenantId, companyId, scope.scopeUserId);
   const company = await db.Company.findOne({
     where,
     include: [
@@ -135,8 +153,7 @@ const create = async (tenantId, data, scope = {}) => {
 };
 
 const update = async (tenantId, companyId, data, scope = {}) => {
-  const where = { id: companyId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const where = await _buildCompanyWhereForSales(tenantId, companyId, scope.scopeUserId);
   const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 
@@ -198,8 +215,7 @@ const update = async (tenantId, companyId, data, scope = {}) => {
 };
 
 const remove = async (tenantId, companyId, scope = {}) => {
-  const where = { id: companyId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const where = await _buildCompanyWhereForSales(tenantId, companyId, scope.scopeUserId);
   const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 
@@ -208,8 +224,7 @@ const remove = async (tenantId, companyId, scope = {}) => {
 };
 
 const addContact = async (tenantId, companyId, contactId, role, isPrimary, scope = {}) => {
-  const where = { id: companyId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const where = await _buildCompanyWhereForSales(tenantId, companyId, scope.scopeUserId);
   const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 
@@ -229,8 +244,7 @@ const addContact = async (tenantId, companyId, contactId, role, isPrimary, scope
 };
 
 const removeContact = async (tenantId, companyId, contactId, scope = {}) => {
-  const where = { id: companyId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.created_by = scope.scopeUserId;
+  const where = await _buildCompanyWhereForSales(tenantId, companyId, scope.scopeUserId);
   const company = await db.Company.findOne({ where });
   if (!company) throw ApiError.notFound('Company not found');
 

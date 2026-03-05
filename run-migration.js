@@ -351,9 +351,16 @@ async function runMigration() {
       }
     }
 
-    console.log('Adding created_by to contacts and companies...');
+    console.log('Adding created_by to contacts, companies, and leads...');
     try { await db.sequelize.query(`ALTER TABLE contacts ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
     try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
+    try { await db.sequelize.query(`ALTER TABLE leads ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
+
+    const salesPermQuery = `
+      SELECT id FROM permissions WHERE module IN ('leads','deals','contacts','companies','inspection_requests','inspection_reports')
+      OR name LIKE 'leads.%' OR name LIKE 'deals.%' OR name LIKE 'contacts.%' OR name LIKE 'companies.%'
+      OR name LIKE 'inspection_requests.%' OR name LIKE 'inspection_reports.%'
+    `;
 
     console.log('Ensuring sales_manager role exists...');
     const [existingSalesManager] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales_manager' AND tenant_id IS NULL LIMIT 1`);
@@ -362,15 +369,18 @@ async function runMigration() {
         INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
         VALUES (NULL, 'sales_manager', 'Sales Manager', 'Full access to leads, deals, contacts, quotations, inspection requests', 1, 'active', NOW(), NOW())
       `);
-      const [smRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales_manager' AND tenant_id IS NULL LIMIT 1`);
-      if (smRows?.[0]?.id) {
-        const [permRows] = await db.sequelize.query(`SELECT id FROM permissions WHERE module IN ('leads','deals','contacts','companies','inspection_requests','inspection_reports')`);
-        for (const p of permRows || []) {
-          try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [smRows[0].id, p.id] }); } catch (e) { /* ignore */ }
-        }
-        console.log('  Created sales_manager role');
+      console.log('  Created sales_manager role');
+    } else {
+      console.log('  sales_manager role already exists');
+    }
+    const [smRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales_manager' AND tenant_id IS NULL LIMIT 1`);
+    if (smRows?.[0]?.id) {
+      const [permRows] = await db.sequelize.query(salesPermQuery);
+      for (const p of permRows || []) {
+        try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [smRows[0].id, p.id] }); } catch (e) { /* ignore */ }
       }
-    } else { console.log('  sales_manager role already exists'); }
+      console.log(`  Assigned ${(permRows || []).length} permissions to sales_manager`);
+    }
 
     console.log('Ensuring sales role exists...');
     const [existingSales] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales' AND tenant_id IS NULL LIMIT 1`);
@@ -379,15 +389,18 @@ async function runMigration() {
         INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
         VALUES (NULL, 'sales', 'Sales', 'Access to own leads, deals, contacts, quotations, and inspection requests only', 1, 'active', NOW(), NOW())
       `);
-      const [sRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales' AND tenant_id IS NULL LIMIT 1`);
-      if (sRows?.[0]?.id) {
-        const [permRows] = await db.sequelize.query(`SELECT id FROM permissions WHERE module IN ('leads','deals','contacts','companies','inspection_requests','inspection_reports')`);
-        for (const p of permRows || []) {
-          try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [sRows[0].id, p.id] }); } catch (e) { /* ignore */ }
-        }
-        console.log('  Created sales role');
+      console.log('  Created sales role');
+    } else {
+      console.log('  sales role already exists');
+    }
+    const [sRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'sales' AND tenant_id IS NULL LIMIT 1`);
+    if (sRows?.[0]?.id) {
+      const [permRows] = await db.sequelize.query(salesPermQuery);
+      for (const p of permRows || []) {
+        try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [sRows[0].id, p.id] }); } catch (e) { /* ignore */ }
       }
-    } else { console.log('  sales role already exists'); }
+      console.log(`  Assigned ${(permRows || []).length} permissions to sales`);
+    }
 
     console.log('✅ Migration completed successfully!');
     process.exit(0);

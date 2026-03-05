@@ -85,6 +85,36 @@ const create = async (tenantId, data) => {
 
   const supplierCode = generateReferenceNumber('SUP');
 
+  // Create a Company so supplier appears in leads company dropdown
+  const companyCode = generateReferenceNumber('COM');
+  const company = await db.Company.create({
+    tenant_id: tenantId,
+    company_code: companyCode,
+    company_name: companyName,
+    primary_contact_id: primaryContactId || null,
+    industry_type: industryType || null,
+    website: website || null,
+    email: email || null,
+    phone: phone || null,
+    country: country || 'UAE',
+    city: city || null,
+    address: address || null,
+    notes: notes || null,
+    status: 'active',
+    type: type || 'organization',
+  });
+
+  if (primaryContactId) {
+    await db.Contact.update(
+      { company_id: company.id },
+      { where: { id: primaryContactId, tenant_id: tenantId } }
+    );
+    await db.CompanyContact.findOrCreate({
+      where: { company_id: company.id, contact_id: primaryContactId },
+      defaults: { role: null, is_primary: true },
+    });
+  }
+
   const supplier = await db.Supplier.create({
     tenant_id: tenantId,
     supplier_code: supplierCode,

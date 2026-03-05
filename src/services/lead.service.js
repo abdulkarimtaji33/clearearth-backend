@@ -8,7 +8,10 @@ const getAll = async (tenantId, filters) => {
   const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
-  if (scopeUserId) where.assigned_to = scopeUserId;
+  // Sales: leads assigned to OR created by the user
+  if (scopeUserId) {
+    where[Op.or] = [{ assigned_to: scopeUserId }, { created_by: scopeUserId }];
+  }
   if (search) {
     where[Op.or] = [
       { email: { [Op.like]: `%${search}%` } },
@@ -17,7 +20,7 @@ const getAll = async (tenantId, filters) => {
     ];
   }
   if (status) where.status = status;
-  if (assignedTo) where.assigned_to = assignedTo;
+  if (assignedTo && !scopeUserId) where.assigned_to = assignedTo;
   if (source) where.source = source;
   if (companyId) where.company_id = companyId;
   if (contactId) where.contact_id = contactId;
@@ -41,7 +44,9 @@ const getAll = async (tenantId, filters) => {
 
 const getById = async (tenantId, leadId, scope = {}) => {
   const where = { id: leadId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  if (scope.scopeUserId) {
+    where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
+  }
   const lead = await db.Lead.findOne({
     where,
     include: [
@@ -83,6 +88,7 @@ const create = async (tenantId, data, scope = {}) => {
     estimated_value: data.estimatedValue,
     notes: data.notes,
     assigned_to: assignedTo,
+    created_by: scope.scopeUserId || null,
     status: LEAD_STATUS.NEW,
   });
 
@@ -91,7 +97,9 @@ const create = async (tenantId, data, scope = {}) => {
 
 const update = async (tenantId, leadId, data, scope = {}) => {
   const where = { id: leadId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  if (scope.scopeUserId) {
+    where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
+  }
   const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
@@ -128,7 +136,9 @@ const update = async (tenantId, leadId, data, scope = {}) => {
 
 const qualify = async (tenantId, leadId, notes, scope = {}) => {
   const where = { id: leadId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  if (scope.scopeUserId) {
+    where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
+  }
   const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
@@ -146,7 +156,9 @@ const qualify = async (tenantId, leadId, notes, scope = {}) => {
 
 const disqualify = async (tenantId, leadId, reason, scope = {}) => {
   const where = { id: leadId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  if (scope.scopeUserId) {
+    where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
+  }
   const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
@@ -164,7 +176,9 @@ const disqualify = async (tenantId, leadId, reason, scope = {}) => {
 
 const convertToDeal = async (tenantId, leadId, dealData, scope = {}) => {
   const where = { id: leadId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  if (scope.scopeUserId) {
+    where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
+  }
   const lead = await db.Lead.findOne({ where });
 
   if (!lead) throw ApiError.notFound('Lead not found');
@@ -182,7 +196,9 @@ const convertToDeal = async (tenantId, leadId, dealData, scope = {}) => {
 
 const remove = async (tenantId, leadId, scope = {}) => {
   const where = { id: leadId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  if (scope.scopeUserId) {
+    where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
+  }
   const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 

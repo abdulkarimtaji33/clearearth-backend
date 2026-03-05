@@ -8,8 +8,8 @@ const { body, param } = require('express-validator');
 router.use(authenticate);
 
 const createValidation = [
-  body('phone').notEmpty().withMessage('Phone is required'),
-  body('email').notEmpty().isEmail().withMessage('Valid email is required'),
+  body('phone').optional({ values: 'falsy' }),
+  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
   body('source').notEmpty().withMessage('Lead source is required'),
   body('productServiceId').optional({ values: 'falsy' }).isInt().withMessage('Valid product/service ID is required'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
@@ -19,7 +19,7 @@ const createValidation = [
 
 const updateValidation = [
   param('id').isInt().withMessage('Valid lead ID is required'),
-  body('phone').optional({ values: 'falsy' }).notEmpty().withMessage('Phone is required'),
+  body('phone').optional({ values: 'falsy' }),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   body('contactId').optional({ values: 'falsy' }).isInt().withMessage('Valid contact ID is required'),
