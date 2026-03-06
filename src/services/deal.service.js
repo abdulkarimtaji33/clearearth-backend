@@ -96,7 +96,7 @@ const getById = async (tenantId, dealId, scope = {}) => {
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.TermsAndConditions, as: 'termsAndConditions', attributes: ['id', 'title', 'content'], required: false },
       { model: db.TermsAndConditions, as: 'termsList', through: { attributes: ['sort_order'] }, attributes: ['id', 'title', 'content'], required: false },
-      { model: db.DealWds, as: 'wdsDetails', required: false },
+      { model: db.DealWds, as: 'wdsDetails', include: [{ model: db.DealWdsAttachment, as: 'attachments', required: false }], required: false },
       { model: db.DealImage, as: 'images', order: [['display_order', 'ASC']], required: false },
       {
         model: db.DealInspectionReport,
@@ -203,7 +203,7 @@ const create = async (tenantId, data, scope = {}) => {
       if (!w.refNo?.trim() || !w.date || !w.companyName?.trim() || !w.licenseNo?.trim() || !w.wasteDescription?.trim() || !w.containerNo?.trim()) {
         throw ApiError.badRequest('WDS required fields missing: Ref No, Date, Company Name, License No, Waste Description, Container No');
       }
-      await db.DealWds.create(
+      const wds = await db.DealWds.create(
         {
           deal_id: deal.id,
           ref_no: data.wdsDetails.refNo,
@@ -222,6 +222,17 @@ const create = async (tenantId, data, scope = {}) => {
         },
         { transaction }
       );
+      const attachments = data.wdsDetails.attachments || [];
+      if (attachments.length > 0) {
+        await db.DealWdsAttachment.bulkCreate(
+          attachments.map(a => ({
+            deal_wds_id: wds.id,
+            file_path: a.path || a.file_path,
+            file_name: a.fileName || a.file_name || null,
+          })),
+          { transaction }
+        );
+      }
     }
 
     // Create deal items
@@ -346,7 +357,7 @@ const update = async (tenantId, dealId, data, scope = {}) => {
         throw ApiError.badRequest('WDS required fields missing: Ref No, Date, Company Name, License No, Waste Description, Container No');
       }
       const existingWds = await db.DealWds.findOne({ where: { deal_id: dealId }, transaction });
-      
+
       if (existingWds) {
         await existingWds.update(
           {
@@ -366,8 +377,20 @@ const update = async (tenantId, dealId, data, scope = {}) => {
           },
           { transaction }
         );
+        await db.DealWdsAttachment.destroy({ where: { deal_wds_id: existingWds.id }, transaction });
+        const attachments = data.wdsDetails.attachments || [];
+        if (attachments.length > 0) {
+          await db.DealWdsAttachment.bulkCreate(
+            attachments.map(a => ({
+              deal_wds_id: existingWds.id,
+              file_path: a.path || a.file_path,
+              file_name: a.fileName || a.file_name || null,
+            })),
+            { transaction }
+          );
+        }
       } else {
-        await db.DealWds.create(
+        const wds = await db.DealWds.create(
           {
             deal_id: dealId,
             ref_no: data.wdsDetails.refNo,
@@ -386,8 +409,23 @@ const update = async (tenantId, dealId, data, scope = {}) => {
           },
           { transaction }
         );
+        const attachments = data.wdsDetails.attachments || [];
+        if (attachments.length > 0) {
+          await db.DealWdsAttachment.bulkCreate(
+            attachments.map(a => ({
+              deal_wds_id: wds.id,
+              file_path: a.path || a.file_path,
+              file_name: a.fileName || a.file_name || null,
+            })),
+            { transaction }
+          );
+        }
       }
     } else if (data.wdsRequired === false) {
+      const wdsRows = await db.DealWds.findAll({ where: { deal_id: dealId }, attributes: ['id'], transaction });
+      for (const row of wdsRows) {
+        await db.DealWdsAttachment.destroy({ where: { deal_wds_id: row.id }, transaction });
+      }
       await db.DealWds.destroy({ where: { deal_id: dealId }, transaction });
     }
 

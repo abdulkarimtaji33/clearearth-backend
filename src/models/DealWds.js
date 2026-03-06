@@ -85,6 +85,7 @@ module.exports = (sequelize, DataTypes) => {
 
   DealWds.associate = models => {
     DealWds.belongsTo(models.Deal, { foreignKey: 'deal_id', as: 'deal' });
+    DealWds.hasMany(models.DealWdsAttachment, { foreignKey: 'deal_wds_id', as: 'attachments' });
   };
 
   return DealWds;

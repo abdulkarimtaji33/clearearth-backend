@@ -68,6 +68,19 @@ async function runMigration() {
       )
     `);
 
+    console.log('Creating deal_wds_attachments table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS deal_wds_attachments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        deal_wds_id INT NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        file_name VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_deal_wds_id (deal_wds_id)
+      )
+    `);
+
     console.log('Creating deal_images table...');
     await db.sequelize.query(`
       CREATE TABLE IF NOT EXISTS deal_images (

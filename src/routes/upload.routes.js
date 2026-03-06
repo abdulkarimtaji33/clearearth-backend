@@ -6,5 +6,6 @@ const { uploadSingle } = require('../middlewares/upload');
 
 router.post('/inspection-document', authenticate, uploadSingle('file'), uploadController.uploadInspectionDocument);
 router.post('/deal-image', authenticate, uploadSingle('file'), uploadController.uploadDealImage);
+router.post('/wds-attachment', authenticate, uploadSingle('file'), uploadController.uploadWdsAttachment);
 
 module.exports = router;

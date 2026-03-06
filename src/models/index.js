@@ -29,6 +29,7 @@ const ProductService = require('./ProductService')(sequelize, DataTypes);
 const Deal = require('./Deal')(sequelize, DataTypes);
 const DealItem = require('./DealItem')(sequelize, DataTypes);
 const DealWds = require('./DealWds')(sequelize, DataTypes);
+const DealWdsAttachment = require('./DealWdsAttachment')(sequelize, DataTypes);
 const DealInspectionRequest = require('./DealInspectionRequest')(sequelize, DataTypes);
 const DealInspectionReport = require('./DealInspectionReport')(sequelize, DataTypes);
 const DealImage = require('./DealImage')(sequelize, DataTypes);
@@ -80,6 +81,7 @@ const db = {
   Deal,
   DealItem,
   DealWds,
+  DealWdsAttachment,
   DealInspectionRequest,
   DealInspectionReport,
   DealImage,

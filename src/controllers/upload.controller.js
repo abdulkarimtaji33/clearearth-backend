@@ -19,3 +19,12 @@ exports.uploadDealImage = async (req, res) => {
   const fileUrl = getFileUrl(relativePath);
   res.json({ success: true, data: { path: relativePath, url: fileUrl } });
 };
+
+exports.uploadWdsAttachment = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
+  }
+  const relativePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
+  const fileUrl = getFileUrl(relativePath);
+  res.json({ success: true, data: { path: relativePath, url: fileUrl, fileName: req.file.originalname } });
+};
