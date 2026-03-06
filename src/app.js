@@ -6,7 +6,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
 require('express-async-errors');
 
 const config = require('./config');
@@ -27,14 +26,6 @@ app.use(
     credentials: true,
   })
 );
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.security.rateLimitWindowMs,
-  max: config.security.rateLimitMaxRequests,
-  message: 'Too many requests from this IP, please try again later.',
-});
-app.use('/api', limiter);
 
 // Body parsers
 app.use(express.json({ limit: '10mb' }));
