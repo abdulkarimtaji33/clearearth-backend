@@ -355,17 +355,18 @@ async function runMigration() {
       console.log('  inspection_team role already exists');
     }
 
-    console.log('Assigning inspection permissions to tenant_admin...');
+    console.log('Assigning all permissions to tenant_admin (users, roles, and all modules)...');
     const [tenantAdminRoles] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'tenant_admin'`);
-    const [inspectionPermIds] = await db.sequelize.query(`SELECT id FROM permissions WHERE module IN ('inspection_requests','inspection_reports')`);
+    const [allPerms] = await db.sequelize.query(`SELECT id FROM permissions`);
     for (const role of tenantAdminRoles || []) {
-      for (const perm of inspectionPermIds || []) {
+      for (const perm of allPerms || []) {
         try {
           await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, {
             replacements: [role.id, perm.id],
           });
         } catch (e) { /* ignore */ }
       }
+      console.log(`  Assigned ${(allPerms || []).length} permissions to tenant_admin (role id ${role.id})`);
     }
 
     console.log('Adding created_by to contacts, companies, and leads...');
