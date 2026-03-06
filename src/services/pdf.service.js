@@ -5,17 +5,6 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../models');
 
-function getLogoImg() {
-  const logoPath = path.join(__dirname, '../templates/logo.png');
-  try {
-    const buf = fs.readFileSync(logoPath);
-    const base64 = buf.toString('base64');
-    return `<img src="data:image/png;base64,${base64}" class="logo" alt="Logo" />`;
-  } catch {
-    return '<img src="" class="logo" alt="Logo" />';
-  }
-}
-
 let puppeteer;
 try {
   puppeteer = require('puppeteer');
@@ -141,7 +130,6 @@ async function generateQuotationPdf(quotationId, tenantId) {
   const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
 
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
-    logoImg: getLogoImg(),
     quoteNumber,
     quoteDate,
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
@@ -214,7 +202,6 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   const toAddr = supplier ? [supplier.address, supplier.city].filter(Boolean).join(', ') || '-' : '-';
 
   const html = renderTemplate(path.join(__dirname, '../templates/purchase-order.html'), {
-    logoImg: getLogoImg(),
     poNumber,
     poDate,
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
