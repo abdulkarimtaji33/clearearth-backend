@@ -1,4 +1,5 @@
 const purchaseOrderService = require('../services/purchaseOrder.service');
+const pdfService = require('../services/pdf.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
@@ -39,4 +40,20 @@ const remove = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'Purchase order deleted');
 });
 
-module.exports = { getAll, getById, create, update, remove };
+const getPdf = asyncHandler(async (req, res) => {
+  await purchaseOrderService.getById(req.tenant.id, req.params.id);
+  const raw = await pdfService.generatePurchaseOrderPdf(req.params.id, req.tenant.id);
+  if (!raw || (!Buffer.isBuffer(raw) && !(raw instanceof Uint8Array))) {
+    return ApiResponse.error(res, 'Purchase order not found or PDF generation failed', 404);
+  }
+  const pdfBuffer = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+  if (pdfBuffer.length < 100 || !pdfBuffer.toString('ascii', 0, 5).startsWith('%PDF')) {
+    return ApiResponse.error(res, 'PDF generation produced invalid output', 500);
+  }
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="purchase-order-${req.params.id}.pdf"`);
+  res.set('Content-Length', pdfBuffer.length);
+  res.end(pdfBuffer, 'binary');
+});
+
+module.exports = { getAll, getById, create, update, remove, getPdf };

@@ -247,6 +247,10 @@ async function runMigration() {
     try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN type ENUM('individual','organization') DEFAULT 'organization'`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
     try { await db.sequelize.query(`ALTER TABLE suppliers ADD COLUMN type ENUM('individual','organization') DEFAULT 'organization'`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
 
+    console.log('Adding vat_number to companies and suppliers...');
+    try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN vat_number VARCHAR(50) NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
+    try { await db.sequelize.query(`ALTER TABLE suppliers ADD COLUMN vat_number VARCHAR(50) NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
+
     console.log('Ensuring super_admin role exists...');
     const [existingSuperAdmin] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'super_admin' AND tenant_id IS NULL LIMIT 1`);
     if (!existingSuperAdmin || existingSuperAdmin.length === 0) {

@@ -62,6 +62,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: 'organization',
       },
+      vat_number: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'VAT/TRN number',
+      },
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: true,

@@ -27,7 +27,7 @@ module.exports = {
   security: {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS) || 10,
     rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 900000, // 15 minutes
-    rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+    rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
   },
 
   // File Upload

@@ -40,8 +40,17 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Compression
-app.use(compression());
+// Compression - skip PDF and other binary to prevent corruption
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (req.path?.includes('/pdf')) return false;
+      const type = res.getHeader('Content-Type') || '';
+      if (type.includes('application/pdf')) return false;
+      return compression.filter(req, res);
+    },
+  })
+);
 
 // Request logging
 if (config.app.env !== 'test') {

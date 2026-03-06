@@ -21,6 +21,10 @@ const termsRoutes = require('./termsAndConditions.routes');
 const quotationRoutes = require('./quotation.routes');
 const purchaseOrderRoutes = require('./purchaseOrder.routes');
 const inspectionRequestRoutes = require('./inspectionRequest.routes');
+const pdfRoutes = require('./pdf.routes');
+
+// PDF routes - must be before resource mounts so /quotations/:id/pdf matches
+router.use(pdfRoutes);
 
 // API info endpoint
 router.get('/', (req, res) => {

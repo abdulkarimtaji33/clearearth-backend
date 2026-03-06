@@ -102,7 +102,7 @@ const getById = async (tenantId, companyId, scope = {}) => {
 const create = async (tenantId, data, scope = {}) => {
   const {
     companyName, primaryContactId, industryType, website,
-    email, phone, country, city, address, notes, contacts, type,
+    email, phone, country, city, address, notes, contacts, type, vatNumber,
   } = data;
 
   if (email) {
@@ -127,6 +127,7 @@ const create = async (tenantId, data, scope = {}) => {
     notes: notes || null,
     status: 'active',
     type: type || 'organization',
+    vat_number: vatNumber || null,
     created_by: scope.scopeUserId || null,
   });
 
@@ -172,6 +173,7 @@ const update = async (tenantId, companyId, data, scope = {}) => {
     website: data.website !== undefined ? data.website : company.website,
     email: data.email !== undefined ? data.email : company.email,
     phone: data.phone !== undefined ? data.phone : company.phone,
+    vat_number: data.vatNumber !== undefined ? data.vatNumber || null : company.vat_number,
     country: data.country !== undefined ? data.country : company.country,
     city: data.city !== undefined ? data.city : company.city,
     address: data.address !== undefined ? data.address : company.address,
