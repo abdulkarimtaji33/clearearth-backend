@@ -357,6 +357,14 @@ async function runMigration() {
     } else {
       console.log('  inspection_team role already exists');
     }
+    // Ensure inspection_team has users.read (for inspectors dropdown)
+    const [inspRoleRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'inspection_team' AND tenant_id IS NULL LIMIT 1`);
+    if (inspRoleRows?.[0]?.id) {
+      const [usersReadPerm] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'users.read' LIMIT 1`);
+      if (usersReadPerm?.[0]?.id) {
+        try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [inspRoleRows[0].id, usersReadPerm[0].id] }); } catch (e) { /* ignore */ }
+      }
+    }
 
     console.log('Assigning all permissions to tenant_admin and admin roles...');
     const [adminRoles] = await db.sequelize.query(`SELECT id, name FROM roles WHERE name IN ('tenant_admin', 'admin')`);
