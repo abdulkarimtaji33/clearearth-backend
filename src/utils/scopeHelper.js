@@ -28,10 +28,25 @@ async function getSalesRelatedCompanyIds(db, tenantId, scopeUserId) {
 }
 
 /**
+ * Get all company IDs the sales user can access (from leads/deals + created by them).
+ */
+async function getSalesAccessibleCompanyIds(db, tenantId, scopeUserId) {
+  const fromLeadsDeals = await getSalesRelatedCompanyIds(db, tenantId, scopeUserId);
+  const [createdRows] = await db.sequelize.query(
+    `SELECT id FROM companies WHERE tenant_id = ? AND created_by = ?`,
+    { replacements: [tenantId, scopeUserId] }
+  );
+  const createdIds = (createdRows || []).map(r => r.id).filter(Boolean);
+  return [...new Set([...fromLeadsDeals, ...createdIds])];
+}
+
+/**
  * Get contact IDs linked to leads/deals the sales user can access.
+ * Also includes contacts belonging to companies the sales user can access.
  */
 async function getSalesRelatedContactIds(db, tenantId, scopeUserId) {
-  const [rows] = await db.sequelize.query(
+  const companyIds = await getSalesAccessibleCompanyIds(db, tenantId, scopeUserId);
+  const [leadDealRows] = await db.sequelize.query(
     `SELECT DISTINCT contact_id FROM leads 
      WHERE tenant_id = ? AND (assigned_to = ? OR created_by = ?) AND contact_id IS NOT NULL
      UNION
@@ -39,7 +54,20 @@ async function getSalesRelatedContactIds(db, tenantId, scopeUserId) {
      WHERE tenant_id = ? AND assigned_to = ? AND contact_id IS NOT NULL`,
     { replacements: [tenantId, scopeUserId, scopeUserId, tenantId, scopeUserId] }
   );
-  return rows.map(r => r.contact_id).filter(Boolean);
+  const fromLeadsDeals = leadDealRows.map(r => r.contact_id).filter(Boolean);
+  let fromCompanies = [];
+  if (companyIds.length > 0) {
+    const [byCompanyId] = await db.sequelize.query(
+      `SELECT id FROM contacts WHERE tenant_id = ? AND company_id IN (?)`,
+      { replacements: [tenantId, companyIds] }
+    );
+    const [byCompanyContact] = await db.sequelize.query(
+      `SELECT contact_id as id FROM company_contacts WHERE company_id IN (?)`,
+      { replacements: [companyIds] }
+    );
+    fromCompanies = [...(byCompanyId || []).map(r => r.id), ...(byCompanyContact || []).map(r => r.id)].filter(Boolean);
+  }
+  return [...new Set([...fromLeadsDeals, ...fromCompanies])];
 }
 
-module.exports = { getSalesScope, getSalesRelatedCompanyIds, getSalesRelatedContactIds };
+module.exports = { getSalesScope, getSalesRelatedCompanyIds, getSalesAccessibleCompanyIds, getSalesRelatedContactIds };
