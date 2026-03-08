@@ -400,7 +400,12 @@ async function runMigration() {
       for (const p of permRows || []) {
         try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [smRows[0].id, p.id] }); } catch (e) { /* ignore */ }
       }
-      console.log(`  Assigned ${(permRows || []).length} permissions to sales_manager`);
+      // Sales Manager needs users.read to populate Assigned To dropdown in Leads/Deals
+      const [usersReadPerm] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'users.read' LIMIT 1`);
+      if (usersReadPerm?.[0]?.id) {
+        try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [smRows[0].id, usersReadPerm[0].id] }); } catch (e) { /* ignore */ }
+      }
+      console.log(`  Assigned permissions to sales_manager`);
     }
 
     console.log('Ensuring sales role exists...');
