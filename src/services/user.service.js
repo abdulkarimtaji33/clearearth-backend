@@ -114,4 +114,4 @@ const remove = async (tenantId, userId) => {
   await user.destroy();
 };
 
-module.exports = { getAll, getById, create, update, remove };
+module.exports = { getAll, getInspectors, getById, create, update, remove };
