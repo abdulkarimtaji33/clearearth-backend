@@ -33,6 +33,21 @@ const getAll = async (tenantId, filters) => {
   return { users: rows, total: count };
 };
 
+const getInspectors = async (tenantId) => {
+  const inspectorRole = await db.Role.findOne({
+    where: { [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }], name: 'inspection_team' },
+    attributes: ['id'],
+  });
+  if (!inspectorRole) return [];
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, role_id: inspectorRole.id, status: 'active' },
+    attributes: ['id', 'first_name', 'last_name', 'email'],
+    include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
+    order: [['first_name', 'ASC']],
+  });
+  return users;
+};
+
 const getById = async (tenantId, userId) => {
   const user = await db.User.findOne({
     where: { id: userId, tenant_id: tenantId },

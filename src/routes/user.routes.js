@@ -33,6 +33,7 @@ const updateUserValidation = [
 
 // Routes
 router.get('/', authorize('users.read'), userController.getAll);
+router.get('/inspectors', authorize('inspection_requests.read', 'inspection_reports.create', 'users.read'), userController.getInspectors);
 router.get('/:id', authorize('users.read'), userController.getById);
 router.post('/', authorize('users.create'), createUserValidation, userController.create);
 router.put('/:id', authorize('users.update'), updateUserValidation, userController.update);

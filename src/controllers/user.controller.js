@@ -24,6 +24,11 @@ const getAll = asyncHandler(async (req, res) => {
   });
 });
 
+const getInspectors = asyncHandler(async (req, res) => {
+  const users = await userService.getInspectors(req.tenant.id);
+  return ApiResponse.success(res, users);
+});
+
 const getById = asyncHandler(async (req, res) => {
   const user = await userService.getById(req.tenant.id, req.params.id);
   return ApiResponse.success(res, user);

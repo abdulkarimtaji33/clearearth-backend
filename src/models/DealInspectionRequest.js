@@ -39,6 +39,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      quantity_uom: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
       safety_tools_required: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
