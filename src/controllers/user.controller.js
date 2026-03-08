@@ -49,4 +49,4 @@ const remove = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'User deleted successfully');
 });
 
-module.exports = { getAll, getById, create, update, remove };
+module.exports = { getAll, getInspectors, getById, create, update, remove };
