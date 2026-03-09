@@ -14,6 +14,7 @@ const createValidation = [
   body('phone').notEmpty().withMessage('Phone is required'),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
+  body('supplierId').optional({ values: 'falsy' }).isInt().withMessage('Valid supplier ID is required'),
   validate,
 ];
 
@@ -22,6 +23,7 @@ const updateValidation = [
   body('phone').optional({ values: 'falsy' }),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
+  body('supplierId').optional({ values: 'falsy' }).isInt().withMessage('Valid supplier ID is required'),
   validate,
 ];
 

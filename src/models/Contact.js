@@ -51,7 +51,13 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: 'companies', key: 'id' },
-        comment: 'Optional company association',
+        comment: 'Optional company association (for client contacts)',
+      },
+      supplier_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'suppliers', key: 'id' },
+        comment: 'Optional supplier association (for vendor contacts)',
       },
       notes: {
         type: DataTypes.TEXT,
@@ -87,6 +93,7 @@ module.exports = (sequelize, DataTypes) => {
   Contact.associate = models => {
     Contact.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
     Contact.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
+    Contact.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     Contact.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator', attributes: [] });
     Contact.hasMany(models.CompanyContact, { foreignKey: 'contact_id', as: 'companyLinks' });
     Contact.hasMany(models.SupplierContact, { foreignKey: 'contact_id', as: 'supplierLinks' });

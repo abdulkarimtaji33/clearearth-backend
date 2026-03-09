@@ -16,7 +16,7 @@ const _buildContactWhereForSales = async (tenantId, contactId, scopeUserId) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, designation, department, companyId, contactType, scopeUserId } = filters;
+  const { offset, limit, search, status, designation, department, companyId, supplierId, contactType, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
 
   if (scopeUserId) {
@@ -45,6 +45,7 @@ const getAll = async (tenantId, filters) => {
   if (designation) where.designation = designation;
   if (department) where.department = { [Op.like]: `%${department}%` };
   if (companyId) where.company_id = companyId;
+  if (supplierId) where.supplier_id = supplierId;
 
   const { count, rows } = await db.Contact.findAndCountAll({
     where,
@@ -52,6 +53,12 @@ const getAll = async (tenantId, filters) => {
       {
         model: db.Company,
         as: 'company',
+        attributes: ['id', 'company_name'],
+        required: false,
+      },
+      {
+        model: db.Supplier,
+        as: 'supplier',
         attributes: ['id', 'company_name'],
         required: false,
       },
@@ -76,6 +83,12 @@ const getById = async (tenantId, contactId, scope = {}) => {
         attributes: ['id', 'company_name'],
         required: false,
       },
+      {
+        model: db.Supplier,
+        as: 'supplier',
+        attributes: ['id', 'company_name'],
+        required: false,
+      },
     ],
   });
   if (!contact) throw ApiError.notFound('Contact not found');
@@ -83,7 +96,7 @@ const getById = async (tenantId, contactId, scope = {}) => {
 };
 
 const create = async (tenantId, data, scope = {}) => {
-  const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, notes, contactType, setAsPrimaryContact } = data;
+  const { firstName, lastName, email, phone, mobile, designation, jobTitle, department, companyId, supplierId, notes, contactType, setAsPrimaryContact } = data;
 
   if (email) {
     const existing = await db.Contact.findOne({ where: { tenant_id: tenantId, email } });
@@ -91,9 +104,14 @@ const create = async (tenantId, data, scope = {}) => {
   }
 
   let company = null;
+  let supplier = null;
   if (companyId) {
     company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
     if (!company) throw ApiError.notFound('Company not found');
+  }
+  if (supplierId) {
+    supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
+    if (!supplier) throw ApiError.notFound('Supplier not found');
   }
 
   const contact = await db.Contact.create({
@@ -107,6 +125,7 @@ const create = async (tenantId, data, scope = {}) => {
     job_title: jobTitle || null,
     department: department || null,
     company_id: companyId || null,
+    supplier_id: supplierId || null,
     notes: notes || null,
     contact_type: contactType || null,
     status: 'active',
@@ -122,6 +141,25 @@ const create = async (tenantId, data, scope = {}) => {
     });
     if (!created) {
       await link.update({ is_primary: true });
+    }
+  }
+
+  if (supplier && (setAsPrimaryContact || !supplier.primary_contact_id)) {
+    await supplier.update({ primary_contact_id: contact.id });
+    const [link, created] = await db.SupplierContact.findOrCreate({
+      where: { supplier_id: supplier.id, contact_id: contact.id },
+      defaults: { role: null, is_primary: true },
+    });
+    if (!created) {
+      await link.update({ is_primary: true });
+    }
+  } else if (supplier) {
+    const [link, created] = await db.SupplierContact.findOrCreate({
+      where: { supplier_id: supplier.id, contact_id: contact.id },
+      defaults: { role: null, is_primary: false },
+    });
+    if (!created) {
+      await link.update({ is_primary: false });
     }
   }
 
@@ -143,6 +181,17 @@ const update = async (tenantId, contactId, data, scope = {}) => {
     const company = await db.Company.findOne({ where: { id: data.companyId, tenant_id: tenantId } });
     if (!company) throw ApiError.notFound('Company not found');
   }
+  // Validate supplier if provided
+  if (data.supplierId !== undefined && data.supplierId !== null) {
+    const supplier = await db.Supplier.findOne({ where: { id: data.supplierId, tenant_id: tenantId } });
+    if (!supplier) throw ApiError.notFound('Supplier not found');
+  }
+
+  const newCompanyId = data.companyId !== undefined ? data.companyId : contact.company_id;
+  const newSupplierId = data.supplierId !== undefined ? data.supplierId : contact.supplier_id;
+  if (newCompanyId && newSupplierId) {
+    throw ApiError.badRequest('Contact cannot be linked to both company and supplier. Choose one.');
+  }
 
   await contact.update({
     first_name: data.firstName !== undefined ? data.firstName : contact.first_name,
@@ -154,10 +203,32 @@ const update = async (tenantId, contactId, data, scope = {}) => {
     job_title: data.jobTitle !== undefined ? data.jobTitle : contact.job_title,
     department: data.department !== undefined ? data.department : contact.department,
     company_id: data.companyId !== undefined ? data.companyId : contact.company_id,
+    supplier_id: data.supplierId !== undefined ? data.supplierId : contact.supplier_id,
     notes: data.notes !== undefined ? data.notes : contact.notes,
     contact_type: data.contactType !== undefined ? (data.contactType || null) : contact.contact_type,
     status: data.status !== undefined ? data.status : contact.status,
   });
+
+  // Sync CompanyContact
+  if (data.companyId !== undefined) {
+    await db.CompanyContact.destroy({ where: { contact_id: contactId } });
+    if (data.companyId) {
+      const [link] = await db.CompanyContact.findOrCreate({
+        where: { company_id: data.companyId, contact_id: contactId },
+        defaults: { role: null, is_primary: true },
+      });
+    }
+  }
+  // Sync SupplierContact
+  if (data.supplierId !== undefined) {
+    await db.SupplierContact.destroy({ where: { contact_id: contactId } });
+    if (data.supplierId) {
+      const [link] = await db.SupplierContact.findOrCreate({
+        where: { supplier_id: data.supplierId, contact_id: contactId },
+        defaults: { role: null, is_primary: true },
+      });
+    }
+  }
 
   return getById(tenantId, contact.id);
 };
