@@ -3,7 +3,6 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
-const { generateReferenceNumber } = require('../utils/helpers');
 const { getSalesRelatedContactIds } = require('../utils/scopeHelper');
 const { Op } = db.Sequelize;
 
@@ -31,13 +30,14 @@ const getAll = async (tenantId, filters) => {
     });
   }
   if (search) {
-    where[Op.or] = [
+    const orConditions = [
       { first_name: { [Op.like]: `%${search}%` } },
       { last_name: { [Op.like]: `%${search}%` } },
       { email: { [Op.like]: `%${search}%` } },
       { phone: { [Op.like]: `%${search}%` } },
-      { contact_code: { [Op.like]: `%${search}%` } },
     ];
+    if (!isNaN(Number(search))) orConditions.push({ id: Number(search) });
+    where[Op.or] = orConditions;
   }
 
   if (status) where.status = status;
@@ -96,11 +96,8 @@ const create = async (tenantId, data, scope = {}) => {
     if (!company) throw ApiError.notFound('Company not found');
   }
 
-  const contactCode = generateReferenceNumber('CON');
-
   const contact = await db.Contact.create({
     tenant_id: tenantId,
-    contact_code: contactCode,
     first_name: firstName,
     last_name: lastName || null,
     email: email || null,

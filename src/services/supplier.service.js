@@ -138,7 +138,9 @@ const create = async (tenantId, data) => {
     await _upsertContactLinks(supplier.id, contacts);
   }
 
-  return getById(tenantId, supplier.id);
+  const supplierData = await getById(tenantId, supplier.id);
+  const plain = supplierData.get ? supplierData.get({ plain: true }) : supplierData;
+  return { ...plain, created_company_id: company.id };
 };
 
 const update = async (tenantId, supplierId, data) => {
