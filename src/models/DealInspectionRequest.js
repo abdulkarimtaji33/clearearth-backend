@@ -47,6 +47,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      safety_tools: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'JSON array of selected safety tool keys',
+      },
       supporting_documents: {
         type: DataTypes.TEXT,
         allowNull: true,

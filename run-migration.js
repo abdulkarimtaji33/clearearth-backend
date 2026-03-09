@@ -49,6 +49,9 @@ async function runMigration() {
     try {
       await db.sequelize.query(`ALTER TABLE deal_inspection_requests ADD COLUMN quantity_uom VARCHAR(50) NULL`);
     } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
+    try {
+      await db.sequelize.query(`ALTER TABLE deal_inspection_requests ADD COLUMN safety_tools TEXT NULL COMMENT 'JSON array of selected safety tool keys'`);
+    } catch (e) { if (!e.message?.includes('Duplicate')) throw e; }
 
     console.log('Creating deal_inspection_reports table...');
     await db.sequelize.query(`

@@ -9,8 +9,9 @@ router.use(authenticate);
 
 const createValidation = [
   body('firstName').notEmpty().withMessage('First name is required'),
+  body('contactType').notEmpty().withMessage('Contact type is required').isIn(['clients', 'vendors']).withMessage('Contact type must be clients or vendors'),
   body('lastName').optional({ values: 'falsy' }),
-  body('phone').optional({ values: 'falsy' }),
+  body('phone').notEmpty().withMessage('Phone is required'),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   validate,
