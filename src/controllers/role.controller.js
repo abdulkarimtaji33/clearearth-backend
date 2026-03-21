@@ -4,9 +4,9 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search } = req.query;
+  const { page, pageSize, search, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const result = await roleService.getAll(req.tenant.id, { ...pagination, search });
+  const result = await roleService.getAll(req.tenant.id, { ...pagination, search, dateFrom, dateTo });
   return ApiResponse.paginated(res, result.roles, { page: pagination.page, pageSize: pagination.pageSize, totalItems: result.total });
 });
 

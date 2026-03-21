@@ -3,10 +3,11 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, dealId, scopeUserId } = filters;
+  const { offset, limit, search, status, dealId, scopeUserId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (scopeUserId) where.prepared_by = scopeUserId;
@@ -21,6 +22,7 @@ const getAll = async (tenantId, filters) => {
     where: search ? { [Op.or]: [{ title: { [Op.like]: `%${search}%` } }, { deal_number: { [Op.like]: `%${search}%` } }] } : undefined,
   };
   if (search) dealInclude.required = true;
+  applyDateOnlyColumnFilter(where, 'quotation_date', dateFrom, dateTo);
 
   const { count, rows } = await db.Quotation.findAndCountAll({
     where,

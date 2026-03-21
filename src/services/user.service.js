@@ -5,9 +5,10 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { hashPassword } = require('../utils/helpers');
 const { Op } = db.Sequelize;
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, roleId } = filters;
+  const { offset, limit, search, status, roleId, dateFrom, dateTo } = filters;
 
   const where = { tenant_id: tenantId };
 
@@ -21,6 +22,7 @@ const getAll = async (tenantId, filters) => {
 
   if (status) where.status = status;
   if (roleId) where.role_id = roleId;
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.User.findAndCountAll({
     where,

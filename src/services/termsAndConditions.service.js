@@ -1,9 +1,10 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, category } = filters;
+  const { offset, limit, search, status, category, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -14,6 +15,7 @@ const getAll = async (tenantId, filters) => {
   }
   if (status) where.status = status;
   if (category) where.category = category;
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.TermsAndConditions.findAndCountAll({
     where,

@@ -5,6 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { getSalesRelatedContactIds } = require('../utils/scopeHelper');
 const { Op } = db.Sequelize;
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 
 const _buildContactWhereForSales = async (tenantId, contactId, scopeUserId) => {
   const where = { id: contactId, tenant_id: tenantId };
@@ -16,7 +17,7 @@ const _buildContactWhereForSales = async (tenantId, contactId, scopeUserId) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, designation, department, companyId, supplierId, contactType, scopeUserId } = filters;
+  const { offset, limit, search, status, designation, department, companyId, supplierId, contactType, scopeUserId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (scopeUserId) {
@@ -46,6 +47,7 @@ const getAll = async (tenantId, filters) => {
   if (department) where.department = { [Op.like]: `%${department}%` };
   if (companyId) where.company_id = companyId;
   if (supplierId) where.supplier_id = supplierId;
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.Contact.findAndCountAll({
     where,

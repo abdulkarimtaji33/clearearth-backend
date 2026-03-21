@@ -3,10 +3,11 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dealId, scopeUserId } = filters;
+  const { offset, limit, search, dealId, scopeUserId, dateFrom, dateTo } = filters;
 
   const dealWhere = { tenant_id: tenantId };
   if (scopeUserId) dealWhere.assigned_to = scopeUserId;
@@ -18,7 +19,11 @@ const getAll = async (tenantId, filters = {}) => {
     ];
   }
 
+  const requestWhere = {};
+  applyCreatedAtFilter(requestWhere, dateFrom, dateTo);
+
   const { count, rows } = await db.DealInspectionRequest.findAndCountAll({
+    where: Object.keys(requestWhere).length ? requestWhere : undefined,
     include: [
       {
         model: db.Deal,

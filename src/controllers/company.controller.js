@@ -8,11 +8,11 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, industryType, country, city, contactId } = req.query;
+  const { page, pageSize, search, status, industryType, country, city, contactId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const scope = getSalesScope(req);
 
-  const result = await companyService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, ...scope });
+  const result = await companyService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, dateFrom, dateTo, ...scope });
 
   return ApiResponse.paginated(res, result.companies, {
     page: pagination.page,

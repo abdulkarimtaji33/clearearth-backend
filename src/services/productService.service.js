@@ -1,10 +1,11 @@
 const db = require('../models');
 const { ProductCategory } = require('../models');
 const ApiError = require('../utils/apiError');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, category, status, type, unitOfMeasure, minPrice, maxPrice } = filters;
+  const { offset, limit, search, category, status, type, unitOfMeasure, minPrice, maxPrice, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -23,6 +24,7 @@ const getAll = async (tenantId, filters) => {
     if (minPrice) where.price[Op.gte] = parseFloat(minPrice);
     if (maxPrice) where.price[Op.lte] = parseFloat(maxPrice);
   }
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.ProductService.findAndCountAll({
     where,

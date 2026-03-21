@@ -5,13 +5,15 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dealId } = req.query;
+  const { page, pageSize, search, dealId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const scope = getSalesScope(req);
   const result = await inspectionRequestService.getAll(req.tenant.id, {
     ...pagination,
     search,
     dealId,
+    dateFrom,
+    dateTo,
     ...scope,
   });
   return ApiResponse.paginated(res, result.inspectionRequests, {

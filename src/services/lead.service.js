@@ -1,11 +1,12 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { generateReferenceNumber } = require('../utils/helpers');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const { LEAD_STATUS } = require('../constants');
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId, scopeUserId } = filters;
+  const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId, scopeUserId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   // Sales: leads assigned to OR created by the user
@@ -25,6 +26,7 @@ const getAll = async (tenantId, filters) => {
   if (companyId) where.company_id = companyId;
   if (contactId) where.contact_id = contactId;
   if (productServiceId) where.product_service_id = productServiceId;
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.Lead.findAndCountAll({
     where,

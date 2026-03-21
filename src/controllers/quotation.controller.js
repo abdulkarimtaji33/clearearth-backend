@@ -6,7 +6,7 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, dealId } = req.query;
+  const { page, pageSize, search, status, dealId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const scope = getSalesScope(req);
   const result = await quotationService.getAll(req.tenant.id, {
@@ -14,6 +14,8 @@ const getAll = asyncHandler(async (req, res) => {
     search,
     status,
     dealId,
+    dateFrom,
+    dateTo,
     ...scope,
   });
   return ApiResponse.paginated(res, result.quotations, {
@@ -49,7 +51,7 @@ const remove = asyncHandler(async (req, res) => {
 
 const getPdf = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
-  await quotationService.getById(req.tenant.id, req.params.id, scope);
+  const quotation = await quotationService.getById(req.tenant.id, req.params.id, scope);
   const raw = await pdfService.generateQuotationPdf(req.params.id, req.tenant.id);
   if (!raw || (!Buffer.isBuffer(raw) && !(raw instanceof Uint8Array))) {
     return ApiResponse.error(res, 'Quotation not found or PDF generation failed', 404);
@@ -58,8 +60,10 @@ const getPdf = asyncHandler(async (req, res) => {
   if (pdfBuffer.length < 100 || !pdfBuffer.toString('ascii', 0, 5).startsWith('%PDF')) {
     return ApiResponse.error(res, 'PDF generation produced invalid output', 500);
   }
+  const isOrder = String(quotation?.status || '').toLowerCase() === 'approved';
+  const fname = isOrder ? `service-order-${req.params.id}.pdf` : `service-quotation-${req.params.id}.pdf`;
   res.set('Content-Type', 'application/pdf');
-  res.set('Content-Disposition', `attachment; filename="quotation-${req.params.id}.pdf"`);
+  res.set('Content-Disposition', `attachment; filename="${fname}"`);
   res.set('Content-Length', pdfBuffer.length);
   res.end(pdfBuffer, 'binary');
 });

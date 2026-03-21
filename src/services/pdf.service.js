@@ -24,14 +24,21 @@ function formatNum(n) {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function isApprovedStatus(s) {
+  return String(s || '').toLowerCase() === 'approved';
+}
+
 function getVat(tenant) {
   return tenant?.trn_number || tenant?.vat_registration_number || '-';
 }
 
 function renderTemplate(templatePath, data) {
   let html = fs.readFileSync(templatePath, 'utf8');
-  for (const [key, value] of Object.entries(data)) {
-    html = html.replace(new RegExp(`{{${key}}}`, 'g'), String(value ?? ''));
+  const keys = Object.keys(data).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    const placeholder = `{{${key}}}`;
+    const val = String(data[key] ?? '');
+    html = html.split(placeholder).join(val);
   }
   return html;
 }
@@ -124,12 +131,19 @@ async function generateQuotationPdf(quotationId, tenantId) {
   }
 
   const totalAmount = formatNum(subtotal + totalVat);
-  const quoteNumber = `QT/SERV/${quotation.id}/1`;
+  const approved = isApprovedStatus(quotation.status);
+  const quoteNumber = approved ? `SO/SERV/${quotation.id}/1` : `QT/SERV/${quotation.id}/1`;
   const quoteDate = formatDate(quotation.quotation_date);
+  const documentTitle = approved ? 'Service Order' : 'Service Quotation';
+  const docMetaLine = approved
+    ? `Order Number : ${quoteNumber} , Order Date : ${quoteDate}`
+    : `Quote Number : ${quoteNumber} , Quote Date : ${quoteDate}`;
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
 
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
+    documentTitle,
+    docMetaLine,
     quoteNumber,
     quoteDate,
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
@@ -196,12 +210,18 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   }
 
   const grandTotal = subtotal + totalVat;
-  const poNumber = `PO/CE/${new Date().getFullYear()}/${po.id}`;
+  const approved = isApprovedStatus(po.dataValues?.status ?? po.status);
+  const y = new Date().getFullYear();
+  const poNumber = approved ? `PO/CE/${y}/${po.id}` : `PQT/CE/${y}/${po.id}`;
   const poDate = formatDate(po.po_date);
+  const documentTitle = approved ? 'Purchase Order' : 'Purchase Quotation';
+  const docRefLabel = approved ? 'PO' : 'Quotation';
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = supplier ? [supplier.address, supplier.city].filter(Boolean).join(', ') || '-' : '-';
 
   const html = renderTemplate(path.join(__dirname, '../templates/purchase-order.html'), {
+    documentTitle,
+    docRefLabel,
     poNumber,
     poDate,
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',

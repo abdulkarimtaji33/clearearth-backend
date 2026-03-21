@@ -7,10 +7,10 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, industryType, country, city, contactId } = req.query;
+  const { page, pageSize, search, status, industryType, country, city, contactId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
 
-  const result = await supplierService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId });
+  const result = await supplierService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, dateFrom, dateTo });
 
   return ApiResponse.paginated(res, result.suppliers, {
     page: pagination.page,

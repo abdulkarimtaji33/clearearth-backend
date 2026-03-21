@@ -1,15 +1,17 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters = {}) => {
-  const { offset, limit, search } = filters;
+  const { offset, limit, search, dateFrom, dateTo } = filters;
   const where = {
     [Op.and]: [
       { [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
       ...(search ? [{ name: { [Op.like]: `%${search}%` } }] : []),
     ],
   };
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.Role.findAndCountAll({
     where,

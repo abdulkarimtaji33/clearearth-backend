@@ -22,6 +22,17 @@ module.exports = (sequelize, DataTypes) => {
         { fields: ['deal_id'] },
         { fields: ['supplier_id'] },
       ],
+      hooks: {
+        afterFind: (instances) => {
+          if (instances == null) return;
+          const list = Array.isArray(instances) ? instances : [instances];
+          for (const row of list) {
+            if (row?.dataValues) {
+              row.dataValues.status = row.dataValues.status ?? 'draft';
+            }
+          }
+        },
+      },
     }
   );
 

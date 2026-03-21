@@ -5,6 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { generateReferenceNumber } = require('../utils/helpers');
 const { Op } = db.Sequelize;
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 
 const contactInclude = {
   model: db.Contact,
@@ -14,7 +15,7 @@ const contactInclude = {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, industryType, country, city, contactId } = filters;
+  const { offset, limit, search, status, industryType, country, city, contactId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (search) {
@@ -32,6 +33,7 @@ const getAll = async (tenantId, filters) => {
   if (country) where.country = country;
   if (city) where.city = city;
   if (contactId) where.primary_contact_id = contactId;
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.Supplier.findAndCountAll({
     where,

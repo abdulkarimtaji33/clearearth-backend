@@ -1,6 +1,7 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { generateReferenceNumber } = require('../utils/helpers');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const calculateDealTotals = (items, vatPercentage = 5) => {
@@ -19,7 +20,7 @@ const calculateDealTotals = (items, vatPercentage = 5) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, paymentStatus, companyId, supplierId, contactId, assignedTo, productServiceId, minAmount, maxAmount, scopeUserId } = filters;
+  const { offset, limit, search, status, paymentStatus, companyId, supplierId, contactId, assignedTo, productServiceId, minAmount, maxAmount, scopeUserId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (scopeUserId) where.assigned_to = scopeUserId;
@@ -58,6 +59,8 @@ const getAll = async (tenantId, filters) => {
       required: !!productServiceId,
     },
   ];
+
+  applyCreatedAtFilter(where, dateFrom, dateTo);
 
   if (productServiceId) {
     includeClause = includeClause.map(inc => {

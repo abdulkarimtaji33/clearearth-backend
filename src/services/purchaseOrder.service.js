@@ -3,14 +3,16 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, supplierId, dealId } = filters;
+  const { offset, limit, search, supplierId, dealId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (supplierId) where.supplier_id = supplierId;
   if (dealId) where.deal_id = dealId;
+  applyDateOnlyColumnFilter(where, 'po_date', dateFrom, dateTo);
 
   const supplierInclude = {
     model: db.Supplier,
