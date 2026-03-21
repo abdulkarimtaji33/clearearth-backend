@@ -9,6 +9,7 @@
     "test": "jest --coverage",
     "migrate": "node src/database/migrate.js",
     "run-migration": "node run-migration.js",
+    "deploy:vps": "bash scripts/deploy-production.sh",
     "seed": "node src/database/seed.js",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write \"src/**/*.js\""
