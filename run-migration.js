@@ -1,6 +1,16 @@
 const db = require('./src/models');
 const bcrypt = require('bcryptjs');
 
+function isDuplicateSchemaError(e) {
+  const m = e?.message || '';
+  return (
+    m.includes('Duplicate column') ||
+    m.includes('Duplicate key') ||
+    m.includes('Duplicate') ||
+    m.includes('already exists')
+  );
+}
+
 async function runMigration() {
   try {
     console.log('Creating material_types table...');
@@ -264,10 +274,17 @@ async function runMigration() {
     console.log('Adding status to purchase_orders...');
     try {
       await db.sequelize.query(
-        `ALTER TABLE purchase_orders ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'draft', ADD INDEX idx_po_status (status)`
+        `ALTER TABLE purchase_orders ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'draft'`
       );
     } catch (e) {
-      if (!e.message?.includes('Duplicate') && !e.message?.includes('already exists')) throw e;
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  status column already present');
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE purchase_orders ADD INDEX idx_po_status (status)`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  idx_po_status already present');
     }
 
     console.log('Adding companies.type, suppliers.type, contacts.last_name...');

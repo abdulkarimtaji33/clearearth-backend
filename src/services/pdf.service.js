@@ -210,7 +210,7 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   }
 
   const grandTotal = subtotal + totalVat;
-  const approved = isApprovedStatus(po.dataValues?.status ?? po.status);
+  const approved = isApprovedStatus(po.status);
   const y = new Date().getFullYear();
   const poNumber = approved ? `PO/CE/${y}/${po.id}` : `PQT/CE/${y}/${po.id}`;
   const poDate = formatDate(po.po_date);

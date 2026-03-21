@@ -7,11 +7,12 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, supplierId, dealId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, supplierId, dealId, status, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (supplierId) where.supplier_id = supplierId;
   if (dealId) where.deal_id = dealId;
+  if (status) where.status = status;
   applyDateOnlyColumnFilter(where, 'po_date', dateFrom, dateTo);
 
   const supplierInclude = {
@@ -64,7 +65,7 @@ const getById = async (tenantId, poId) => {
 };
 
 const create = async (tenantId, data) => {
-  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds } = data;
+  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
 
   const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
   if (!supplier) throw ApiError.badRequest('Supplier not found');
@@ -86,6 +87,7 @@ const create = async (tenantId, data) => {
         supplier_id: supplierId,
         po_date: poDate,
         expected_delivery: expectedDelivery || null,
+        status: status && String(status).trim() ? String(status).trim() : 'draft',
       },
       { transaction: t }
     );
@@ -127,7 +129,7 @@ const create = async (tenantId, data) => {
 
 const update = async (tenantId, poId, data) => {
   const po = await getById(tenantId, poId);
-  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds } = data;
+  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
 
   if (supplierId) {
     const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
@@ -148,6 +150,7 @@ const update = async (tenantId, poId, data) => {
         supplier_id: supplierId ?? po.supplier_id,
         po_date: poDate ?? po.po_date,
         expected_delivery: expectedDelivery !== undefined ? expectedDelivery : po.expected_delivery,
+        status: status !== undefined ? status : po.status,
       },
       { transaction: t }
     );

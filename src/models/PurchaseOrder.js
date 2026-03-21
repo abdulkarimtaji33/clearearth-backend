@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       supplier_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'suppliers', key: 'id' } },
       po_date: { type: DataTypes.DATEONLY, allowNull: false },
       expected_delivery: { type: DataTypes.STRING(255) },
+      status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'draft' },
     },
     {
       tableName: 'purchase_orders',
@@ -21,18 +22,8 @@ module.exports = (sequelize, DataTypes) => {
         { fields: ['tenant_id'] },
         { fields: ['deal_id'] },
         { fields: ['supplier_id'] },
+        { fields: ['status'] },
       ],
-      hooks: {
-        afterFind: (instances) => {
-          if (instances == null) return;
-          const list = Array.isArray(instances) ? instances : [instances];
-          for (const row of list) {
-            if (row?.dataValues) {
-              row.dataValues.status = row.dataValues.status ?? 'draft';
-            }
-          }
-        },
-      },
     }
   );
 
