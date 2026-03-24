@@ -40,6 +40,12 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         references: { model: 'suppliers', key: 'id' },
       },
+      downstream_partner_supplier_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'suppliers', key: 'id' },
+        comment: 'Second vendor for separate purchase quotation (downstream partner)',
+      },
       title: {
         type: DataTypes.STRING(255),
         allowNull: false,
@@ -138,6 +144,7 @@ module.exports = (sequelize, DataTypes) => {
         { fields: ['lead_id'] },
         { fields: ['company_id'] },
         { fields: ['supplier_id'] },
+        { fields: ['downstream_partner_supplier_id'] },
         { fields: ['status'] },
         { fields: ['payment_status'] },
         { fields: ['assigned_to'] },
@@ -151,6 +158,7 @@ module.exports = (sequelize, DataTypes) => {
     Deal.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
     Deal.belongsTo(models.Contact, { foreignKey: 'contact_id', as: 'contact' });
     Deal.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+    Deal.belongsTo(models.Supplier, { foreignKey: 'downstream_partner_supplier_id', as: 'downstreamPartner' });
     Deal.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
     Deal.belongsTo(models.TermsAndConditions, { foreignKey: 'terms_and_conditions_id', as: 'termsAndConditions' });
     Deal.belongsToMany(models.TermsAndConditions, {

@@ -4,6 +4,15 @@ const { generateReferenceNumber } = require('../utils/helpers');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
+const _validateDownstreamSupplier = async (tenantId, supplierId, downstreamPartnerSupplierId) => {
+  if (!downstreamPartnerSupplierId) return;
+  if (supplierId && Number(supplierId) === Number(downstreamPartnerSupplierId)) {
+    throw ApiError.badRequest('Downstream partner supplier must be different from the primary supplier');
+  }
+  const ds = await db.Supplier.findOne({ where: { id: downstreamPartnerSupplierId, tenant_id: tenantId } });
+  if (!ds) throw ApiError.badRequest('Downstream partner supplier not found');
+};
+
 const calculateDealTotals = (items, vatPercentage = 5) => {
   const subtotal = items.reduce((sum, item) => {
     return sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice));
@@ -49,6 +58,7 @@ const getAll = async (tenantId, filters) => {
     { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
     { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
     { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+    { model: db.Supplier, as: 'downstreamPartner', attributes: ['id', 'company_name'], required: false },
     { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
     {
       model: db.DealItem,
@@ -96,6 +106,7 @@ const getById = async (tenantId, dealId, scope = {}) => {
       { model: db.Company, as: 'company', required: false },
       { model: db.Contact, as: 'contact', required: false },
       { model: db.Supplier, as: 'supplier', required: false },
+      { model: db.Supplier, as: 'downstreamPartner', attributes: ['id', 'company_name'], required: false },
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.TermsAndConditions, as: 'termsAndConditions', attributes: ['id', 'title', 'content'], required: false },
       { model: db.TermsAndConditions, as: 'termsList', through: { attributes: ['sort_order'] }, attributes: ['id', 'title', 'content'], required: false },
@@ -139,6 +150,8 @@ const create = async (tenantId, data, scope = {}) => {
     const dealNumber = generateReferenceNumber('DEAL');
     const assignedTo = scope.scopeUserId || data.assignedTo;
 
+    await _validateDownstreamSupplier(tenantId, data.supplierId, data.downstreamPartnerSupplierId);
+
     // Calculate totals
     const totals = calculateDealTotals(data.items || [], data.vatPercentage || 5);
 
@@ -151,6 +164,7 @@ const create = async (tenantId, data, scope = {}) => {
         company_id: data.companyId || null,
         contact_id: data.contactId || null,
         supplier_id: data.supplierId || null,
+        downstream_partner_supplier_id: data.downstreamPartnerSupplierId || null,
         title: data.title,
         description: data.description,
         deal_date: data.dealDate || new Date(),
@@ -312,6 +326,10 @@ const update = async (tenantId, dealId, data, scope = {}) => {
     });
     if (!deal) throw ApiError.notFound('Deal not found');
 
+    const nextSupplierId = data.supplierId !== undefined ? data.supplierId : deal.supplier_id;
+    const nextDownstreamId = data.downstreamPartnerSupplierId !== undefined ? data.downstreamPartnerSupplierId : deal.downstream_partner_supplier_id;
+    await _validateDownstreamSupplier(tenantId, nextSupplierId, nextDownstreamId);
+
     // Calculate new totals if items provided
     let totals = null;
     if (data.items) {
@@ -325,6 +343,7 @@ const update = async (tenantId, dealId, data, scope = {}) => {
         company_id: data.companyId !== undefined ? data.companyId : deal.company_id,
         contact_id: data.contactId !== undefined ? data.contactId : deal.contact_id,
         supplier_id: data.supplierId !== undefined ? data.supplierId : deal.supplier_id,
+        downstream_partner_supplier_id: data.downstreamPartnerSupplierId !== undefined ? data.downstreamPartnerSupplierId : deal.downstream_partner_supplier_id,
         title: data.title !== undefined ? data.title : deal.title,
         description: data.description !== undefined ? data.description : deal.description,
         deal_date: data.dealDate !== undefined ? data.dealDate : deal.deal_date,

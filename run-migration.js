@@ -412,6 +412,9 @@ async function runMigration() {
     console.log('Adding supplier_id to contacts...');
     try { await db.sequelize.query(`ALTER TABLE contacts ADD COLUMN supplier_id INT NULL, ADD INDEX idx_supplier_id (supplier_id)`); } catch (e) { if (!e.message?.includes('Duplicate') && !e.message?.includes('Unknown column')) console.warn(e.message); }
 
+    console.log('Adding downstream_partner_supplier_id to deals...');
+    try { await db.sequelize.query(`ALTER TABLE deals ADD COLUMN downstream_partner_supplier_id INT NULL, ADD INDEX idx_downstream_partner_supplier (downstream_partner_supplier_id)`); } catch (e) { if (!e.message?.includes('Duplicate') && !e.message?.includes('Unknown column')) console.warn(e.message); }
+
     console.log('Adding created_by to contacts, companies, and leads...');
     try { await db.sequelize.query(`ALTER TABLE contacts ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
     try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
