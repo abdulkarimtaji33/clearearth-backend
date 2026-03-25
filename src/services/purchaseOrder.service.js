@@ -7,27 +7,28 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, supplierId, dealId, status, dateFrom, dateTo } = filters;
+  const { offset, limit, search, supplierId, companyId, dealId, status, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (supplierId) where.supplier_id = supplierId;
+  if (companyId) where.company_id = companyId;
   if (dealId) where.deal_id = dealId;
   if (status) where.status = status;
   applyDateOnlyColumnFilter(where, 'po_date', dateFrom, dateTo);
 
-  const supplierInclude = {
-    model: db.Supplier,
-    as: 'supplier',
-    attributes: ['id', 'company_name'],
-    required: true,
-    where: search ? { company_name: { [Op.like]: `%${search}%` } } : undefined,
-  };
+  if (search) {
+    where[Op.or] = [
+      { '$supplier.company_name$': { [Op.like]: `%${search}%` } },
+      { '$company.company_name$': { [Op.like]: `%${search}%` } },
+    ];
+  }
 
   const { count, rows } = await db.PurchaseOrder.findAndCountAll({
     where,
     include: [
       { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
-      supplierInclude,
+      { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
       {
         model: db.PurchaseOrderItem,
         as: 'items',
@@ -40,6 +41,7 @@ const getAll = async (tenantId, filters) => {
     limit,
     order: [['created_at', 'DESC']],
     distinct: true,
+    subQuery: false,
   });
 
   return { purchaseOrders: rows, total: count };
@@ -50,7 +52,8 @@ const getById = async (tenantId, poId) => {
     where: { id: poId, tenant_id: tenantId },
     include: [
       { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'] },
-      { model: db.Supplier, as: 'supplier' },
+      { model: db.Company, as: 'company', required: false },
+      { model: db.Supplier, as: 'supplier', required: false },
       {
         model: db.PurchaseOrderItem,
         as: 'items',
@@ -64,11 +67,29 @@ const getById = async (tenantId, poId) => {
   return po;
 };
 
-const create = async (tenantId, data) => {
-  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
+const _validateParty = async (tenantId, companyId, supplierId) => {
+  const hasC = companyId != null && companyId !== '';
+  const hasS = supplierId != null && supplierId !== '';
+  if (hasC === hasS) {
+    throw ApiError.badRequest('Specify exactly one of company (client) or supplier (vendor)');
+  }
+  if (hasC) {
+    const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+    if (!company) throw ApiError.badRequest('Company not found');
+  }
+  if (hasS) {
+    const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
+    if (!supplier) throw ApiError.badRequest('Supplier not found');
+  }
+  return { hasC, hasS };
+};
 
-  const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
-  if (!supplier) throw ApiError.badRequest('Supplier not found');
+const create = async (tenantId, data) => {
+  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
+
+  await _validateParty(tenantId, companyId, supplierId);
+  const hasC = companyId != null && companyId !== '';
+  const hasS = supplierId != null && supplierId !== '';
 
   if (dealId) {
     const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
@@ -84,7 +105,8 @@ const create = async (tenantId, data) => {
       {
         tenant_id: tenantId,
         deal_id: dealId || null,
-        supplier_id: supplierId,
+        company_id: hasC ? companyId : null,
+        supplier_id: hasS ? supplierId : null,
         po_date: poDate,
         expected_delivery: expectedDelivery || null,
         status: status && String(status).trim() ? String(status).trim() : 'draft',
@@ -129,11 +151,16 @@ const create = async (tenantId, data) => {
 
 const update = async (tenantId, poId, data) => {
   const po = await getById(tenantId, poId);
-  const { dealId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
+  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
 
-  if (supplierId) {
-    const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId } });
-    if (!supplier) throw ApiError.badRequest('Supplier not found');
+  let nextCompanyId = po.company_id;
+  let nextSupplierId = po.supplier_id;
+  if (companyId !== undefined || supplierId !== undefined) {
+    nextCompanyId = companyId !== undefined ? (companyId || null) : po.company_id;
+    nextSupplierId = supplierId !== undefined ? (supplierId || null) : po.supplier_id;
+    if (nextSupplierId) nextCompanyId = null;
+    else if (nextCompanyId) nextSupplierId = null;
+    await _validateParty(tenantId, nextCompanyId, nextSupplierId);
   }
 
   if (dealId !== undefined) {
@@ -147,7 +174,8 @@ const update = async (tenantId, poId, data) => {
     await po.update(
       {
         deal_id: dealId !== undefined ? (dealId || null) : po.deal_id,
-        supplier_id: supplierId ?? po.supplier_id,
+        company_id: nextCompanyId,
+        supplier_id: nextSupplierId,
         po_date: poDate ?? po.po_date,
         expected_delivery: expectedDelivery !== undefined ? expectedDelivery : po.expected_delivery,
         status: status !== undefined ? status : po.status,

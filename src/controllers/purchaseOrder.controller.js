@@ -5,12 +5,13 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, supplierId, dealId, status, dateFrom, dateTo } = req.query;
+  const { page, pageSize, search, supplierId, companyId, dealId, status, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await purchaseOrderService.getAll(req.tenant.id, {
     ...pagination,
     search,
     supplierId,
+    companyId,
     dealId,
     status,
     dateFrom,

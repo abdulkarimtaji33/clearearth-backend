@@ -415,6 +415,10 @@ async function runMigration() {
     console.log('Adding downstream_partner_supplier_id to deals...');
     try { await db.sequelize.query(`ALTER TABLE deals ADD COLUMN downstream_partner_supplier_id INT NULL, ADD INDEX idx_downstream_partner_supplier (downstream_partner_supplier_id)`); } catch (e) { if (!e.message?.includes('Duplicate') && !e.message?.includes('Unknown column')) console.warn(e.message); }
 
+    console.log('Adding company_id to purchase_orders, supplier_id nullable...');
+    try { await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN company_id INT NULL, ADD INDEX idx_po_company (company_id)`); } catch (e) { if (!e.message?.includes('Duplicate') && !e.message?.includes('Unknown column')) console.warn(e.message); }
+    try { await db.sequelize.query(`ALTER TABLE purchase_orders MODIFY supplier_id INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
+
     console.log('Adding created_by to contacts, companies, and leads...');
     try { await db.sequelize.query(`ALTER TABLE contacts ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }
     try { await db.sequelize.query(`ALTER TABLE companies ADD COLUMN created_by INT NULL`); } catch (e) { if (!e.message?.includes('Duplicate')) console.warn(e.message); }

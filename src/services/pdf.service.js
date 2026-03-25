@@ -168,7 +168,8 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId },
     include: [
-      { model: db.Supplier, as: 'supplier' },
+      { model: db.Company, as: 'company', required: false },
+      { model: db.Supplier, as: 'supplier', required: false },
       {
         model: db.PurchaseOrderItem,
         as: 'items',
@@ -182,7 +183,7 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   const tenant = await db.Tenant.findByPk(tenantId);
   if (!tenant) return null;
 
-  const supplier = po.supplier;
+  const party = po.company || po.supplier;
   const vatPct = 0.05;
   const currency = 'AED';
 
@@ -217,7 +218,7 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   const documentTitle = approved ? 'Purchase Order' : 'Purchase Quotation';
   const docRefLabel = approved ? 'PO' : 'Quotation';
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
-  const toAddr = supplier ? [supplier.address, supplier.city].filter(Boolean).join(', ') || '-' : '-';
+  const toAddr = party ? [party.address, party.city].filter(Boolean).join(', ') || '-' : '-';
 
   const html = renderTemplate(path.join(__dirname, '../templates/purchase-order.html'), {
     documentTitle,
@@ -229,11 +230,11 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
     fromPhone: tenant.phone || '-',
     fromAddress: fromAddr,
     fromVat: getVat(tenant),
-    toCompany: supplier?.company_name || '-',
-    toEmail: supplier?.email || '-',
-    toPhone: supplier?.phone || '-',
+    toCompany: party?.company_name || '-',
+    toEmail: party?.email || '-',
+    toPhone: party?.phone || '-',
     toAddress: toAddr,
-    toVat: supplier?.vat_number || '-',
+    toVat: party?.vat_number || '-',
     itemsHtml,
     currency,
     subtotal: formatNum(subtotal),
