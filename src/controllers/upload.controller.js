@@ -1,6 +1,7 @@
 const path = require('path');
 const config = require('../config');
 const { getFileUrl } = require('../middlewares/upload');
+const db = require('../models');
 
 exports.uploadInspectionDocument = async (req, res) => {
   if (!req.file) {

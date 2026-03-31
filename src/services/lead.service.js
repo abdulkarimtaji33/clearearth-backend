@@ -120,12 +120,14 @@ const update = async (tenantId, leadId, data, scope = {}) => {
     if (!contact) throw ApiError.notFound('Contact not found');
   }
 
+  const VALID_STATUSES = [LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED, LEAD_STATUS.QUALIFIED, LEAD_STATUS.DISQUALIFIED];
   await lead.update({
     company_id: data.companyId !== undefined ? data.companyId : lead.company_id,
     contact_id: data.contactId !== undefined ? data.contactId : lead.contact_id,
     email: data.email !== undefined ? data.email : lead.email,
     phone: data.phone !== undefined ? data.phone : lead.phone,
     source: data.source !== undefined ? data.source : lead.source,
+    status: (data.status !== undefined && VALID_STATUSES.includes(data.status)) ? data.status : lead.status,
     service_interest: data.serviceInterest !== undefined ? data.serviceInterest : lead.service_interest,
     product_service_id: data.productServiceId !== undefined ? data.productServiceId : lead.product_service_id,
     estimated_value: data.estimatedValue !== undefined ? data.estimatedValue : lead.estimated_value,
