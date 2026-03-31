@@ -6,6 +6,9 @@ const router = express.Router();
 const tenantController = require('../controllers/tenant.controller');
 const { authenticate, authorize } = require('../middlewares/auth');
 
+// Public — no auth
+router.get('/logo', tenantController.getPublicLogo);
+
 router.use(authenticate);
 
 router.get('/me', tenantController.getMyTenant);
