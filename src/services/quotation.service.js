@@ -14,12 +14,23 @@ const getAll = async (tenantId, filters) => {
   if (status) where.status = status;
   if (dealId) where.deal_id = dealId;
 
+  const dealWhereForSearch = () => {
+    if (!search) return undefined;
+    const s = String(search).trim();
+    const or = [
+      { title: { [Op.like]: `%${s}%` } },
+      { deal_number: { [Op.like]: `%${s}%` } },
+    ];
+    const n = parseInt(s, 10);
+    if (String(n) === s && n > 0) or.push({ id: n });
+    return { [Op.or]: or };
+  };
   const dealInclude = {
     model: db.Deal,
     as: 'deal',
     attributes: ['id', 'title', 'deal_number'],
     required: !search,
-    where: search ? { [Op.or]: [{ title: { [Op.like]: `%${search}%` } }, { deal_number: { [Op.like]: `%${search}%` } }] } : undefined,
+    where: dealWhereForSearch(),
   };
   if (search) dealInclude.required = true;
   applyDateOnlyColumnFilter(where, 'quotation_date', dateFrom, dateTo);

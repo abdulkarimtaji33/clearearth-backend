@@ -3,7 +3,6 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
-const { generateReferenceNumber } = require('../utils/helpers');
 const { getSalesRelatedCompanyIds } = require('../utils/scopeHelper');
 const { Op } = db.Sequelize;
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
@@ -39,13 +38,17 @@ const getAll = async (tenantId, filters) => {
     });
   }
   if (search) {
-    where[Op.or] = [
-      { company_name: { [Op.like]: `%${search}%` } },
-      { email: { [Op.like]: `%${search}%` } },
-      { phone: { [Op.like]: `%${search}%` } },
-      { company_code: { [Op.like]: `%${search}%` } },
-      { industry_type: { [Op.like]: `%${search}%` } },
+    const s = String(search).trim();
+    const or = [
+      { company_name: { [Op.like]: `%${s}%` } },
+      { email: { [Op.like]: `%${s}%` } },
+      { phone: { [Op.like]: `%${s}%` } },
+      { company_code: { [Op.like]: `%${s}%` } },
+      { industry_type: { [Op.like]: `%${s}%` } },
     ];
+    const n = parseInt(s, 10);
+    if (String(n) === s && n > 0) or.push({ id: n });
+    where[Op.or] = or;
   }
 
   if (status) where.status = status;
@@ -112,11 +115,8 @@ const create = async (tenantId, data, scope = {}) => {
     if (existing) throw ApiError.conflict('Email already exists');
   }
 
-  const companyCode = generateReferenceNumber('COM');
-
   const company = await db.Company.create({
     tenant_id: tenantId,
-    company_code: companyCode,
     company_name: companyName,
     primary_contact_id: primaryContactId || null,
     industry_type: industryType || null,
@@ -132,6 +132,8 @@ const create = async (tenantId, data, scope = {}) => {
     vat_number: vatNumber || null,
     created_by: scope.scopeUserId || null,
   });
+
+  await company.update({ company_code: String(company.id) });
 
   if (contacts && contacts.length > 0) {
     await _upsertContactLinks(company.id, contacts);

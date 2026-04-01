@@ -64,15 +64,6 @@ const generateRandomString = (length = 32) => {
 };
 
 /**
- * Generate unique reference number
- */
-const generateReferenceNumber = (prefix = 'REF', length = 8) => {
-  const timestamp = Date.now().toString(36).toUpperCase();
-  const random = crypto.randomBytes(length).toString('hex').toUpperCase().substring(0, length);
-  return `${prefix}-${timestamp}-${random}`;
-};
-
-/**
  * Generate invoice number
  */
 const generateInvoiceNumber = (tenantId, year = new Date().getFullYear(), sequence) => {
@@ -238,7 +229,6 @@ module.exports = {
   verifyToken,
   verifyRefreshToken,
   generateRandomString,
-  generateReferenceNumber,
   generateInvoiceNumber,
   generateLotNumber,
   getPaginationParams,

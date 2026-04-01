@@ -61,6 +61,11 @@ const PurchaseOrder = require('./PurchaseOrder')(sequelize, DataTypes);
 const PurchaseOrderItem = require('./PurchaseOrderItem')(sequelize, DataTypes);
 const PurchaseOrderTerm = require('./PurchaseOrderTerm')(sequelize, DataTypes);
 
+// Operations
+const WorkOrder = require('./WorkOrder')(sequelize, DataTypes);
+const WorkOrderTask = require('./WorkOrderTask')(sequelize, DataTypes);
+const WorkType = require('./WorkType')(sequelize, DataTypes);
+
 // Create db object with all models
 const db = {
   sequelize,
@@ -106,6 +111,9 @@ const db = {
   PurchaseOrder,
   PurchaseOrderItem,
   PurchaseOrderTerm,
+  WorkOrder,
+  WorkOrderTask,
+  WorkType,
 };
 
 // Define Associations

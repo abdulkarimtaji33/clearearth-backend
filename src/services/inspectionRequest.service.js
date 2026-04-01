@@ -13,10 +13,14 @@ const getAll = async (tenantId, filters = {}) => {
   if (scopeUserId) dealWhere.assigned_to = scopeUserId;
   if (dealId) dealWhere.id = dealId;
   if (search) {
-    dealWhere[Op.or] = [
-      { title: { [Op.like]: `%${search}%` } },
-      { deal_number: { [Op.like]: `%${search}%` } },
+    const s = String(search).trim();
+    const or = [
+      { title: { [Op.like]: `%${s}%` } },
+      { deal_number: { [Op.like]: `%${s}%` } },
     ];
+    const n = parseInt(s, 10);
+    if (String(n) === s && n > 0) or.push({ id: n });
+    dealWhere[Op.or] = or;
   }
 
   const requestWhere = {};

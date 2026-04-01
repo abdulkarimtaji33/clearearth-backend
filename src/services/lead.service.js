@@ -1,6 +1,5 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
-const { generateReferenceNumber } = require('../utils/helpers');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const { LEAD_STATUS } = require('../constants');
@@ -14,11 +13,15 @@ const getAll = async (tenantId, filters) => {
     where[Op.or] = [{ assigned_to: scopeUserId }, { created_by: scopeUserId }];
   }
   if (search) {
-    where[Op.or] = [
-      { email: { [Op.like]: `%${search}%` } },
-      { phone: { [Op.like]: `%${search}%` } },
-      { lead_number: { [Op.like]: `%${search}%` } },
+    const s = String(search).trim();
+    const or = [
+      { email: { [Op.like]: `%${s}%` } },
+      { phone: { [Op.like]: `%${s}%` } },
+      { lead_number: { [Op.like]: `%${s}%` } },
     ];
+    const n = parseInt(s, 10);
+    if (String(n) === s && n > 0) or.push({ id: n });
+    where[Op.or] = or;
   }
   if (status) where.status = status;
   if (assignedTo && !scopeUserId) where.assigned_to = assignedTo;
@@ -63,7 +66,6 @@ const getById = async (tenantId, leadId, scope = {}) => {
 };
 
 const create = async (tenantId, data, scope = {}) => {
-  const leadNumber = generateReferenceNumber('LEAD');
   const assignedTo = scope.scopeUserId || data.assignedTo;
 
   // Validate company and contact if provided
@@ -79,7 +81,6 @@ const create = async (tenantId, data, scope = {}) => {
 
   const lead = await db.Lead.create({
     tenant_id: tenantId,
-    lead_number: leadNumber,
     company_id: data.companyId || null,
     contact_id: data.contactId || null,
     email: data.email,
@@ -93,6 +94,8 @@ const create = async (tenantId, data, scope = {}) => {
     created_by: scope.scopeUserId || null,
     status: LEAD_STATUS.NEW,
   });
+
+  await lead.update({ lead_number: String(lead.id) });
 
   return await getById(tenantId, lead.id);
 };

@@ -21,6 +21,8 @@ const termsRoutes = require('./termsAndConditions.routes');
 const quotationRoutes = require('./quotation.routes');
 const purchaseOrderRoutes = require('./purchaseOrder.routes');
 const inspectionRequestRoutes = require('./inspectionRequest.routes');
+const workOrderRoutes = require('./workOrder.routes');
+const workTypeRoutes = require('./workType.routes');
 const pdfRoutes = require('./pdf.routes');
 const tenantRoutes = require('./tenant.routes');
 
@@ -47,6 +49,8 @@ router.get('/', (req, res) => {
       quotations: '/quotations',
       'purchase-orders': '/purchase-orders',
       'inspection-requests': '/inspection-requests',
+      'work-orders': '/work-orders',
+      'work-types': '/work-types',
       tenants: '/tenants',
     },
   });
@@ -69,6 +73,8 @@ router.use('/terms', termsRoutes);
 router.use('/quotations', quotationRoutes);
 router.use('/purchase-orders', purchaseOrderRoutes);
 router.use('/inspection-requests', inspectionRequestRoutes);
+router.use('/work-orders', workOrderRoutes);
+router.use('/work-types', workTypeRoutes);
 router.use('/tenants', tenantRoutes);
 
 module.exports = router;

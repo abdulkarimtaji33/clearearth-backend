@@ -1,6 +1,5 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
-const { generateReferenceNumber } = require('../utils/helpers');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
@@ -34,11 +33,15 @@ const getAll = async (tenantId, filters) => {
 
   if (scopeUserId) where.assigned_to = scopeUserId;
   if (search) {
-    where[Op.or] = [
-      { title: { [Op.like]: `%${search}%` } },
-      { deal_number: { [Op.like]: `%${search}%` } },
-      { description: { [Op.like]: `%${search}%` } },
+    const s = String(search).trim();
+    const or = [
+      { title: { [Op.like]: `%${s}%` } },
+      { deal_number: { [Op.like]: `%${s}%` } },
+      { description: { [Op.like]: `%${s}%` } },
     ];
+    const n = parseInt(s, 10);
+    if (String(n) === s && n > 0) or.push({ id: n });
+    where[Op.or] = or;
   }
   if (status) where.status = status;
   if (paymentStatus) where.payment_status = paymentStatus;
@@ -147,7 +150,6 @@ const create = async (tenantId, data, scope = {}) => {
   const transaction = await db.sequelize.transaction();
 
   try {
-    const dealNumber = generateReferenceNumber('DEAL');
     const assignedTo = scope.scopeUserId || data.assignedTo;
 
     await _validateDownstreamSupplier(tenantId, data.supplierId, data.downstreamPartnerSupplierId);
@@ -159,7 +161,6 @@ const create = async (tenantId, data, scope = {}) => {
     const deal = await db.Deal.create(
       {
         tenant_id: tenantId,
-        deal_number: dealNumber,
         lead_id: data.leadId || null,
         company_id: data.companyId || null,
         contact_id: data.contactId || null,
@@ -192,6 +193,8 @@ const create = async (tenantId, data, scope = {}) => {
       },
       { transaction }
     );
+
+    await deal.update({ deal_number: String(deal.id) }, { transaction });
 
     // Create inspection request if provided
     if (data.inspectionRequired && data.inspectionDetails) {

@@ -480,6 +480,91 @@ async function runMigration() {
       console.log(`  Assigned permissions to sales`);
     }
 
+    console.log('Creating work_orders table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS work_orders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        deal_id INT NULL,
+        title VARCHAR(255) NULL,
+        notes TEXT NULL,
+        status ENUM('draft','in_progress','completed','cancelled') NOT NULL DEFAULT 'draft',
+        created_by INT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        deleted_at DATETIME NULL,
+        INDEX idx_work_orders_tenant (tenant_id),
+        INDEX idx_work_orders_deal (deal_id),
+        INDEX idx_work_orders_status (status)
+      )
+    `);
+
+    console.log('Creating work_order_tasks table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS work_order_tasks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        work_order_id INT NOT NULL,
+        type_of_work VARCHAR(255) NULL,
+        expense DECIMAL(15,2) NULL,
+        estimated_duration VARCHAR(100) NULL,
+        start_date DATE NULL,
+        end_date DATE NULL,
+        assigned_to INT NULL,
+        status ENUM('not_started','in_progress','completed') NOT NULL DEFAULT 'not_started',
+        notes TEXT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_work_order_tasks_wo (work_order_id),
+        INDEX idx_work_order_tasks_assigned (assigned_to)
+      )
+    `);
+
+    console.log('Creating work_types table and linking work_order_tasks...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS work_types (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        display_order INT DEFAULT 0,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY uk_work_types_tenant_name (tenant_id, name),
+        INDEX idx_work_types_tenant (tenant_id),
+        CONSTRAINT fk_work_types_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+      )
+    `);
+    try {
+      await db.sequelize.query('ALTER TABLE work_order_tasks ADD COLUMN work_type_id INT NULL');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query('ALTER TABLE work_order_tasks ADD INDEX idx_work_order_tasks_work_type (work_type_id)');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE work_order_tasks
+        ADD CONSTRAINT fk_work_order_tasks_work_type FOREIGN KEY (work_type_id) REFERENCES work_types(id)
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+
+    console.log('Normalizing reference codes to numeric primary keys (leads, deals, companies, suppliers, contacts)...');
+    try {
+      await db.sequelize.query(`UPDATE leads SET lead_number = CAST(id AS CHAR)`);
+      await db.sequelize.query(`UPDATE deals SET deal_number = CAST(id AS CHAR) WHERE deleted_at IS NULL`);
+      await db.sequelize.query(`UPDATE companies SET company_code = CAST(id AS CHAR) WHERE deleted_at IS NULL`);
+      await db.sequelize.query(`UPDATE suppliers SET supplier_code = CAST(id AS CHAR) WHERE deleted_at IS NULL`);
+      await db.sequelize.query(`UPDATE contacts SET contact_code = CAST(id AS CHAR) WHERE deleted_at IS NULL`);
+      console.log('  Reference codes normalized to id');
+    } catch (e) {
+      console.warn('  Reference code normalization skipped:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

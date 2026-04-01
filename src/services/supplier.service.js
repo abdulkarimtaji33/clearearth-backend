@@ -3,7 +3,6 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
-const { generateReferenceNumber } = require('../utils/helpers');
 const { Op } = db.Sequelize;
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 
@@ -19,13 +18,17 @@ const getAll = async (tenantId, filters) => {
   const where = { tenant_id: tenantId };
 
   if (search) {
-    where[Op.or] = [
-      { company_name: { [Op.like]: `%${search}%` } },
-      { email: { [Op.like]: `%${search}%` } },
-      { phone: { [Op.like]: `%${search}%` } },
-      { supplier_code: { [Op.like]: `%${search}%` } },
-      { industry_type: { [Op.like]: `%${search}%` } },
+    const s = String(search).trim();
+    const or = [
+      { company_name: { [Op.like]: `%${s}%` } },
+      { email: { [Op.like]: `%${s}%` } },
+      { phone: { [Op.like]: `%${s}%` } },
+      { supplier_code: { [Op.like]: `%${s}%` } },
+      { industry_type: { [Op.like]: `%${s}%` } },
     ];
+    const n = parseInt(s, 10);
+    if (String(n) === s && n > 0) or.push({ id: n });
+    where[Op.or] = or;
   }
 
   if (status) where.status = status;
@@ -71,7 +74,47 @@ const getById = async (tenantId, supplierId) => {
     ],
   });
   if (!supplier) throw ApiError.notFound('Supplier not found');
-  return supplier;
+
+  const deals = await db.Deal.findAll({
+    where: {
+      tenant_id: tenantId,
+      [Op.or]: [
+        { supplier_id: supplierId },
+        { downstream_partner_supplier_id: supplierId },
+      ],
+    },
+    attributes: [
+      'id',
+      'deal_number',
+      'title',
+      'description',
+      'subtotal',
+      'vat_amount',
+      'total',
+      'currency',
+      'deal_date',
+      'status',
+      'payment_status',
+      'supplier_id',
+      'downstream_partner_supplier_id',
+    ],
+    order: [['created_at', 'DESC']],
+    limit: 200,
+  });
+
+  const plain = supplier.get({ plain: true });
+  plain.deals = deals.map(d => {
+    const row = d.get({ plain: true });
+    const sid = Number(supplierId);
+    const isPrimary = Number(row.supplier_id) === sid;
+    const isDownstream = Number(row.downstream_partner_supplier_id) === sid;
+    row.vendorRole = isPrimary && isDownstream ? 'both' : isPrimary ? 'primary' : 'downstream';
+    delete row.supplier_id;
+    delete row.downstream_partner_supplier_id;
+    return row;
+  });
+
+  return plain;
 };
 
 const create = async (tenantId, data) => {
@@ -85,11 +128,8 @@ const create = async (tenantId, data) => {
     if (existing) throw ApiError.conflict('Email already exists');
   }
 
-  const supplierCode = generateReferenceNumber('SUP');
-
   const supplier = await db.Supplier.create({
     tenant_id: tenantId,
-    supplier_code: supplierCode,
     company_name: companyName,
     primary_contact_id: primaryContactId || null,
     industry_type: industryType || null,
@@ -104,6 +144,8 @@ const create = async (tenantId, data) => {
     type: type || 'organization',
     vat_number: vatNumber || null,
   });
+
+  await supplier.update({ supplier_code: String(supplier.id) });
 
   if (primaryContactId) {
     await db.Contact.update(

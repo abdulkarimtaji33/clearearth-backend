@@ -31,13 +31,16 @@ const getAll = async (tenantId, filters) => {
     });
   }
   if (search) {
+    const s = String(search).trim();
     const orConditions = [
-      { first_name: { [Op.like]: `%${search}%` } },
-      { last_name: { [Op.like]: `%${search}%` } },
-      { email: { [Op.like]: `%${search}%` } },
-      { phone: { [Op.like]: `%${search}%` } },
+      { first_name: { [Op.like]: `%${s}%` } },
+      { last_name: { [Op.like]: `%${s}%` } },
+      { email: { [Op.like]: `%${s}%` } },
+      { phone: { [Op.like]: `%${s}%` } },
+      { contact_code: { [Op.like]: `%${s}%` } },
     ];
-    if (!isNaN(Number(search))) orConditions.push({ id: Number(search) });
+    const n = parseInt(s, 10);
+    if (String(n) === s && n > 0) orConditions.push({ id: n });
     where[Op.or] = orConditions;
   }
 
@@ -133,6 +136,8 @@ const create = async (tenantId, data, scope = {}) => {
     status: 'active',
     created_by: scope.scopeUserId || null,
   });
+
+  await contact.update({ contact_code: String(contact.id) });
 
   if (company && (setAsPrimaryContact || !company.primary_contact_id)) {
     await company.update({ primary_contact_id: contact.id });
