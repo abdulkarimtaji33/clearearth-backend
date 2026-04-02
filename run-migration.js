@@ -553,6 +553,13 @@ async function runMigration() {
       if (!isDuplicateSchemaError(e)) throw e;
     }
 
+    console.log('Dropping unique constraint uk_deal_terms from deal_terms (terms can be reused across deals)...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deal_terms DROP INDEX uk_deal_terms`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !e.message?.includes("Can't DROP") && !e.message?.includes('check that column/key exists')) throw e;
+    }
+
     console.log('Normalizing reference codes to numeric primary keys (leads, deals, companies, suppliers, contacts)...');
     try {
       await db.sequelize.query(`UPDATE leads SET lead_number = CAST(id AS CHAR)`);

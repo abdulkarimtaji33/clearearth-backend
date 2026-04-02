@@ -76,6 +76,13 @@ async function generateQuotationPdf(quotationId, tenantId) {
             include: [{ model: db.ProductService, as: 'productService' }],
             order: [['id', 'ASC']],
           },
+          {
+            model: db.TermsAndConditions,
+            as: 'termsList',
+            through: { attributes: ['sort_order'] },
+            attributes: ['id', 'title', 'content'],
+            required: false,
+          },
         ],
       },
     ],
@@ -141,6 +148,14 @@ async function generateQuotationPdf(quotationId, tenantId) {
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
 
+  const termsList = quotation.deal?.termsList || [];
+  const termsHtml = termsList.length > 0
+    ? termsList
+        .sort((a, b) => (a.DealTerm?.sort_order ?? 0) - (b.DealTerm?.sort_order ?? 0))
+        .map(t => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong><br>${(t.content || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`)
+        .join('')
+    : '<p>Payment terms: Immediate</p>';
+
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
     documentTitle,
     docMetaLine,
@@ -159,6 +174,7 @@ async function generateQuotationPdf(quotationId, tenantId) {
     itemsHtml,
     currency,
     totalAmount,
+    termsHtml,
   });
 
   return htmlToPdf(html);
