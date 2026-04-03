@@ -72,7 +72,7 @@ const getById = async (tenantId, requestId, scope = {}) => {
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
-          { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
+          { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'mobile', 'designation'], required: false },
           {
             model: db.DealInspectionReport,
             as: 'inspectionReport',
