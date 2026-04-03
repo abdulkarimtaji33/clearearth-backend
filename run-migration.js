@@ -586,17 +586,41 @@ async function runMigration() {
     }
 
     console.log('Updating deal statuses to new pipeline values...');
+    // Must remap data before narrowing ENUM — convert to VARCHAR, map legacy values, then apply new ENUM.
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE deals MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'new'
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !e.message?.includes('Duplicate')) console.warn('  deal status → varchar:', e.message);
+    }
+    try {
+      await db.sequelize.query(`
+        UPDATE deals SET status = CASE LOWER(TRIM(status))
+          WHEN 'draft' THEN 'new'
+          WHEN 'pending' THEN 'negotiation'
+          WHEN 'approved' THEN 'approved'
+          WHEN 'in_progress' THEN 'negotiation'
+          WHEN 'completed' THEN 'won'
+          WHEN 'cancelled' THEN 'lost'
+          ELSE status
+        END
+      `);
+    } catch (e) { console.warn('  deal status remap:', e.message); }
+    try {
+      await db.sequelize.query(`
+        UPDATE deals SET status = 'new'
+        WHERE status NOT IN ('new','approved','quotation_sent','negotiation','won','lost')
+      `);
+    } catch (e) { console.warn('  deal status fallback:', e.message); }
     try {
       await db.sequelize.query(`
         ALTER TABLE deals
           MODIFY COLUMN status ENUM('new','approved','quotation_sent','negotiation','won','lost') NOT NULL DEFAULT 'new'
       `);
     } catch (e) {
-      if (!isDuplicateSchemaError(e) && !e.message?.includes('already exists')) console.warn('  deal status enum alter:', e.message);
+      if (!isDuplicateSchemaError(e) && !e.message?.includes('already exists')) console.warn('  deal status enum final:', e.message);
     }
-    try {
-      await db.sequelize.query(`UPDATE deals SET status = 'new' WHERE status NOT IN ('new','approved','quotation_sent','negotiation','won','lost')`);
-    } catch (e) { console.warn('  deal status update:', e.message); }
     try {
       await db.sequelize.query(`DELETE FROM deal_statuses`);
       await db.sequelize.query(`
