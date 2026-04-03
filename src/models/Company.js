@@ -67,6 +67,43 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         comment: 'VAT/TRN number',
       },
+      trade_license_file_path: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      trade_license_number: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+      trade_license_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      trade_license_expiry_date: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
+      vat_certificate_file_path: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      vat_certificate_trn: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'TRN as shown on VAT certificate',
+      },
+      bank_details_file_path: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      bank_name: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+      },
+      bank_iban: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: true,

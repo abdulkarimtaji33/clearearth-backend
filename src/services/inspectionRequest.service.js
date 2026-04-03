@@ -34,10 +34,11 @@ const getAll = async (tenantId, filters = {}) => {
         as: 'deal',
         where: dealWhere,
         required: true,
-        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status'],
+        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status', 'total', 'currency'],
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+          { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
           {
             model: db.DealInspectionReport,
             as: 'inspectionReport',
@@ -71,6 +72,7 @@ const getById = async (tenantId, requestId, scope = {}) => {
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+          { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
           {
             model: db.DealInspectionReport,
             as: 'inspectionReport',

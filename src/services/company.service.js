@@ -130,6 +130,15 @@ const create = async (tenantId, data, scope = {}) => {
     status: 'active',
     type: type || 'organization',
     vat_number: vatNumber || null,
+    trade_license_file_path: data.tradeLicenseFilePath || null,
+    trade_license_number: data.tradeLicenseNumber || null,
+    trade_license_name: data.tradeLicenseName || null,
+    trade_license_expiry_date: data.tradeLicenseExpiryDate || null,
+    vat_certificate_file_path: data.vatCertificateFilePath || null,
+    vat_certificate_trn: data.vatCertificateTrn || null,
+    bank_details_file_path: data.bankDetailsFilePath || null,
+    bank_name: data.bankName || null,
+    bank_iban: data.bankIban || null,
     created_by: scope.scopeUserId || null,
   });
 
@@ -184,6 +193,15 @@ const update = async (tenantId, companyId, data, scope = {}) => {
     notes: data.notes !== undefined ? data.notes : company.notes,
     status: data.status !== undefined ? data.status : company.status,
     type: data.type !== undefined ? data.type : company.type,
+    trade_license_file_path: data.tradeLicenseFilePath !== undefined ? data.tradeLicenseFilePath || null : company.trade_license_file_path,
+    trade_license_number: data.tradeLicenseNumber !== undefined ? data.tradeLicenseNumber || null : company.trade_license_number,
+    trade_license_name: data.tradeLicenseName !== undefined ? data.tradeLicenseName || null : company.trade_license_name,
+    trade_license_expiry_date: data.tradeLicenseExpiryDate !== undefined ? data.tradeLicenseExpiryDate || null : company.trade_license_expiry_date,
+    vat_certificate_file_path: data.vatCertificateFilePath !== undefined ? data.vatCertificateFilePath || null : company.vat_certificate_file_path,
+    vat_certificate_trn: data.vatCertificateTrn !== undefined ? data.vatCertificateTrn || null : company.vat_certificate_trn,
+    bank_details_file_path: data.bankDetailsFilePath !== undefined ? data.bankDetailsFilePath || null : company.bank_details_file_path,
+    bank_name: data.bankName !== undefined ? data.bankName || null : company.bank_name,
+    bank_iban: data.bankIban !== undefined ? data.bankIban || null : company.bank_iban,
   });
 
   // Clear old primary contact's company_id if changed

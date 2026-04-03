@@ -143,6 +143,15 @@ const create = async (tenantId, data) => {
     status: 'active',
     type: type || 'organization',
     vat_number: vatNumber || null,
+    trade_license_file_path: data.tradeLicenseFilePath || null,
+    trade_license_number: data.tradeLicenseNumber || null,
+    trade_license_name: data.tradeLicenseName || null,
+    trade_license_expiry_date: data.tradeLicenseExpiryDate || null,
+    vat_certificate_file_path: data.vatCertificateFilePath || null,
+    vat_certificate_trn: data.vatCertificateTrn || null,
+    bank_details_file_path: data.bankDetailsFilePath || null,
+    bank_name: data.bankName || null,
+    bank_iban: data.bankIban || null,
   });
 
   await supplier.update({ supplier_code: String(supplier.id) });
@@ -190,6 +199,15 @@ const update = async (tenantId, supplierId, data) => {
     notes: data.notes !== undefined ? data.notes : supplier.notes,
     status: data.status !== undefined ? data.status : supplier.status,
     type: data.type !== undefined ? data.type : supplier.type,
+    trade_license_file_path: data.tradeLicenseFilePath !== undefined ? data.tradeLicenseFilePath || null : supplier.trade_license_file_path,
+    trade_license_number: data.tradeLicenseNumber !== undefined ? data.tradeLicenseNumber || null : supplier.trade_license_number,
+    trade_license_name: data.tradeLicenseName !== undefined ? data.tradeLicenseName || null : supplier.trade_license_name,
+    trade_license_expiry_date: data.tradeLicenseExpiryDate !== undefined ? data.tradeLicenseExpiryDate || null : supplier.trade_license_expiry_date,
+    vat_certificate_file_path: data.vatCertificateFilePath !== undefined ? data.vatCertificateFilePath || null : supplier.vat_certificate_file_path,
+    vat_certificate_trn: data.vatCertificateTrn !== undefined ? data.vatCertificateTrn || null : supplier.vat_certificate_trn,
+    bank_details_file_path: data.bankDetailsFilePath !== undefined ? data.bankDetailsFilePath || null : supplier.bank_details_file_path,
+    bank_name: data.bankName !== undefined ? data.bankName || null : supplier.bank_name,
+    bank_iban: data.bankIban !== undefined ? data.bankIban || null : supplier.bank_iban,
   });
 
   if (data.contacts !== undefined) {

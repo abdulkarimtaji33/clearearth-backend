@@ -560,6 +560,31 @@ async function runMigration() {
       if (!isDuplicateSchemaError(e) && !e.message?.includes("Can't DROP") && !e.message?.includes('check that column/key exists')) throw e;
     }
 
+    console.log('Adding company documentation columns (trade license, VAT cert, bank)...');
+    const docCols = [
+      'trade_license_file_path VARCHAR(500) NULL',
+      'trade_license_number VARCHAR(100) NULL',
+      'trade_license_name VARCHAR(255) NULL',
+      'trade_license_expiry_date DATE NULL',
+      'vat_certificate_file_path VARCHAR(500) NULL',
+      'vat_certificate_trn VARCHAR(50) NULL',
+      'bank_details_file_path VARCHAR(500) NULL',
+      'bank_name VARCHAR(200) NULL',
+      'bank_iban VARCHAR(50) NULL',
+    ];
+    for (const col of docCols) {
+      try {
+        await db.sequelize.query(`ALTER TABLE companies ADD COLUMN ${col}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+      }
+      try {
+        await db.sequelize.query(`ALTER TABLE suppliers ADD COLUMN ${col}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+      }
+    }
+
     console.log('Normalizing reference codes to numeric primary keys (leads, deals, companies, suppliers, contacts)...');
     try {
       await db.sequelize.query(`UPDATE leads SET lead_number = CAST(id AS CHAR)`);
