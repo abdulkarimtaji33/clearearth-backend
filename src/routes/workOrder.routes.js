@@ -10,6 +10,7 @@ router.get('/:id', authorize('deals.read'), workOrderController.getById);
 router.post('/', authorize('deals.create'), workOrderController.create);
 router.put('/:id', authorize('deals.update'), workOrderController.update);
 router.patch('/:id/tasks/:taskId/status', authorize('deals.update'), workOrderController.updateTaskStatus);
+router.patch('/:id/tasks/:taskId/notes', authorize('deals.update'), workOrderController.updateTaskNotes);
 router.delete('/:id', authorize('deals.delete'), workOrderController.remove);
 
 module.exports = router;

@@ -44,9 +44,15 @@ const updateTaskStatus = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, task, 'Task status updated');
 });
 
+const updateTaskNotes = asyncHandler(async (req, res) => {
+  const { notes } = req.body;
+  const task = await workOrderService.updateTaskNotes(req.tenant.id, req.params.id, req.params.taskId, notes);
+  return ApiResponse.success(res, task, 'Task notes updated');
+});
+
 const remove = asyncHandler(async (req, res) => {
   await workOrderService.remove(req.tenant.id, req.params.id);
   return ApiResponse.success(res, null, 'Work order deleted successfully');
 });
 
-module.exports = { getAll, getById, create, update, updateTaskStatus, remove };
+module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, remove };

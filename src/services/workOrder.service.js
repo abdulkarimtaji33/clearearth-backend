@@ -168,6 +168,15 @@ const updateTaskStatus = async (tenantId, workOrderId, taskId, status) => {
   return task;
 };
 
+const updateTaskNotes = async (tenantId, workOrderId, taskId, notes) => {
+  const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
+  if (!workOrder) throw ApiError.notFound('Work order not found');
+  const task = await db.WorkOrderTask.findOne({ where: { id: taskId, work_order_id: workOrderId } });
+  if (!task) throw ApiError.notFound('Task not found');
+  await task.update({ notes: notes || null });
+  return task;
+};
+
 const remove = async (tenantId, workOrderId) => {
   const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
   if (!workOrder) throw ApiError.notFound('Work order not found');
@@ -175,4 +184,4 @@ const remove = async (tenantId, workOrderId) => {
   await workOrder.destroy();
 };
 
-module.exports = { getAll, getById, create, update, updateTaskStatus, remove };
+module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, remove };
