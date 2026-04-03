@@ -6,13 +6,14 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, dealId, dateFrom, dateTo } = req.query;
+  const { page, pageSize, search, status, statusNot, dealId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const scope = getSalesScope(req);
   const result = await quotationService.getAll(req.tenant.id, {
     ...pagination,
     search,
     status,
+    statusNot,
     dealId,
     dateFrom,
     dateTo,

@@ -198,7 +198,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 |--------|------|------|---------|--------|
 | GET | `/purchase-orders` | Yes | `getAll` | Paginated |
 | GET | `/purchase-orders/:id` | Yes | `getById` | Items + terms |
-| POST | `/purchase-orders` | Yes | `create` | Company XOR supplier + items + terms |
+| POST | `/purchase-orders` | Yes | `create` | Company XOR supplier + items + terms; **default status** `draft` (client) / `approved` (supplier/downstream) |
 | PUT | `/purchase-orders/:id` | Yes | `update` | Update |
 | DELETE | `/purchase-orders/:id` | Yes | `remove` | Delete |
 
@@ -423,7 +423,7 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `purchaseOrder.service.js` | `getAll` | Search on supplier/company names |
 | | `getById` | |
 | | `_validateParty` | Exactly one of company or supplier |
-| | `create` | Transaction items + PO terms |
+| | `create` | Transaction items + PO terms; default `status` = `approved` if `supplier_id`, else `draft` |
 | | `update` | Replace items/terms if provided |
 | | `remove` | |
 | `inspectionRequest.service.js` | `getAll` | Deals with inspection request; role-based visibility |

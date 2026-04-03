@@ -7,13 +7,25 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, supplierId, companyId, dealId, status, dateFrom, dateTo } = filters;
+  const { offset, limit, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
-  if (supplierId) where.supplier_id = supplierId;
-  if (companyId) where.company_id = companyId;
+  if (companyId) {
+    where.company_id = companyId;
+  } else if (side === 'client') {
+    where.company_id = { [Op.not]: null };
+  }
+  if (supplierId) {
+    where.supplier_id = supplierId;
+  } else if (side === 'supplier') {
+    where.supplier_id = { [Op.not]: null };
+  }
   if (dealId) where.deal_id = dealId;
-  if (status) where.status = status;
+  if (status) {
+    where.status = status;
+  } else if (statusNot) {
+    where.status = { [Op.ne]: statusNot };
+  }
   applyDateOnlyColumnFilter(where, 'po_date', dateFrom, dateTo);
 
   if (search) {
@@ -100,6 +112,10 @@ const create = async (tenantId, data) => {
     throw ApiError.badRequest('At least one item is required');
   }
 
+  const explicitStatus = status && String(status).trim();
+  const defaultStatus = hasS ? 'approved' : 'draft';
+  const resolvedStatus = explicitStatus || defaultStatus;
+
   const po = await db.sequelize.transaction(async (t) => {
     const newPo = await db.PurchaseOrder.create(
       {
@@ -109,7 +125,7 @@ const create = async (tenantId, data) => {
         supplier_id: hasS ? supplierId : null,
         po_date: poDate,
         expected_delivery: expectedDelivery || null,
-        status: status && String(status).trim() ? String(status).trim() : 'draft',
+        status: resolvedStatus,
       },
       { transaction: t }
     );

@@ -7,11 +7,15 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, dealId, scopeUserId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, status, statusNot, dealId, scopeUserId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
 
   if (scopeUserId) where.prepared_by = scopeUserId;
-  if (status) where.status = status;
+  if (status) {
+    where.status = status;
+  } else if (statusNot) {
+    where.status = { [Op.ne]: statusNot };
+  }
   if (dealId) where.deal_id = dealId;
 
   const dealWhereForSearch = () => {
