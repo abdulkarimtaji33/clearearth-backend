@@ -93,4 +93,15 @@ const getById = async (tenantId, requestId, scope = {}) => {
   return request;
 };
 
-module.exports = { getAll, getById };
+const VALID_INSPECTION_STATUSES = ['request_submitted', 'team_assigned', 'inspection_completed', 'report_submitted'];
+
+const updateStatus = async (tenantId, requestId, status, scope = {}) => {
+  if (!VALID_INSPECTION_STATUSES.includes(status)) {
+    throw ApiError.badRequest(`Invalid status. Must be one of: ${VALID_INSPECTION_STATUSES.join(', ')}`);
+  }
+  const request = await getById(tenantId, requestId, scope);
+  await request.update({ status });
+  return request;
+};
+
+module.exports = { getAll, getById, updateStatus };

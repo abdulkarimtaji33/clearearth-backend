@@ -585,6 +585,86 @@ async function runMigration() {
       }
     }
 
+    console.log('Updating deal statuses to new pipeline values...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE deals
+          MODIFY COLUMN status ENUM('new','approved','quotation_sent','negotiation','won','lost') NOT NULL DEFAULT 'new'
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !e.message?.includes('already exists')) console.warn('  deal status enum alter:', e.message);
+    }
+    try {
+      await db.sequelize.query(`UPDATE deals SET status = 'new' WHERE status NOT IN ('new','approved','quotation_sent','negotiation','won','lost')`);
+    } catch (e) { console.warn('  deal status update:', e.message); }
+    try {
+      await db.sequelize.query(`DELETE FROM deal_statuses`);
+      await db.sequelize.query(`
+        INSERT INTO deal_statuses (value, display_name, display_order, is_active, created_at, updated_at) VALUES
+          ('new',            'New',             1, 1, NOW(), NOW()),
+          ('approved',       'Approved',        2, 1, NOW(), NOW()),
+          ('quotation_sent', 'Quotation Sent',  3, 1, NOW(), NOW()),
+          ('negotiation',    'Negotiation',     4, 1, NOW(), NOW()),
+          ('won',            'Won',             5, 1, NOW(), NOW()),
+          ('lost',           'Lost',            6, 1, NOW(), NOW())
+      `);
+    } catch (e) { console.warn('  deal_statuses seed:', e.message); }
+
+    console.log('Adding loss_reason to deals...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deals ADD COLUMN loss_reason TEXT NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  loss_reason:', e.message); }
+
+    console.log('Adding status to deal_inspection_requests...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE deal_inspection_requests
+          ADD COLUMN status ENUM('request_submitted','team_assigned','inspection_completed','report_submitted') NOT NULL DEFAULT 'request_submitted'
+      `);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  inspection status:', e.message); }
+
+    console.log('Adding inspection_requests.update permission...');
+    try {
+      await db.sequelize.query(`
+        INSERT IGNORE INTO permissions (name, display_name, module, action, description)
+        VALUES ('inspection_requests.update', 'Update Inspection Requests', 'inspection_requests', 'update', 'Permission to update inspection requests')
+      `);
+    } catch (e) { console.warn('  inspection_requests.update perm:', e.message); }
+
+    console.log('Updating quotation statuses...');
+    try {
+      await db.sequelize.query(`DELETE FROM quotation_statuses`);
+      await db.sequelize.query(`
+        INSERT INTO quotation_statuses (value, display_name, display_order, is_active, created_at, updated_at) VALUES
+          ('new',          'New',          1, 1, NOW(), NOW()),
+          ('sent',         'Sent',         2, 1, NOW(), NOW()),
+          ('under_review', 'Under Review', 3, 1, NOW(), NOW()),
+          ('revised',      'Revised',      4, 1, NOW(), NOW()),
+          ('approved',     'Approved',     5, 1, NOW(), NOW()),
+          ('rejected',     'Rejected',     6, 1, NOW(), NOW())
+      `);
+    } catch (e) { console.warn('  quotation_statuses seed:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE quotations SET status = 'new' WHERE status NOT IN ('new','sent','under_review','revised','approved','rejected')`);
+    } catch (e) { console.warn('  quotation status update:', e.message); }
+
+    console.log('Updating purchase order statuses...');
+    try {
+      await db.sequelize.query(`DELETE FROM purchase_order_statuses`);
+      await db.sequelize.query(`
+        INSERT INTO purchase_order_statuses (value, display_name, display_order, is_active, created_at, updated_at) VALUES
+          ('new',          'New',          1, 1, NOW(), NOW()),
+          ('sent',         'Sent',         2, 1, NOW(), NOW()),
+          ('under_review', 'Under Review', 3, 1, NOW(), NOW()),
+          ('revised',      'Revised',      4, 1, NOW(), NOW()),
+          ('approved',     'Approved',     5, 1, NOW(), NOW()),
+          ('rejected',     'Rejected',     6, 1, NOW(), NOW())
+      `);
+    } catch (e) { console.warn('  purchase_order_statuses seed:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE purchase_orders SET status = 'new' WHERE status NOT IN ('new','sent','under_review','revised','approved','rejected')`);
+    } catch (e) { console.warn('  purchase_order status update:', e.message); }
+
     console.log('Normalizing reference codes to numeric primary keys (leads, deals, companies, suppliers, contacts)...');
     try {
       await db.sequelize.query(`UPDATE leads SET lead_number = CAST(id AS CHAR)`);

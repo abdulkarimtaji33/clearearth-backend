@@ -64,6 +64,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      status: {
+        type: DataTypes.ENUM('request_submitted', 'team_assigned', 'inspection_completed', 'report_submitted'),
+        allowNull: false,
+        defaultValue: 'request_submitted',
+      },
     },
     {
       tableName: 'deal_inspection_requests',

@@ -78,8 +78,13 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'AED',
       },
       status: {
-        type: DataTypes.ENUM('draft', 'pending', 'approved', 'in_progress', 'completed', 'cancelled'),
-        defaultValue: 'draft',
+        type: DataTypes.ENUM('new', 'approved', 'quotation_sent', 'negotiation', 'won', 'lost'),
+        defaultValue: 'new',
+      },
+      loss_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Reason for losing the deal (required when status = lost)',
       },
       payment_status: {
         type: DataTypes.ENUM('unpaid', 'partial', 'paid'),

@@ -7,5 +7,6 @@ router.use(authenticate);
 
 router.get('/', authorize('inspection_requests.read'), inspectionRequestController.getAll);
 router.get('/:id', authorize('inspection_requests.read'), inspectionRequestController.getById);
+router.patch('/:id/status', authorize('inspection_requests.update'), inspectionRequestController.updateStatus);
 
 module.exports = router;

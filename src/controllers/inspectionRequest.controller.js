@@ -29,4 +29,11 @@ const getById = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, request);
 });
 
-module.exports = { getAll, getById };
+const updateStatus = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const { status } = req.body;
+  const request = await inspectionRequestService.updateStatus(req.tenant.id, req.params.id, status, scope);
+  return ApiResponse.success(res, request);
+});
+
+module.exports = { getAll, getById, updateStatus };
