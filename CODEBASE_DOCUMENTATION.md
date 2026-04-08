@@ -143,6 +143,9 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | POST | `/deals/:id/payment` | Yes | `deals.update` | `updatePayment` | Set paid amount → payment_status |
 | PUT | `/deals/:id/inspection-report` | Yes | `deals.read` OR `inspection_reports.create` OR `inspection_reports.update` | `saveInspectionReport` | Upsert inspection report |
 
+**Deal `status` (ENUM):** `new`, `approved`, `quotation_sent`, `negotiation`, `won`, `lost`. Optional **`loss_reason`** (TEXT) when status is `lost`.  
+**Line items (`items[]` on create/update):** each item may include **`unitOfMeasure`** (string, matches `units_of_measure.value`) → stored as **`deal_items.unit_of_measure`** (see `DealItem` model).
+
 ### 3.12 Dropdowns — `/dropdowns`
 
 | Method | Path | Auth | Handler | Brief |
@@ -208,6 +211,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 |--------|------|------|------------|---------|--------|
 | GET | `/inspection-requests` | Yes | `inspection_requests.read` | `getAll` | List from deals with inspection |
 | GET | `/inspection-requests/:id` | Yes | `inspection_requests.read` | `getById` | Single request detail |
+| PATCH | `/inspection-requests/:id/status` | Yes | `inspection_requests.update` | `updateStatus` | Body `{ status }` — pipeline: `request_submitted`, `team_assigned`, `inspection_completed`, `report_submitted` |
 
 ### 3.19 Work orders — `/work-orders`
 
@@ -230,8 +234,8 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 |--------|------|------|------------|---------|--------|
 | GET | `/work-types` | Yes | `deals.read` | `getAll` | Query: `search`, `activeOnly` (default active only) |
 | GET | `/work-types/:id` | Yes | `deals.read` | `getById` | One row |
-| POST | `/work-types` | Yes | `deals.create` | `create` | Body: `name`, `displayOrder`, `isActive` |
-| PUT | `/work-types/:id` | Yes | `deals.update` | `update` | |
+| POST | `/work-types` | Yes | `deals.create` | `create` | Body: `name`, `displayOrder`, `isActive`, optional **`isDefault`** (only one default per tenant) |
+| PUT | `/work-types/:id` | Yes | `deals.update` | `update` | Same; **`isDefault`** clears other defaults for the tenant when set true |
 | DELETE | `/work-types/:id` | Yes | `deals.delete` | `remove` | Blocked if referenced by `work_order_tasks.work_type_id` |
 
 ### 3.21 Tenants — `/tenants`
@@ -328,11 +332,13 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `getPdf` | `generatePurchaseOrderPdf` |
 | `inspectionRequest.controller.js` | `getAll` | Pagination + optional scope → `inspectionRequestService.getAll` |
 | | `getById` | |
+| | `updateStatus` | Body.status → `inspectionRequestService.updateStatus` |
 | `workOrder.controller.js` | `getAll` | Pagination → `workOrderService.getAll` |
 | | `getById` | |
 | | `create` | Passes `{ userId: req.user.id }` as scope |
 | | `update` | |
 | | `updateTaskStatus` | Body.status |
+| | `updateTaskNotes` | Body.notes |
 | | `remove` | |
 | `tenant.controller.js` | `getMyTenant` | `tenantService.getById(req.tenant.id)` |
 | | `getPublicLogo` | Public logo for branding |
@@ -410,8 +416,8 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `calculateDealTotals` | Subtotal, VAT, total from line items |
 | | `getAll` | Rich filters + includes |
 | | `getById` | Full graph |
-| | `create` | Transaction: Deal, items, WDS, inspection, images, DealTerm, update lead converted |
-| | `update` | Transaction: sync WDS, inspection, terms, items, images |
+| | `create` | Transaction: Deal, items (incl. `unit_of_measure` per line), WDS, inspection, images, DealTerm, update lead converted |
+| | `update` | Transaction: sync WDS, inspection, terms, items (incl. UOM), images |
 | | `updatePayment` | paid_amount + payment_status |
 | | `remove` | destroy |
 | | `saveInspectionReport` | Upsert DealInspectionReport |
@@ -428,13 +434,15 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `remove` | |
 | `inspectionRequest.service.js` | `getAll` | Deals with inspection request; role-based visibility |
 | | `getById` | |
-| `workOrder.service.js` | `getAll` | Search, deal, status |
-| | `getById` | Deal + tasks + `assignedUser` + `workType` on tasks |
-| | `create` | Transaction WO + tasks; `resolveTaskPayload` maps `workTypeId` → `type_of_work` + `work_type_id` |
-| | `update` | Replace tasks if provided |
+| | `updateStatus` | Validates ENUM; updates `deal_inspection_requests.status` |
+| `workOrder.service.js` | `getAll` | Search, deal, status; tasks include **`expenses`** (nested `WorkOrderTaskExpense`) |
+| | `getById` | Deal + tasks + `assignedUser` + `workType` + **`expenses`** on tasks |
+| | `create` | Transaction WO + tasks; per task: `createTaskWithExpenses` ( **`expenses[]`** or legacy **`expense`** ); `resolveTaskPayload` |
+| | `update` | Replace tasks + expense rows if provided |
 | | `updateTaskStatus` | Single task |
-| | `remove` | Deletes tasks then WO |
-| `workType.service.js` | `getAll`, `getById`, `create`, `update`, `remove` | Tenant-scoped `work_types`; delete blocked if tasks reference `work_type_id` |
+| | `updateTaskNotes` | Single task notes |
+| | `remove` | Deletes tasks (cascades expense rows) then WO |
+| `workType.service.js` | `getAll`, `getById`, `create`, `update`, `remove` | Tenant-scoped `work_types`; **`is_default`** enforced (single default); delete blocked if tasks reference `work_type_id` |
 | `termsAndConditions.service.js` | `getAll` | Tenant filter |
 | | `getById` | |
 | | `create` | |
@@ -623,6 +631,8 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `updateWorkOrder(id, data)` | PUT `/work-orders/:id` |
 | `deleteWorkOrder(id)` | DELETE `/work-orders/:id` |
 | `updateWorkOrderTaskStatus(workOrderId, taskId, status)` | PATCH `/work-orders/:id/tasks/:taskId/status` |
+| `updateWorkOrderTaskNotes(workOrderId, taskId, notes)` | PATCH `/work-orders/:id/tasks/:taskId/notes` |
+| `updateInspectionRequestStatus(id, status)` | PATCH `/inspection-requests/:id/status` |
 | `getWorkTypes(params)` | GET `/work-types` |
 | `getWorkType(id)` | GET `/work-types/:id` |
 | `createWorkType(data)` | POST `/work-types` |
@@ -645,12 +655,14 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `/erp/products`, `.../create`, `.../edit/:id` | Products |
 | `/erp/deals`, `.../create`, `.../edit/:id`, `.../view/:id` | Deals |
 | `/erp/terms`, `.../create`, `.../edit/:id` | Terms |
-| `/erp/quotations`, `.../create`, `.../edit/:id` | Quotations |
-| `/erp/purchase-orders`, `.../create`, `.../edit/:id` | POs |
+| `/erp/quotations`, `/erp/service-orders` | **QuotationList** (service orders = approved filter) |
+| `/erp/quotations/create`, `.../view/:id`, `.../edit/:id` | QuotationForm / **QuotationView** |
+| `/erp/purchase-orders`, `.../create`, `.../view/:id`, `.../edit/:id` | PurchaseOrderList / **PurchaseOrderView** / PurchaseOrderForm |
+| `/erp/client-purchase-orders`, `/erp/supplier-purchase-orders` | Approved PO lists (client vs vendor) |
 | `/erp/roles`, `.../create`, `.../edit/:id` | Roles |
 | `/erp/users`, `.../create`, `.../edit/:id` | Users |
 | `/erp/inspection-requests`, `/erp/inspection-requests/:id` | Inspection list / detail |
-| `/erp/work-orders`, `.../create`, `.../edit/:id` | Work orders (`WorkOrderList`, `WorkOrderForm`; shared `TaskStatusSegments`, `WorkTypesManageDialog`) |
+| `/erp/work-orders`, `.../create`, `.../view/:id`, `.../edit/:id` | Work orders (`WorkOrderList`, **WorkOrderView**, `WorkOrderForm`; `TaskStatusSegments`, `WorkTypesManageDialog`) |
 | `/erp/settings/company` | Company settings |
 | `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/404`, etc. | Auth / error / maintenance |
 
@@ -675,14 +687,21 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 
 - **`clearearth_erp.sql`:** Full phpMyAdmin dump (schema + data) for `clearearth_erp`.
 - **`src/database/migrate.js`:** Runs every `migrations/*.js` in filename order; no migration metadata table.
-- **`run-migration.js`:** Raw SQL idempotent patches + role/user seeds (see file header comments). Includes **`work_types`** table + **`work_order_tasks.work_type_id`** when run on an existing DB.
+- **`run-migration.js`:** Raw SQL idempotent patches + role/user seeds (see file header comments). On existing DBs it may:
+  - Create/alter **`work_types`**, **`work_order_tasks.work_type_id`**, **`work_types.is_default`**
+  - Create **`work_order_task_expenses`** (FK to `work_order_tasks` ON DELETE CASCADE) and backfill from legacy task `expense`
+  - Add **`deal_items.unit_of_measure`** and backfill from **`products_services.unit_of_measure`**
+  - Remap **`deals.status`** to the new ENUM via temporary VARCHAR + **`deals.loss_reason`**
+  - Add **`deal_inspection_requests.status`** ENUM + seed **`inspection_requests.update`** permission
+  - Refresh lookup rows: **`deal_statuses`**, **`quotation_statuses`**, **`purchase_order_statuses`**
+  - Other historical patches (companies/suppliers docs, reference codes, etc.)
 - **`20260401000000-add-work-types.js`:** Creates `work_types` (FK to `tenants`, unique `(tenant_id, name)`), adds `work_order_tasks.work_type_id` FK to `work_types`.
 
 ---
 
 ## 11. Sequelize models (`src/models/*.js`)
 
-Each file default-exports a **factory** `(sequelize, DataTypes) => Model` with `Model.associate(db)`. No standalone functions. Files: `Tenant`, `User`, `Role`, `Permission`, `RolePermission`, `AuditLog`, `Contact`, `CompanyContact`, `Company`, `SupplierContact`, `Supplier`, `Lead`, `ProductService`, `Deal`, `DealItem`, `DealWds`, `DealWdsAttachment`, `DealInspectionRequest`, `DealInspectionReport`, `DealImage`, `DealTerm`, `MaterialType`, `termsAndConditions.model`, `Designation`, `IndustryType`, `UaeCity`, `Country`, `LeadSource`, `ContactRole`, `ServiceInterest`, `ProductCategory`, `UnitOfMeasure`, `DealStatus`, `PaymentStatus`, `Status`, `QuotationStatus`, `PurchaseOrderStatus`, `Quotation`, `PurchaseOrder`, `PurchaseOrderItem`, `PurchaseOrderTerm`, `WorkOrder`, `WorkOrderTask`, `WorkType`. `WorkOrderTask` belongs to `WorkType` (`work_type_id`). Wired in `models/index.js`.
+Each file default-exports a **factory** `(sequelize, DataTypes) => Model` with `Model.associate(db)`. No standalone functions. Files: `Tenant`, `User`, `Role`, `Permission`, `RolePermission`, `AuditLog`, `Contact`, `CompanyContact`, `Company`, `SupplierContact`, `Supplier`, `Lead`, `ProductService`, `Deal`, **`DealItem`** (includes **`unit_of_measure`**), `DealWds`, `DealWdsAttachment`, `DealInspectionRequest`, `DealInspectionReport`, `DealImage`, `DealTerm`, `MaterialType`, `termsAndConditions.model`, `Designation`, `IndustryType`, `UaeCity`, `Country`, `LeadSource`, `ContactRole`, `ServiceInterest`, `ProductCategory`, `UnitOfMeasure`, `DealStatus`, `PaymentStatus`, `Status`, `QuotationStatus`, `PurchaseOrderStatus`, `Quotation`, `PurchaseOrder`, `PurchaseOrderItem`, `PurchaseOrderTerm`, `WorkOrder`, **`WorkOrderTask`**, **`WorkOrderTaskExpense`** (line-level expenses; CASCADE delete with task), **`WorkType`** (includes **`is_default`**). `WorkOrderTask` belongs to `WorkType` (`work_type_id`); **`hasMany` `WorkOrderTaskExpense`**. Wired in `models/index.js`.
 
 ---
 
@@ -709,16 +728,24 @@ Exports objects only (no functions): `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATU
 
 ---
 
-## 15. Production VPS deployment (reference)
+## 15. Frontend features (non-API reference)
+
+- **Deal & quotation lists:** Status can be changed **inline** on the list (popover + chips) without opening the form; deal **Lost** may prompt for **`loss_reason`**.
+- **Quotations & purchase orders:** List row opens a **read-only view** (`/erp/quotations/view/:id`, `/erp/purchase-orders/view/:id`); **`?return=`** encodes the list URL for Back. Deal detail links to these views with return to the deal page.
+- **Work orders:** **WorkOrderView** supports drag-reorder, sequential task unlock (previous completed or noted), inline **task notes** (PATCH notes endpoint), and **multiple expenses per task** on create/edit forms; **default work type** pre-adds a task on new WO when configured.
+
+---
+
+## 16. Production VPS deployment (reference)
 
 **Server:** `root@72.60.223.25` (hostname `srv1457820`). **Paths:** `/var/www/clearearth-backend`, `/var/www/clearearth-frontend`. **Process manager:** PM2 app name **`clearearth-api`** (Express on `127.0.0.1:3000`). **Web:** nginx default vhost serves **`/var/www/clearearth-frontend/dist`**; `location /api` and `/uploads` reverse-proxy to port 3000.
 
 **Typical deploy after `git push` to `main`:**
 
-1. **Backend:** `cd /var/www/clearearth-backend && git pull && npm ci` (or `npm install`) **`&& node run-migration.js`** (idempotent; applies `work_types` + `work_order_tasks.work_type_id` when present in script) **`&& pm2 restart clearearth-api`**. Confirm: `pm2 logs clearearth-api --lines 30`.
+1. **Backend:** `cd /var/www/clearearth-backend && git pull && npm ci` (or `npm install`) **`&& node run-migration.js`** (idempotent; see §10 for what it may alter) **`&& pm2 restart clearearth-api`**. Confirm: `pm2 logs clearearth-api --lines 30`. Use **`SKIP_MIGRATE=1`** in deploy script only when DB changes are not part of that release.
 2. **Frontend:** `cd /var/www/clearearth-frontend && git pull && npm ci && npm run build` (outputs to `dist/`). No separate PM2 for static assets; nginx already points at `dist`.
 
-See also repo **`DEPLOYMENT.md`** for migration expectations.
+See also repo **`DEPLOYMENT.md`**, **`DEPLOYMENT_GUIDE.md`**, and **`scripts/deploy-production.sh`** (optional `SKIP_MIGRATE` / `SKIP_NGINX_RELOAD`).
 
 ---
 

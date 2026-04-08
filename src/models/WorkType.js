@@ -27,6 +27,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      is_default: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'Pre-select this type when creating a new work order',
+      },
     },
     {
       tableName: 'work_types',

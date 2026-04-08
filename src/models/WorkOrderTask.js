@@ -74,6 +74,7 @@ module.exports = (sequelize, DataTypes) => {
     WorkOrderTask.belongsTo(models.WorkOrder, { foreignKey: 'work_order_id', as: 'workOrder' });
     WorkOrderTask.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
     WorkOrderTask.belongsTo(models.WorkType, { foreignKey: 'work_type_id', as: 'workType' });
+    WorkOrderTask.hasMany(models.WorkOrderTaskExpense, { foreignKey: 'work_order_task_id', as: 'expenses' });
   };
 
   return WorkOrderTask;

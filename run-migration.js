@@ -689,6 +689,59 @@ async function runMigration() {
       await db.sequelize.query(`UPDATE purchase_orders SET status = 'new' WHERE status NOT IN ('new','sent','under_review','revised','approved','rejected')`);
     } catch (e) { console.warn('  purchase_order status update:', e.message); }
 
+    console.log('Adding work_types.is_default and work_order_task_expenses...');
+    try {
+      await db.sequelize.query('ALTER TABLE work_types ADD COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS work_order_task_expenses (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          work_order_task_id INT NOT NULL,
+          description VARCHAR(255) NULL,
+          amount DECIMAL(15,2) NOT NULL,
+          sort_order INT DEFAULT 0,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL,
+          INDEX idx_wote_task (work_order_task_id),
+          CONSTRAINT fk_wote_task FOREIGN KEY (work_order_task_id) REFERENCES work_order_tasks(id) ON DELETE CASCADE
+        )
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !String(e.message || '').includes('already exists')) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        INSERT INTO work_order_task_expenses (work_order_task_id, description, amount, sort_order, created_at, updated_at)
+        SELECT wot.id, NULL, wot.expense, 0, NOW(), NOW()
+        FROM work_order_tasks wot
+        LEFT JOIN work_order_task_expenses e ON e.work_order_task_id = wot.id
+        WHERE wot.expense IS NOT NULL AND CAST(wot.expense AS DECIMAL(15,2)) != 0 AND e.id IS NULL
+      `);
+    } catch (e) {
+      console.warn('  backfill task expenses:', e.message);
+    }
+
+    console.log('Adding deal_items.unit_of_measure...');
+    try {
+      await db.sequelize.query('ALTER TABLE deal_items ADD COLUMN unit_of_measure VARCHAR(100) NULL');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        UPDATE deal_items di
+        INNER JOIN products_services ps ON ps.id = di.product_service_id
+        SET di.unit_of_measure = ps.unit_of_measure
+        WHERE (di.unit_of_measure IS NULL OR di.unit_of_measure = '')
+          AND ps.unit_of_measure IS NOT NULL AND TRIM(ps.unit_of_measure) != ''
+      `);
+    } catch (e) {
+      console.warn('  deal_items UOM backfill:', e.message);
+    }
+
     console.log('Normalizing reference codes to numeric primary keys (leads, deals, companies, suppliers, contacts)...');
     try {
       await db.sequelize.query(`UPDATE leads SET lead_number = CAST(id AS CHAR)`);

@@ -271,6 +271,7 @@ const create = async (tenantId, data, scope = {}) => {
         unit_price: item.unitPrice,
         line_total: (parseFloat(item.quantity) * parseFloat(item.unitPrice)).toFixed(2),
         notes: item.notes || null,
+        unit_of_measure: item.unitOfMeasure != null && String(item.unitOfMeasure).trim() !== '' ? String(item.unitOfMeasure).trim() : null,
       }));
 
       await db.DealItem.bulkCreate(itemsToCreate, { transaction });
@@ -520,6 +521,7 @@ const update = async (tenantId, dealId, data, scope = {}) => {
           unit_price: item.unitPrice,
           line_total: (parseFloat(item.quantity) * parseFloat(item.unitPrice)).toFixed(2),
           notes: item.notes || null,
+          unit_of_measure: item.unitOfMeasure != null && String(item.unitOfMeasure).trim() !== '' ? String(item.unitOfMeasure).trim() : null,
         }));
 
         await db.DealItem.bulkCreate(itemsToCreate, { transaction });

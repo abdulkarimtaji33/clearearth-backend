@@ -8,10 +8,41 @@ const { Op } = db.Sequelize;
 const taskInclude = {
   model: db.WorkOrderTask,
   as: 'tasks',
+  separate: true,
+  order: [['id', 'ASC']],
   include: [
     { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
     { model: db.WorkType, as: 'workType', attributes: ['id', 'name'], required: false },
+    {
+      model: db.WorkOrderTaskExpense,
+      as: 'expenses',
+      required: false,
+      separate: true,
+      order: [['sort_order', 'ASC'], ['id', 'ASC']],
+    },
   ],
+};
+
+const buildExpenseLines = (task) => {
+  const lines = [];
+  if (Array.isArray(task.expenses) && task.expenses.length > 0) {
+    task.expenses.forEach((ex, i) => {
+      const amt = ex.amount != null ? parseFloat(ex.amount) : NaN;
+      if (!Number.isFinite(amt) || amt < 0) return;
+      lines.push({
+        description: ex.description != null && String(ex.description).trim() !== '' ? String(ex.description).trim() : null,
+        amount: amt,
+        sort_order: i,
+      });
+    });
+  } else if (task.expense != null && task.expense !== '') {
+    const v = parseFloat(task.expense);
+    if (Number.isFinite(v) && v >= 0) {
+      lines.push({ description: null, amount: v, sort_order: 0 });
+    }
+  }
+  const sum = lines.length > 0 ? lines.reduce((s, e) => s + e.amount, 0) : null;
+  return { expenseLines: lines, expenseTotal: sum };
 };
 
 const resolveTaskPayload = async (tenantId, task, transaction) => {
@@ -25,17 +56,38 @@ const resolveTaskPayload = async (tenantId, task, transaction) => {
     workTypeId = null;
   }
   const status = task.status || 'not_started';
+  const { expenseLines, expenseTotal } = buildExpenseLines(task);
   return {
-    type_of_work: typeOfWork,
-    work_type_id: workTypeId,
-    expense: task.expense != null ? parseFloat(task.expense) : null,
-    estimated_duration: task.estimatedDuration || null,
-    start_date: task.startDate || null,
-    end_date: task.endDate || null,
-    assigned_to: task.assignedTo || null,
-    status,
-    notes: task.notes || null,
+    payload: {
+      type_of_work: typeOfWork,
+      work_type_id: workTypeId,
+      expense: expenseTotal,
+      estimated_duration: task.estimatedDuration || null,
+      start_date: task.startDate || null,
+      end_date: task.endDate || null,
+      assigned_to: task.assignedTo || null,
+      status,
+      notes: task.notes || null,
+    },
+    expenseLines,
   };
+};
+
+const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction) => {
+  const { payload, expenseLines } = await resolveTaskPayload(tenantId, task, transaction);
+  const created = await db.WorkOrderTask.create({ ...payload, work_order_id: workOrderId }, { transaction });
+  if (expenseLines.length > 0) {
+    await db.WorkOrderTaskExpense.bulkCreate(
+      expenseLines.map((line) => ({
+        work_order_task_id: created.id,
+        description: line.description,
+        amount: line.amount,
+        sort_order: line.sort_order,
+      })),
+      { transaction }
+    );
+  }
+  return created;
 };
 
 const getAll = async (tenantId, filters = {}) => {
@@ -116,11 +168,9 @@ const create = async (tenantId, data, scope = {}) => {
     );
 
     if (tasks && tasks.length > 0) {
-      const rows = await Promise.all(tasks.map(task => resolveTaskPayload(tenantId, task, t)));
-      await db.WorkOrderTask.bulkCreate(
-        rows.map(row => ({ ...row, work_order_id: wo.id })),
-        { transaction: t }
-      );
+      for (const task of tasks) {
+        await createTaskWithExpenses(tenantId, task, wo.id, t);
+      }
     }
 
     return wo;
@@ -147,11 +197,9 @@ const update = async (tenantId, workOrderId, data) => {
     if (data.tasks !== undefined) {
       await db.WorkOrderTask.destroy({ where: { work_order_id: workOrderId }, transaction: t });
       if (data.tasks.length > 0) {
-        const rows = await Promise.all(data.tasks.map(task => resolveTaskPayload(tenantId, task, t)));
-        await db.WorkOrderTask.bulkCreate(
-          rows.map(row => ({ ...row, work_order_id: workOrderId })),
-          { transaction: t }
-        );
+        for (const task of data.tasks) {
+          await createTaskWithExpenses(tenantId, task, workOrderId, t);
+        }
       }
     }
   });

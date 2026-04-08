@@ -37,6 +37,11 @@ module.exports = (sequelize, DataTypes) => {
       notes: {
         type: DataTypes.TEXT,
       },
+      unit_of_measure: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'UOM value from units_of_measure catalog (same as products_services.unit_of_measure)',
+      },
     },
     {
       tableName: 'deal_items',
