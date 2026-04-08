@@ -35,6 +35,14 @@ const getAll = async (tenantId, filters) => {
     attributes: ['id', 'title', 'deal_number'],
     required: !search,
     where: dealWhereForSearch(),
+    include: [
+      {
+        model: db.DealItem,
+        as: 'items',
+        attributes: ['id'],
+        required: false,
+      },
+    ],
   };
   if (search) dealInclude.required = true;
   applyDateOnlyColumnFilter(where, 'quotation_date', dateFrom, dateTo);
@@ -49,6 +57,7 @@ const getAll = async (tenantId, filters) => {
     limit,
     order: [['created_at', 'DESC']],
     distinct: true,
+    subQuery: false,
   });
 
   return { quotations: rows, total: count };
@@ -60,7 +69,17 @@ const getById = async (tenantId, quotationId, scope = {}) => {
   const quotation = await db.Quotation.findOne({
     where,
     include: [
-      { model: db.Deal, as: 'deal' },
+      {
+        model: db.Deal,
+        as: 'deal',
+        include: [
+          {
+            model: db.DealItem,
+            as: 'items',
+            include: [{ model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'unit_of_measure'] }],
+          },
+        ],
+      },
       { model: db.User, as: 'preparedByUser', attributes: ['id', 'first_name', 'last_name', 'email'] },
     ],
   });
