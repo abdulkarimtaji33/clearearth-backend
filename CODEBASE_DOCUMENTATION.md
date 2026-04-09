@@ -136,7 +136,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | Method | Path | Auth | Permission | Handler | Brief |
 |--------|------|------|------------|---------|--------|
 | GET | `/deals` | Yes | `deals.read` | `getAll` | Paginated; sales scope on `assigned_to` |
-| GET | `/deals/:id` | Yes | `deals.read` | `getById` | Full graph (items, WDS, inspection, terms, images) |
+| GET | `/deals/:id` | Yes | `deals.read` | `getById` | Full graph (items, WDS, inspection, terms, images, **`workOrders`** + tasks + **`workType`**) |
 | POST | `/deals` | Yes | `deals.create` | `create` | Create deal + items + optional WDS/inspection/images/terms |
 | PUT | `/deals/:id` | Yes | `deals.update` | `update` | Update deal |
 | DELETE | `/deals/:id` | Yes | `deals.delete` | `remove` | Soft delete |
@@ -415,7 +415,7 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `deal.service.js` | `_validateDownstreamSupplier` | Ensures partner ≠ primary and exists |
 | | `calculateDealTotals` | Subtotal, VAT, total from line items |
 | | `getAll` | Rich filters + includes |
-| | `getById` | Full graph |
+| | `getById` | Full graph incl. **`workOrders`** → **`tasks`** → **`workType`** (sorted newest WO first, tasks by `id`) |
 | | `create` | Transaction: Deal, items (incl. `unit_of_measure` per line), WDS, inspection, images, DealTerm, update lead converted |
 | | `update` | Transaction: sync WDS, inspection, terms, items (incl. UOM), images |
 | | `updatePayment` | paid_amount + payment_status |
@@ -731,6 +731,7 @@ Exports objects only (no functions): `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATU
 ## 15. Frontend features (non-API reference)
 
 - **Deal & quotation lists:** Status can be changed **inline** on the list (popover + chips) without opening the form; deal **Lost** may prompt for **`loss_reason`**.
+- **Deal view — Work progress:** Section **`sec-work-progress`** shows each linked work order as a horizontal pipeline (task cards with status chips, connectors, progress bar). **New work order** after save goes to **`/erp/work-orders`**; editing a work order goes to **`/erp/work-orders/view/:id`**.
 - **Quotations & purchase orders:** List row opens a **read-only view** (`/erp/quotations/view/:id`, `/erp/purchase-orders/view/:id`); **`?return=`** encodes the list URL for Back. Deal detail links to these views with return to the deal page.
 - **Work orders:** **WorkOrderView** supports drag-reorder, sequential task unlock (previous completed or noted), inline **task notes** (PATCH notes endpoint), and **multiple expenses per task** on create/edit forms. **Manage types of work** (`WorkTypesManageDialog`) sends **`isDefault`** in **`/work-types`** create/update; **WorkOrderForm** seeds **one task per default** type (`is_default`) on new WOs (order follows list sort).
 - **Quotations:** List **Items** column uses nested **`deal.items`**; read-only **view** shows deal line items.

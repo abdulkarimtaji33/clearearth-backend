@@ -140,9 +140,30 @@ const getById = async (tenantId, dealId, scope = {}) => {
           { model: db.ProductService, as: 'productService' },
         ],
       },
+      {
+        model: db.WorkOrder,
+        as: 'workOrders',
+        attributes: ['id', 'title', 'status', 'deal_id', 'created_at', 'updated_at'],
+        required: false,
+        include: [
+          {
+            model: db.WorkOrderTask,
+            as: 'tasks',
+            attributes: ['id', 'type_of_work', 'work_type_id', 'status'],
+            required: false,
+            include: [{ model: db.WorkType, as: 'workType', attributes: ['id', 'name'], required: false }],
+          },
+        ],
+      },
     ],
   });
   if (!deal) throw ApiError.notFound('Deal not found');
+  if (deal.workOrders?.length) {
+    deal.workOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    deal.workOrders.forEach((wo) => {
+      if (wo.tasks?.length) wo.tasks.sort((a, b) => a.id - b.id);
+    });
+  }
   return deal;
 };
 
