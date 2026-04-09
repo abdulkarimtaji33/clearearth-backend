@@ -187,8 +187,8 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 
 | Method | Path | Auth | Handler | Brief |
 |--------|------|------|---------|--------|
-| GET | `/quotations` | Yes | `getAll` | Paginated; sales scope on `prepared_by` |
-| GET | `/quotations/:id` | Yes | `getById` | One + deal |
+| GET | `/quotations` | Yes | `getAll` | Paginated; sales scope on `prepared_by`; **`deal`** includes **`items`** (DealItem `id` only) for list item counts |
+| GET | `/quotations/:id` | Yes | `getById` | One + **`deal`** with **`items`** (DealItem + `productService`) for line-item display |
 | POST | `/quotations` | Yes | `create` | Create quotation |
 | PUT | `/quotations/:id` | Yes | `update` | Update |
 | DELETE | `/quotations/:id` | Yes | `remove` | Delete |
@@ -224,7 +224,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | PATCH | `/work-orders/:id/tasks/:taskId/status` | Yes | `deals.update` | `updateTaskStatus` | Body `{ status }` — `not_started` \| `in_progress` \| `completed` |
 | DELETE | `/work-orders/:id` | Yes | `deals.delete` | `remove` | Delete WO + tasks |
 
-**Task payload (create/update `tasks[]`):** `dealId`, `title`, `notes`, `status` on WO; each task supports `workTypeId` (preferred, tenant-scoped `work_types.id`), `typeOfWork` (legacy free text if no id), `expense`, `estimatedDuration`, `startDate`, `endDate`, `assignedTo`, `status`, `notes`. Service resolves `type_of_work` + `work_type_id` from `workTypeId` when present.
+**Task payload (create/update `tasks[]`):** `dealId`, `title`, `notes`, `status` on WO; each task supports `workTypeId` (preferred, tenant-scoped `work_types.id`), `typeOfWork` (legacy free text if no id), **`expenses[]`** `{ amount, description? }` (or legacy single **`expense`**), `estimatedDuration`, `startDate`, `endDate`, `assignedTo`, `status`, `notes`. Service resolves `type_of_work` + `work_type_id` from `workTypeId` when present.
 
 ### 3.20 Work types (catalog) — `/work-types`
 
@@ -234,8 +234,8 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 |--------|------|------|------------|---------|--------|
 | GET | `/work-types` | Yes | `deals.read` | `getAll` | Query: `search`, `activeOnly` (default active only) |
 | GET | `/work-types/:id` | Yes | `deals.read` | `getById` | One row |
-| POST | `/work-types` | Yes | `deals.create` | `create` | Body: `name`, `displayOrder`, `isActive`, optional **`isDefault`** (only one default per tenant) |
-| PUT | `/work-types/:id` | Yes | `deals.update` | `update` | Same; **`isDefault`** clears other defaults for the tenant when set true |
+| POST | `/work-types` | Yes | `deals.create` | `create` | Body: `name`, `displayOrder`, `isActive`, optional **`isDefault`** (many rows may be default per tenant) |
+| PUT | `/work-types/:id` | Yes | `deals.update` | `update` | Same; **`isDefault`** toggles that row only (no clearing of other types) |
 | DELETE | `/work-types/:id` | Yes | `deals.delete` | `remove` | Blocked if referenced by `work_order_tasks.work_type_id` |
 
 ### 3.21 Tenants — `/tenants`
@@ -421,8 +421,8 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `updatePayment` | paid_amount + payment_status |
 | | `remove` | destroy |
 | | `saveInspectionReport` | Upsert DealInspectionReport |
-| `quotation.service.js` | `getAll` | Join deal for search; date on quotation_date |
-| | `getById` | Scope prepared_by for sales |
+| `quotation.service.js` | `getAll` | Join deal for search; **`deal.items`** (lightweight ids) nested for UI counts; `subQuery: false` + `distinct` |
+| | `getById` | Scope prepared_by for sales; **`deal.items`** + `productService` for line items |
 | | `create` | Validates deal + user |
 | | `update` | |
 | | `remove` | |
@@ -442,7 +442,7 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `updateTaskStatus` | Single task |
 | | `updateTaskNotes` | Single task notes |
 | | `remove` | Deletes tasks (cascades expense rows) then WO |
-| `workType.service.js` | `getAll`, `getById`, `create`, `update`, `remove` | Tenant-scoped `work_types`; **`is_default`** enforced (single default); delete blocked if tasks reference `work_type_id` |
+| `workType.service.js` | `getAll`, `getById`, `create`, `update`, `remove` | Tenant-scoped `work_types`; multiple rows may have **`is_default`**; delete blocked if tasks reference `work_type_id` |
 | `termsAndConditions.service.js` | `getAll` | Tenant filter |
 | | `getById` | |
 | | `create` | |
@@ -732,7 +732,8 @@ Exports objects only (no functions): `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATU
 
 - **Deal & quotation lists:** Status can be changed **inline** on the list (popover + chips) without opening the form; deal **Lost** may prompt for **`loss_reason`**.
 - **Quotations & purchase orders:** List row opens a **read-only view** (`/erp/quotations/view/:id`, `/erp/purchase-orders/view/:id`); **`?return=`** encodes the list URL for Back. Deal detail links to these views with return to the deal page.
-- **Work orders:** **WorkOrderView** supports drag-reorder, sequential task unlock (previous completed or noted), inline **task notes** (PATCH notes endpoint), and **multiple expenses per task** on create/edit forms; **default work type** pre-adds a task on new WO when configured.
+- **Work orders:** **WorkOrderView** supports drag-reorder, sequential task unlock (previous completed or noted), inline **task notes** (PATCH notes endpoint), and **multiple expenses per task** on create/edit forms. **Manage types of work** (`WorkTypesManageDialog`) sends **`isDefault`** in **`/work-types`** create/update; **WorkOrderForm** seeds **one task per default** type (`is_default`) on new WOs (order follows list sort).
+- **Quotations:** List **Items** column uses nested **`deal.items`**; read-only **view** shows deal line items.
 
 ---
 

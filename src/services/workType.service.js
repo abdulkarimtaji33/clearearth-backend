@@ -25,31 +25,17 @@ const getById = async (tenantId, id) => {
   return row;
 };
 
-const clearOtherDefaults = async (tenantId, exceptId, transaction) => {
-  await db.WorkType.update(
-    { is_default: false },
-    { where: { tenant_id: tenantId, ...(exceptId != null ? { id: { [Op.ne]: exceptId } } : {}) }, transaction }
-  );
-};
-
 const create = async (tenantId, data) => {
   const name = data.name?.trim();
   if (!name) throw ApiError.badRequest('Name is required');
   const existing = await db.WorkType.findOne({ where: { tenant_id: tenantId, name } });
   if (existing) throw ApiError.conflict('A work type with this name already exists');
-  const isDefault = Boolean(data.isDefault);
-  return db.sequelize.transaction(async (t) => {
-    if (isDefault) await clearOtherDefaults(tenantId, null, t);
-    return db.WorkType.create(
-      {
-        tenant_id: tenantId,
-        name,
-        display_order: data.displayOrder != null ? parseInt(data.displayOrder, 10) : 0,
-        is_active: data.isActive !== false,
-        is_default: isDefault,
-      },
-      { transaction: t }
-    );
+  return db.WorkType.create({
+    tenant_id: tenantId,
+    name,
+    display_order: data.displayOrder != null ? parseInt(data.displayOrder, 10) : 0,
+    is_active: data.isActive !== false,
+    is_default: Boolean(data.isDefault),
   });
 };
 
@@ -68,12 +54,7 @@ const update = async (tenantId, id, data) => {
   if (data.isActive !== undefined) row.is_active = Boolean(data.isActive);
   if (data.isDefault !== undefined) row.is_default = Boolean(data.isDefault);
 
-  await db.sequelize.transaction(async (t) => {
-    if (row.is_default) {
-      await clearOtherDefaults(tenantId, id, t);
-    }
-    await row.save({ transaction: t });
-  });
+  await row.save();
   return row.reload();
 };
 
