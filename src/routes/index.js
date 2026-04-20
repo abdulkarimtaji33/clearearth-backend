@@ -19,12 +19,15 @@ const materialTypeRoutes = require('./materialType.routes');
 const uploadRoutes = require('./upload.routes');
 const termsRoutes = require('./termsAndConditions.routes');
 const quotationRoutes = require('./quotation.routes');
+const proformaInvoiceRoutes = require('./proformaInvoice.routes');
+const taxInvoiceRoutes = require('./taxInvoice.routes');
 const purchaseOrderRoutes = require('./purchaseOrder.routes');
 const inspectionRequestRoutes = require('./inspectionRequest.routes');
 const workOrderRoutes = require('./workOrder.routes');
 const workTypeRoutes = require('./workType.routes');
 const pdfRoutes = require('./pdf.routes');
 const tenantRoutes = require('./tenant.routes');
+const accountsRoutes = require('./accounts.routes');
 
 // PDF routes - must be before resource mounts so /quotations/:id/pdf matches
 router.use(pdfRoutes);
@@ -47,11 +50,15 @@ router.get('/', (req, res) => {
       dropdowns: '/dropdowns',
       terms: '/terms',
       quotations: '/quotations',
+      'proforma-invoices': '/proforma-invoices',
+      'tax-invoices': '/tax-invoices',
       'purchase-orders': '/purchase-orders',
       'inspection-requests': '/inspection-requests',
       'work-orders': '/work-orders',
       'work-types': '/work-types',
       tenants: '/tenants',
+      accounts: '/accounts',
+      'accounts-expenses': '/accounts/expenses',
     },
   });
 });
@@ -71,10 +78,13 @@ router.use('/material-types', materialTypeRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/terms', termsRoutes);
 router.use('/quotations', quotationRoutes);
+router.use('/proforma-invoices', proformaInvoiceRoutes);
+router.use('/tax-invoices', taxInvoiceRoutes);
 router.use('/purchase-orders', purchaseOrderRoutes);
 router.use('/inspection-requests', inspectionRequestRoutes);
 router.use('/work-orders', workOrderRoutes);
 router.use('/work-types', workTypeRoutes);
 router.use('/tenants', tenantRoutes);
+router.use('/accounts', accountsRoutes);
 
 module.exports = router;

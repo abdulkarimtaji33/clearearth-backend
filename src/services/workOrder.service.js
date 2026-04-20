@@ -19,6 +19,9 @@ const taskInclude = {
       required: false,
       separate: true,
       order: [['sort_order', 'ASC'], ['id', 'ASC']],
+      include: [
+        { model: db.Expense, as: 'ledgerExpense', required: false, attributes: ['id', 'category', 'amount', 'expense_date', 'reference'] },
+      ],
     },
   ],
 };

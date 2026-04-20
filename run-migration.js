@@ -742,6 +742,207 @@ async function runMigration() {
       console.warn('  deal_items UOM backfill:', e.message);
     }
 
+    console.log('Creating proforma_invoices tables...');
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS proforma_invoices (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          tenant_id INT NOT NULL,
+          quotation_id INT NOT NULL,
+          deal_id INT NOT NULL,
+          proforma_number VARCHAR(50) NOT NULL,
+          invoice_date DATE NOT NULL,
+          currency VARCHAR(10) DEFAULT 'AED',
+          subtotal DECIMAL(15,2) NOT NULL DEFAULT 0,
+          vat_percentage DECIMAL(5,2) NOT NULL DEFAULT 0,
+          vat_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+          total DECIMAL(15,2) NOT NULL DEFAULT 0,
+          remarks TEXT NULL,
+          created_by INT NOT NULL,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL,
+          INDEX idx_pi_tenant (tenant_id),
+          INDEX idx_pi_quotation (quotation_id),
+          INDEX idx_pi_deal (deal_id),
+          UNIQUE KEY uk_tenant_proforma_number (tenant_id, proforma_number),
+          CONSTRAINT fk_pi_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+          CONSTRAINT fk_pi_quotation FOREIGN KEY (quotation_id) REFERENCES quotations(id),
+          CONSTRAINT fk_pi_deal FOREIGN KEY (deal_id) REFERENCES deals(id),
+          CONSTRAINT fk_pi_user FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !String(e.message || '').includes('already exists')) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS proforma_invoice_items (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          proforma_invoice_id INT NOT NULL,
+          product_service_id INT NULL,
+          description TEXT NULL,
+          quantity DECIMAL(15,4) NOT NULL DEFAULT 1,
+          unit_price DECIMAL(15,2) NOT NULL DEFAULT 0,
+          line_total DECIMAL(15,2) NOT NULL DEFAULT 0,
+          unit_of_measure VARCHAR(100) NULL,
+          sort_order INT DEFAULT 0,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL,
+          INDEX idx_pii_pi (proforma_invoice_id),
+          CONSTRAINT fk_pii_pi FOREIGN KEY (proforma_invoice_id) REFERENCES proforma_invoices(id) ON DELETE CASCADE,
+          CONSTRAINT fk_pii_ps FOREIGN KEY (product_service_id) REFERENCES products_services(id)
+        )
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !String(e.message || '').includes('already exists')) throw e;
+    }
+
+    console.log('Adding proforma_invoices.due_date...');
+    try {
+      await db.sequelize.query(`ALTER TABLE proforma_invoices ADD COLUMN due_date DATE NULL`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+
+    console.log('Creating tax_invoices tables...');
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS tax_invoices (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          tenant_id INT NOT NULL,
+          proforma_invoice_id INT NOT NULL,
+          tax_invoice_number VARCHAR(50) NOT NULL,
+          invoice_date DATE NOT NULL,
+          due_date DATE NULL,
+          currency VARCHAR(10) DEFAULT 'AED',
+          subtotal DECIMAL(15,2) NOT NULL DEFAULT 0,
+          vat_percentage DECIMAL(5,2) NOT NULL DEFAULT 0,
+          vat_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+          total DECIMAL(15,2) NOT NULL DEFAULT 0,
+          payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
+          payment_method VARCHAR(255) NULL,
+          reference_no VARCHAR(255) NULL,
+          attachment_path VARCHAR(500) NULL,
+          remarks TEXT NULL,
+          created_by INT NOT NULL,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL,
+          INDEX idx_ti_tenant (tenant_id),
+          UNIQUE KEY uk_ti_proforma (proforma_invoice_id),
+          UNIQUE KEY uk_tenant_tax_number (tenant_id, tax_invoice_number),
+          INDEX idx_ti_payment (payment_status),
+          CONSTRAINT fk_ti_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+          CONSTRAINT fk_ti_proforma FOREIGN KEY (proforma_invoice_id) REFERENCES proforma_invoices(id),
+          CONSTRAINT fk_ti_user FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !String(e.message || '').includes('already exists')) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS tax_invoice_items (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          tax_invoice_id INT NOT NULL,
+          product_service_id INT NULL,
+          description TEXT NULL,
+          quantity DECIMAL(15,4) NOT NULL DEFAULT 1,
+          unit_price DECIMAL(15,2) NOT NULL DEFAULT 0,
+          line_total DECIMAL(15,2) NOT NULL DEFAULT 0,
+          unit_of_measure VARCHAR(100) NULL,
+          sort_order INT DEFAULT 0,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL,
+          INDEX idx_tii_ti (tax_invoice_id),
+          CONSTRAINT fk_tii_ti FOREIGN KEY (tax_invoice_id) REFERENCES tax_invoices(id) ON DELETE CASCADE,
+          CONSTRAINT fk_tii_ps FOREIGN KEY (product_service_id) REFERENCES products_services(id)
+        )
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !String(e.message || '').includes('already exists')) throw e;
+    }
+
+    console.log('Accounts: work_order_task_expenses approval columns + expenses ledger...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE work_order_task_expenses ADD COLUMN accounts_status VARCHAR(20) NOT NULL DEFAULT 'pending'
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE work_order_task_expenses ADD COLUMN accounts_approved_at DATETIME NULL`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE work_order_task_expenses ADD COLUMN accounts_approved_by INT NULL,
+        ADD CONSTRAINT fk_wote_accounts_user FOREIGN KEY (accounts_approved_by) REFERENCES users(id)
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS expenses (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          tenant_id INT NOT NULL,
+          work_order_task_expense_id INT NOT NULL,
+          category VARCHAR(100) NOT NULL,
+          amount DECIMAL(15,2) NOT NULL,
+          expense_date DATE NOT NULL,
+          paid_to VARCHAR(255) NULL,
+          payment_method VARCHAR(255) NULL,
+          notes TEXT NULL,
+          reference VARCHAR(255) NULL,
+          reference_id VARCHAR(255) NULL,
+          created_by INT NULL,
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL,
+          INDEX idx_exp_tenant (tenant_id),
+          INDEX idx_exp_date (expense_date),
+          INDEX idx_exp_category (category),
+          UNIQUE KEY uk_exp_task_line (work_order_task_expense_id),
+          CONSTRAINT fk_exp_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+          CONSTRAINT fk_exp_wote FOREIGN KEY (work_order_task_expense_id) REFERENCES work_order_task_expenses(id),
+          CONSTRAINT fk_exp_user FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e) && !String(e.message || '').includes('already exists')) throw e;
+    }
+
+    console.log('Expenses: nullable work_order_task_expense_id for manual ledger rows...');
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses DROP FOREIGN KEY fk_exp_wote`);
+    } catch (e) {
+      if (!String(e.message || '').includes('Unknown') && !String(e.message || '').includes("doesn't exist")) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses DROP INDEX uk_exp_task_line`);
+    } catch (e) {
+      if (!String(e.message || '').includes('Unknown') && !String(e.message || '').includes("doesn't exist")) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses MODIFY work_order_task_expense_id INT NULL`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE expenses ADD CONSTRAINT fk_exp_wote
+        FOREIGN KEY (work_order_task_expense_id) REFERENCES work_order_task_expenses(id)
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses ADD UNIQUE KEY uk_exp_task_line (work_order_task_expense_id)`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+
     console.log('Normalizing reference codes to numeric primary keys (leads, deals, companies, suppliers, contacts)...');
     try {
       await db.sequelize.query(`UPDATE leads SET lead_number = CAST(id AS CHAR)`);

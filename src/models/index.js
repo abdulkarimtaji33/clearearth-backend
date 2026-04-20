@@ -57,6 +57,10 @@ const PurchaseOrderStatus = require('./PurchaseOrderStatus')(sequelize, DataType
 
 // Quotations & Purchase Orders
 const Quotation = require('./Quotation')(sequelize, DataTypes);
+const ProformaInvoice = require('./ProformaInvoice')(sequelize, DataTypes);
+const ProformaInvoiceItem = require('./ProformaInvoiceItem')(sequelize, DataTypes);
+const TaxInvoice = require('./TaxInvoice')(sequelize, DataTypes);
+const TaxInvoiceItem = require('./TaxInvoiceItem')(sequelize, DataTypes);
 const PurchaseOrder = require('./PurchaseOrder')(sequelize, DataTypes);
 const PurchaseOrderItem = require('./PurchaseOrderItem')(sequelize, DataTypes);
 const PurchaseOrderTerm = require('./PurchaseOrderTerm')(sequelize, DataTypes);
@@ -65,6 +69,7 @@ const PurchaseOrderTerm = require('./PurchaseOrderTerm')(sequelize, DataTypes);
 const WorkOrder = require('./WorkOrder')(sequelize, DataTypes);
 const WorkOrderTask = require('./WorkOrderTask')(sequelize, DataTypes);
 const WorkOrderTaskExpense = require('./WorkOrderTaskExpense')(sequelize, DataTypes);
+const Expense = require('./Expense')(sequelize, DataTypes);
 const WorkType = require('./WorkType')(sequelize, DataTypes);
 
 // Create db object with all models
@@ -109,12 +114,17 @@ const db = {
   QuotationStatus,
   PurchaseOrderStatus,
   Quotation,
+  ProformaInvoice,
+  ProformaInvoiceItem,
+  TaxInvoice,
+  TaxInvoiceItem,
   PurchaseOrder,
   PurchaseOrderItem,
   PurchaseOrderTerm,
   WorkOrder,
   WorkOrderTask,
   WorkOrderTaskExpense,
+  Expense,
   WorkType,
 };
 
