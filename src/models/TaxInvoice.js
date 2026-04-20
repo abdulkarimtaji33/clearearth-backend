@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
       vat_percentage: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
       vat_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       total: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
+      paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true, defaultValue: null, comment: 'Amount received so far (null = not tracked)' },
       payment_status: {
         type: DataTypes.STRING(20),
         allowNull: false,

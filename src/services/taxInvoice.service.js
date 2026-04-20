@@ -176,6 +176,7 @@ const create = async (tenantId, userId, body, scope = {}) => {
     invoiceDate,
     dueDate,
     paymentStatus,
+    paidAmount,
     paymentMethod,
     referenceNo,
     attachmentPath,
@@ -215,6 +216,7 @@ const create = async (tenantId, userId, body, scope = {}) => {
         vat_amount: parseFloat(plain.vat_amount) || 0,
         total: parseFloat(plain.total) || 0,
         payment_status: ps,
+        paid_amount: paidAmount != null ? parseFloat(paidAmount) : null,
         payment_method: paymentMethod || null,
         reference_no: referenceNo || null,
         attachment_path: attachmentPath || null,
@@ -261,6 +263,7 @@ const update = async (tenantId, id, body, scope = {}) => {
     invoiceDate,
     dueDate,
     paymentStatus,
+    paidAmount,
     paymentMethod,
     referenceNo,
     attachmentPath,
@@ -277,6 +280,7 @@ const update = async (tenantId, id, body, scope = {}) => {
 
   if (invoiceDate !== undefined) row.invoice_date = invoiceDate;
   if (dueDate !== undefined) row.due_date = dueDate;
+  if (paidAmount !== undefined) row.paid_amount = paidAmount != null ? parseFloat(paidAmount) : null;
   if (paymentMethod !== undefined) row.payment_method = paymentMethod;
   if (referenceNo !== undefined) row.reference_no = referenceNo;
   if (attachmentPath !== undefined) row.attachment_path = attachmentPath;

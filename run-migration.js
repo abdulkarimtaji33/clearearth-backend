@@ -955,6 +955,13 @@ async function runMigration() {
       console.warn('  Reference code normalization skipped:', e.message);
     }
 
+    console.log('Adding paid_amount to tax_invoices...');
+    try {
+      await db.sequelize.query(`ALTER TABLE tax_invoices ADD COLUMN paid_amount DECIMAL(15,2) NULL DEFAULT NULL AFTER total`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

@@ -7,7 +7,7 @@
 
 ## 1. Project overview
 
-Multi-tenant ERP for UAE recycling/waste: CRM (leads, contacts, companies, suppliers), deals (line items, VAT, WDS, inspections), quotations, purchase orders, work orders, roles/permissions, PDFs (Puppeteer), uploads. JWT carries `userId` and `tenantId`; data scoped by `tenant_id`. **Sales** users are scoped to own records via `scopeHelper` + services.
+Multi-tenant ERP for UAE recycling/waste: CRM (leads, contacts, companies, suppliers), deals (line items, VAT, WDS, inspections), quotations, **proforma invoices**, **tax invoices**, purchase orders, work orders (with per-task expenses and Accounts approval), **posted expenses ledger** (work-order lines + manual entries), roles/permissions, PDFs (Puppeteer), uploads. JWT carries `userId` and `tenantId`; data scoped by `tenant_id`. **Sales** users are scoped to own records via `scopeHelper` + services.
 
 ---
 
@@ -168,8 +168,10 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 |--------|------|------|------------|---------|--------|
 | POST | `/upload/inspection-document` | Yes | `uploadSingle('file')` | `uploadInspectionDocument` | Save file; return path/url |
 | POST | `/upload/deal-image` | Yes | `uploadSingle('file')` | `uploadDealImage` | Deal image path |
+| POST | `/upload/company-document` | Yes | `uploadSingle('file')` | `uploadCompanyDocument` | Company/supplier documentation file path |
 | POST | `/upload/wds-attachment` | Yes | `uploadSingle('file')` | `uploadWdsAttachment` | WDS attachment path + original name |
 | POST | `/upload/tenant-logo` | Yes | `uploadSingle('file')` | `uploadTenantLogo` | Sets `tenant.logo` |
+| POST | `/upload/tax-invoice-attachment` | Yes | `uploadSingle('file')` | `uploadTaxInvoiceAttachment` | Stores file; path used when creating/updating tax invoices |
 
 ### 3.15 Terms and conditions — `/terms`
 
@@ -195,7 +197,42 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 
 *Duplicate PDF route also at §3.1.*
 
-### 3.17 Purchase orders — `/purchase-orders`
+### 3.17 Proforma invoices — `/proforma-invoices`
+
+| Method | Path | Auth | Permission | Handler | Brief |
+|--------|------|------|------------|---------|--------|
+| GET | `/proforma-invoices/preview-from-quotation/:quotationId` | Yes | `deals.read` | `previewFromQuotation` | Deal line items + totals for UI before create |
+| GET | `/proforma-invoices` | Yes | `deals.read` | `getAll` | Paginated list (quotation, deal, dates) |
+| GET | `/proforma-invoices/:id` | Yes | `deals.read` | `getById` | Header + items + optional linked tax invoice |
+| POST | `/proforma-invoices` | Yes | `deals.create` | `create` | Body: `quotationId`, dates, amounts, `items[]` (product, qty, prices, UOM); assigns `PF-YYYY-#####` |
+| PUT | `/proforma-invoices/:id` | Yes | `deals.update` | `update` | Patch header fields (e.g. `due_date`, `remarks`) |
+| DELETE | `/proforma-invoices/:id` | Yes | `deals.delete` | `remove` | Delete proforma + line items |
+
+### 3.18 Tax invoices — `/tax-invoices`
+
+| Method | Path | Auth | Permission | Handler | Brief |
+|--------|------|------|------------|---------|--------|
+| GET | `/tax-invoices/preview-from-proforma/:proformaInvoiceId` | Yes | `deals.read` | `previewFromProforma` | Defaults for tax invoice create from proforma |
+| GET | `/tax-invoices` | Yes | `deals.read` | `getAll` | Paginated |
+| GET | `/tax-invoices/:id` | Yes | `deals.read` | `getById` | Detail + items + proforma link |
+| POST | `/tax-invoices` | Yes | `deals.create` | `create` | One tax invoice per proforma (enforced in service); optional `attachmentPath` from upload |
+| PUT | `/tax-invoices/:id` | Yes | `deals.update` | `update` | Patch payment fields, remarks, etc. |
+| DELETE | `/tax-invoices/:id` | Yes | `deals.delete` | `remove` | Delete |
+
+### 3.19 Accounts (billing) — `/accounts`
+
+All routes **authenticate**; permissions as listed. **GET `/accounts/work-orders`** uses `workOrderService.getAll` (same filters as `/work-orders` — tenant-scoped, no separate sales filter in the Accounts controller).
+
+| Method | Path | Auth | Permission | Handler | Brief |
+|--------|------|------|------------|---------|--------|
+| GET | `/accounts/expenses` | Yes | `deals.read` | `listExpenses` | Paginated **expenses** ledger (work-order–sourced and manual); filters: search, category, date range |
+| POST | `/accounts/expenses` | Yes | `deals.update` | `createExpense` | **Manual** ledger row (`category`, `amount`, `expenseDate`, optional `paidTo`, `paymentMethod`, `notes`; `reference` defaults to `manual`) |
+| GET | `/accounts/work-orders` | Yes | `deals.read` | `listWorkOrders` | Work orders for Accounts (prepared by scope for sales) |
+| GET | `/accounts/work-orders/:id` | Yes | `deals.read` | `getWorkOrder` | Same payload as WO detail; tasks include `expenses` with `accounts_status` |
+| POST | `/accounts/work-orders/:workOrderId/task-expenses/:taskExpenseId/approve` | Yes | `deals.update` | `approveTaskExpense` | Approve line → **Expense** row + `accounts_status` on task expense |
+| POST | `/accounts/work-orders/:workOrderId/task-expenses/:taskExpenseId/reject` | Yes | `deals.update` | `rejectTaskExpense` | Reject pending line |
+
+### 3.20 Purchase orders — `/purchase-orders`
 
 | Method | Path | Auth | Handler | Brief |
 |--------|------|------|---------|--------|
@@ -205,7 +242,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | PUT | `/purchase-orders/:id` | Yes | `update` | Update |
 | DELETE | `/purchase-orders/:id` | Yes | `remove` | Delete |
 
-### 3.18 Inspection requests — `/inspection-requests`
+### 3.21 Inspection requests — `/inspection-requests`
 
 | Method | Path | Auth | Permission | Handler | Brief |
 |--------|------|------|------------|---------|--------|
@@ -213,7 +250,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | GET | `/inspection-requests/:id` | Yes | `inspection_requests.read` | `getById` | Single request detail |
 | PATCH | `/inspection-requests/:id/status` | Yes | `inspection_requests.update` | `updateStatus` | Body `{ status }` — pipeline: `request_submitted`, `team_assigned`, `inspection_completed`, `report_submitted` |
 
-### 3.19 Work orders — `/work-orders`
+### 3.22 Work orders — `/work-orders`
 
 | Method | Path | Auth | Permission | Handler | Brief |
 |--------|------|------|------------|---------|--------|
@@ -226,7 +263,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 
 **Task payload (create/update `tasks[]`):** `dealId`, `title`, `notes`, `status` on WO; each task supports `workTypeId` (preferred, tenant-scoped `work_types.id`), `typeOfWork` (legacy free text if no id), **`expenses[]`** `{ amount, description? }` (or legacy single **`expense`**), `estimatedDuration`, `startDate`, `endDate`, `assignedTo`, `status`, `notes`. Service resolves `type_of_work` + `work_type_id` from `workTypeId` when present.
 
-### 3.20 Work types (catalog) — `/work-types`
+### 3.23 Work types (catalog) — `/work-types`
 
 Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/index.js`.
 
@@ -238,7 +275,7 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | PUT | `/work-types/:id` | Yes | `deals.update` | `update` | Same; **`isDefault`** toggles that row only (no clearing of other types) |
 | DELETE | `/work-types/:id` | Yes | `deals.delete` | `remove` | Blocked if referenced by `work_order_tasks.work_type_id` |
 
-### 3.21 Tenants — `/tenants`
+### 3.24 Tenants — `/tenants`
 
 | Method | Path | Auth | Permission | Handler | Brief |
 |--------|------|------|------------|---------|--------|
@@ -345,14 +382,19 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `updateMyTenant` | `tenantService.update` |
 | `upload.controller.js` | `uploadInspectionDocument` | Relative path + URL JSON |
 | | `uploadDealImage` | Same |
+| | `uploadCompanyDocument` | Company docs |
 | | `uploadWdsAttachment` | Same + fileName |
 | | `uploadTenantLogo` | Saves path on `Tenant.logo` |
+| | `uploadTaxInvoiceAttachment` | Path for tax invoice supporting docs |
 | `termsAndConditions.controller.js` | `getAll` | `termsService.getAll` |
 | | `getById` | |
 | | `create` | |
 | | `update` | |
 | | `remove` | |
 | `workType.controller.js` | `getAll`, `getById`, `create`, `update`, `remove` | `workType.service` — CRUD for `WorkType` |
+| `proformaInvoice.controller.js` | `previewFromQuotation`, `getAll`, `getById`, `create`, `update`, `remove` | `proformaInvoice.service`; `getSalesScope` on preview/list/getById |
+| `taxInvoice.controller.js` | `previewFromProforma`, `getAll`, `getById`, `create`, `update`, `remove` | `taxInvoice.service`; `getSalesScope` on preview/list/getById |
+| `accounts.controller.js` | `listWorkOrders`, `getWorkOrder`, `listExpenses`, `createExpense`, `approveTaskExpense`, `rejectTaskExpense` | `workOrder.service` + `expense.service` |
 
 ---
 
@@ -426,6 +468,18 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `create` | Validates deal + user |
 | | `update` | |
 | | `remove` | |
+| `proformaInvoice.service.js` | `getPreviewFromQuotation` | Deal items + quotation snapshot for create form |
+| | `getAll`, `getById` | Paginated list + detail with items, quotation, deal, optional `taxInvoice` |
+| | `create` | Transaction: `ProformaInvoice` + `ProformaInvoiceItem` rows; `deal_id` from quotation |
+| | `update`, `remove` | Patch header / delete |
+| `taxInvoice.service.js` | `getPreviewFromProforma` | Proforma + suggested tax invoice fields |
+| | `getAll`, `getById` | List/detail with items + proforma link |
+| | `create` | One tax invoice per proforma; copies line items; optional attachment path |
+| | `update`, `remove` | Patch / delete |
+| `expense.service.js` | `approveTaskExpense` | Validates pending task expense; creates **`Expense`** row (`work_order_task_expense_id` linked); sets approved |
+| | `rejectTaskExpense` | Sets `accounts_status` rejected |
+| | `createManualExpense` | Manual ledger row (`work_order_task_expense_id` null); categories: travel, utility, fuel, materials, equipment, professional, other |
+| | `listLedgerExpenses` | Paginated **Expense** with optional `taskExpense` join (null for manual rows) |
 | `purchaseOrder.service.js` | `getAll` | Search on supplier/company names |
 | | `getById` | |
 | | `_validateParty` | Exactly one of company or supplier |
@@ -435,7 +489,7 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `inspectionRequest.service.js` | `getAll` | Deals with inspection request; role-based visibility |
 | | `getById` | |
 | | `updateStatus` | Validates ENUM; updates `deal_inspection_requests.status` |
-| `workOrder.service.js` | `getAll` | Search, deal, status; tasks include **`expenses`** (nested `WorkOrderTaskExpense`) |
+| `workOrder.service.js` | `getAll` | Search, deal, status; tasks include **`expenses`** (nested `WorkOrderTaskExpense` with **`accounts_status`**, etc.) |
 | | `getById` | Deal + tasks + `assignedUser` + `workType` + **`expenses`** on tasks |
 | | `create` | Transaction WO + tasks; per task: `createTaskWithExpenses` ( **`expenses[]`** or legacy **`expense`** ); `resolveTaskPayload` |
 | | `update` | Replace tasks + expense rows if provided |
@@ -589,6 +643,25 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `updateQuotation(id, data)` | PUT `/quotations/:id` |
 | `deleteQuotation(id)` | DELETE `/quotations/:id` |
 | `downloadQuotationPdf(id)` | GET blob `/quotations/:id/pdf`; trigger download |
+| `getProformaPreviewFromQuotation(quotationId)` | GET `/proforma-invoices/preview-from-quotation/:quotationId` |
+| `getProformaInvoices(params)` | GET `/proforma-invoices` |
+| `getProformaInvoice(id)` | GET `/proforma-invoices/:id` |
+| `createProformaInvoice(data)` | POST `/proforma-invoices` |
+| `updateProformaInvoice(id, data)` | PUT `/proforma-invoices/:id` |
+| `deleteProformaInvoice(id)` | DELETE `/proforma-invoices/:id` |
+| `getTaxPreviewFromProforma(proformaInvoiceId)` | GET `/tax-invoices/preview-from-proforma/:proformaInvoiceId` |
+| `getTaxInvoices(params)` | GET `/tax-invoices` |
+| `getTaxInvoice(id)` | GET `/tax-invoices/:id` |
+| `createTaxInvoice(data)` | POST `/tax-invoices` |
+| `updateTaxInvoice(id, data)` | PUT `/tax-invoices/:id` |
+| `deleteTaxInvoice(id)` | DELETE `/tax-invoices/:id` |
+| `uploadTaxInvoiceAttachment(file)` | POST FormData `/upload/tax-invoice-attachment` |
+| `getAccountsWorkOrders(params)` | GET `/accounts/work-orders` |
+| `getAccountsWorkOrder(id)` | GET `/accounts/work-orders/:id` |
+| `getAccountsExpenses(params)` | GET `/accounts/expenses` |
+| `createAccountsExpense(data)` | POST `/accounts/expenses` |
+| `approveAccountsTaskExpense(workOrderId, taskExpenseId, data)` | POST `/accounts/work-orders/:workOrderId/task-expenses/:taskExpenseId/approve` |
+| `rejectAccountsTaskExpense(workOrderId, taskExpenseId)` | POST `/accounts/work-orders/:workOrderId/task-expenses/:taskExpenseId/reject` |
 | `getPurchaseOrders(params)` | GET `/purchase-orders` |
 | `getPurchaseOrder(id)` | GET `/purchase-orders/:id` |
 | `createPurchaseOrder(data)` | POST `/purchase-orders` |
@@ -657,6 +730,9 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `/erp/terms`, `.../create`, `.../edit/:id` | Terms |
 | `/erp/quotations`, `/erp/service-orders` | **QuotationList** (service orders = approved filter) |
 | `/erp/quotations/create`, `.../view/:id`, `.../edit/:id` | QuotationForm / **QuotationView** |
+| `/erp/proforma-invoices`, `.../create/:quotationId`, `.../view/:id` | Proforma list / create from quotation / view |
+| `/erp/tax-invoices`, `.../create/:proformaId`, `.../view/:id` | Tax invoice list / create from proforma / view |
+| `/erp/accounts/expenses`, `.../expenses/create`, `.../work-orders`, `.../work-orders/view/:id` | Posted expenses, manual expense form, Accounts work orders |
 | `/erp/purchase-orders`, `.../create`, `.../view/:id`, `.../edit/:id` | PurchaseOrderList / **PurchaseOrderView** / PurchaseOrderForm |
 | `/erp/client-purchase-orders`, `/erp/supplier-purchase-orders` | Approved PO lists (client vs vendor) |
 | `/erp/roles`, `.../create`, `.../edit/:id` | Roles |
@@ -689,7 +765,9 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 - **`src/database/migrate.js`:** Runs every `migrations/*.js` in filename order; no migration metadata table.
 - **`run-migration.js`:** Raw SQL idempotent patches + role/user seeds (see file header comments). On existing DBs it may:
   - Create/alter **`work_types`**, **`work_order_tasks.work_type_id`**, **`work_types.is_default`**
-  - Create **`work_order_task_expenses`** (FK to `work_order_tasks` ON DELETE CASCADE) and backfill from legacy task `expense`
+  - Create **`work_order_task_expenses`** (FK to `work_order_tasks` ON DELETE CASCADE) and backfill from legacy task `expense`; add Accounts columns (**`accounts_status`**, **`accounts_approved_at`**, **`accounts_approved_by`**)
+  - Create **`expenses`** ledger + alter **`work_order_task_expense_id`** to **NULL** for manual rows (drop/recreate FK + unique)
+  - Create **`proforma_invoices`**, **`proforma_invoice_items`**, **`tax_invoices`**, **`tax_invoice_items`**
   - Add **`deal_items.unit_of_measure`** and backfill from **`products_services.unit_of_measure`**
   - Remap **`deals.status`** to the new ENUM via temporary VARCHAR + **`deals.loss_reason`**
   - Add **`deal_inspection_requests.status`** ENUM + seed **`inspection_requests.update`** permission
@@ -701,7 +779,7 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 
 ## 11. Sequelize models (`src/models/*.js`)
 
-Each file default-exports a **factory** `(sequelize, DataTypes) => Model` with `Model.associate(db)`. No standalone functions. Files: `Tenant`, `User`, `Role`, `Permission`, `RolePermission`, `AuditLog`, `Contact`, `CompanyContact`, `Company`, `SupplierContact`, `Supplier`, `Lead`, `ProductService`, `Deal`, **`DealItem`** (includes **`unit_of_measure`**), `DealWds`, `DealWdsAttachment`, `DealInspectionRequest`, `DealInspectionReport`, `DealImage`, `DealTerm`, `MaterialType`, `termsAndConditions.model`, `Designation`, `IndustryType`, `UaeCity`, `Country`, `LeadSource`, `ContactRole`, `ServiceInterest`, `ProductCategory`, `UnitOfMeasure`, `DealStatus`, `PaymentStatus`, `Status`, `QuotationStatus`, `PurchaseOrderStatus`, `Quotation`, `PurchaseOrder`, `PurchaseOrderItem`, `PurchaseOrderTerm`, `WorkOrder`, **`WorkOrderTask`**, **`WorkOrderTaskExpense`** (line-level expenses; CASCADE delete with task), **`WorkType`** (includes **`is_default`**). `WorkOrderTask` belongs to `WorkType` (`work_type_id`); **`hasMany` `WorkOrderTaskExpense`**. Wired in `models/index.js`.
+Each file default-exports a **factory** `(sequelize, DataTypes) => Model` with `Model.associate(db)`. No standalone functions. Files: `Tenant`, `User`, `Role`, `Permission`, `RolePermission`, `AuditLog`, `Contact`, `CompanyContact`, `Company`, `SupplierContact`, `Supplier`, `Lead`, `ProductService`, `Deal`, **`DealItem`** (includes **`unit_of_measure`**), `DealWds`, `DealWdsAttachment`, `DealInspectionRequest`, `DealInspectionReport`, `DealImage`, `DealTerm`, `MaterialType`, `termsAndConditions.model`, `Designation`, `IndustryType`, `UaeCity`, `Country`, `LeadSource`, `ContactRole`, `ServiceInterest`, `ProductCategory`, `UnitOfMeasure`, `DealStatus`, `PaymentStatus`, `Status`, `QuotationStatus`, `PurchaseOrderStatus`, `Quotation`, `PurchaseOrder`, `PurchaseOrderItem`, `PurchaseOrderTerm`, **`ProformaInvoice`**, **`ProformaInvoiceItem`**, **`TaxInvoice`**, **`TaxInvoiceItem`**, **`Expense`** (ledger; optional FK to **`work_order_task_expenses`** for approved lines), `WorkOrder`, **`WorkOrderTask`**, **`WorkOrderTaskExpense`** (Accounts approval fields; CASCADE delete with task), **`WorkType`** (includes **`is_default`**). `WorkOrderTask` belongs to `WorkType` (`work_type_id`); **`hasMany` `WorkOrderTaskExpense`**. Wired in `models/index.js`.
 
 ---
 
@@ -734,7 +812,9 @@ Exports objects only (no functions): `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATU
 - **Deal view — Work progress:** Section **`sec-work-progress`** shows each linked work order as a horizontal pipeline (task cards with status chips, connectors, progress bar). **New work order** after save goes to **`/erp/work-orders`**; editing a work order goes to **`/erp/work-orders/view/:id`**.
 - **Quotations & purchase orders:** List row opens a **read-only view** (`/erp/quotations/view/:id`, `/erp/purchase-orders/view/:id`); **`?return=`** encodes the list URL for Back. Deal detail links to these views with return to the deal page.
 - **Work orders:** **WorkOrderView** supports drag-reorder, sequential task unlock (previous completed or noted), inline **task notes** (PATCH notes endpoint), and **multiple expenses per task** on create/edit forms. **Manage types of work** (`WorkTypesManageDialog`) sends **`isDefault`** in **`/work-types`** create/update; **WorkOrderForm** seeds **one task per default** type (`is_default`) on new WOs (order follows list sort).
-- **Quotations:** List **Items** column uses nested **`deal.items`**; read-only **view** shows deal line items.
+- **Quotations:** List **Items** column uses nested **`deal.items`**; read-only **view** shows deal line items; links to **proforma** create/view where applicable.
+- **Proforma & tax invoices:** Create proforma from an approved quotation; create tax invoice from a proforma (one tax invoice per proforma). **Tax invoice** form may attach a file via **`uploadTaxInvoiceAttachment`**.
+- **Accounts:** **Posted expenses** lists ledger rows (work-order approvals + manual **Add expense**). **Accounts → Work orders** lists WOs and supports approve/reject on pending task expense lines.
 
 ---
 
@@ -744,7 +824,7 @@ Exports objects only (no functions): `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATU
 
 **Typical deploy after `git push` to `main`:**
 
-1. **Backend:** `cd /var/www/clearearth-backend && git pull && npm ci` (or `npm install`) **`&& node run-migration.js`** (idempotent; see §10 for what it may alter) **`&& pm2 restart clearearth-api`**. Confirm: `pm2 logs clearearth-api --lines 30`. Use **`SKIP_MIGRATE=1`** in deploy script only when DB changes are not part of that release.
+1. **Backend:** `cd /var/www/clearearth-backend && git pull && npm ci` (or `npm install`) **`&& npm run run-migration`** (same as `node run-migration.js`; idempotent; see §10) **`&& pm2 restart clearearth-api`**. Confirm: `pm2 logs clearearth-api --lines 30`. Use **`SKIP_MIGRATE=1`** in deploy script only when DB changes are not part of that release.
 2. **Frontend:** `cd /var/www/clearearth-frontend && git pull && npm ci && npm run build` (outputs to `dist/`). No separate PM2 for static assets; nginx already points at `dist`.
 
 See also repo **`DEPLOYMENT.md`**, **`DEPLOYMENT_GUIDE.md`**, and **`scripts/deploy-production.sh`** (optional `SKIP_MIGRATE` / `SKIP_NGINX_RELOAD`).
