@@ -186,6 +186,7 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
     include: [
       { model: db.Company, as: 'company', required: false },
       { model: db.Supplier, as: 'supplier', required: false },
+      { model: db.Deal, as: 'deal', attributes: ['id', 'is_rcm_applicable', 'vat_percentage'], required: false },
       {
         model: db.PurchaseOrderItem,
         as: 'items',
@@ -200,7 +201,8 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   if (!tenant) return null;
 
   const party = po.company || po.supplier;
-  const vatPct = 0.05;
+  const isRcm = po.deal?.is_rcm_applicable || false;
+  const vatPct = isRcm ? 0 : (parseFloat(po.deal?.vat_percentage) || 5) / 100;
   const currency = 'AED';
 
   let itemsHtml = '';
@@ -211,17 +213,20 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
     const qty = parseFloat(item.quantity) || 0;
     const price = parseFloat(item.price) || 0;
     const amount = qty * price;
-    const vat = amount * vatPct;
+    const vat = isRcm ? 0 : amount * vatPct;
     const total = amount + vat;
     subtotal += amount;
     totalVat += vat;
+    const vatCell = isRcm
+      ? `<td class="text-right">RCM</td>`
+      : `<td class="text-right">${formatNum(vat)} @${(vatPct * 100).toFixed(1)}%</td>`;
     itemsHtml += `<tr>
       <td>${i + 1}</td>
       <td>${(item.productService?.name || item.item_description || '-').replace(/</g, '&lt;')}</td>
       <td class="text-right">${formatNum(price)}</td>
       <td class="text-right">${formatNum(qty)} Pcs</td>
       <td class="text-right">${formatNum(amount)}</td>
-      <td class="text-right">${formatNum(vat)} @5.0%</td>
+      ${vatCell}
       <td class="text-right">${formatNum(total)}</td>
     </tr>`;
   }
@@ -254,8 +259,9 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
     itemsHtml,
     currency,
     subtotal: formatNum(subtotal),
-    totalVat: formatNum(totalVat),
+    totalVat: isRcm ? 'RCM (Reverse Charge — paid to Govt.)' : formatNum(totalVat),
     grandTotal: formatNum(grandTotal),
+    rcmNote: isRcm ? 'Note: VAT is applicable under Reverse Charge Mechanism. The recipient is liable to pay VAT directly to the government.' : '',
   });
 
   return htmlToPdf(html);

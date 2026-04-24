@@ -136,6 +136,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      is_rcm_applicable: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'Reverse Charge Mechanism: if true, VAT is paid to government by buyer and excluded from purchase documents',
+      },
       notes: {
         type: DataTypes.TEXT,
       },

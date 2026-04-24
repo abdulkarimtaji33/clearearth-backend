@@ -268,6 +268,7 @@ const update = async (tenantId, id, body, scope = {}) => {
     referenceNo,
     attachmentPath,
     remarks,
+    items,
   } = body;
 
   if (paymentStatus !== undefined) {
@@ -285,6 +286,26 @@ const update = async (tenantId, id, body, scope = {}) => {
   if (referenceNo !== undefined) row.reference_no = referenceNo;
   if (attachmentPath !== undefined) row.attachment_path = attachmentPath;
   if (remarks !== undefined) row.remarks = remarks;
+
+  // Update line item quantities and recalculate totals
+  if (Array.isArray(items) && items.length > 0) {
+    let newSubtotal = 0;
+    for (const itemUpdate of items) {
+      if (!itemUpdate.id) continue;
+      const item = await db.TaxInvoiceItem.findOne({ where: { id: itemUpdate.id, tax_invoice_id: id } });
+      if (item) {
+        const qty = parseFloat(itemUpdate.quantity) || parseFloat(item.quantity);
+        const price = parseFloat(item.unit_price);
+        const lineTotal = qty * price;
+        await item.update({ quantity: qty, line_total: lineTotal.toFixed(2) });
+        newSubtotal += lineTotal;
+      }
+    }
+    const vatAmount = (newSubtotal * parseFloat(row.vat_percentage)) / 100;
+    row.subtotal = newSubtotal.toFixed(2);
+    row.vat_amount = vatAmount.toFixed(2);
+    row.total = (newSubtotal + vatAmount).toFixed(2);
+  }
 
   await row.save();
   return getById(tenantId, id, scope);

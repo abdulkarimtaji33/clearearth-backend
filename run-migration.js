@@ -962,6 +962,13 @@ async function runMigration() {
       if (!isDuplicateSchemaError(e)) throw e;
     }
 
+    console.log('Adding is_rcm_applicable to deals...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deals ADD COLUMN is_rcm_applicable TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Reverse Charge Mechanism: VAT paid to government by buyer, excluded from purchase documents'`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
