@@ -969,6 +969,60 @@ async function runMigration() {
       if (!isDuplicateSchemaError(e)) throw e;
     }
 
+    console.log('ERP billing: expenses payment + purchase_orders payable columns...');
+    try {
+      await db.sequelize.query(
+        `ALTER TABLE expenses ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'`
+      );
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses ADD COLUMN paid_amount DECIMAL(15,2) NULL`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses ADD COLUMN paid_at DATE NULL`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses ADD INDEX idx_exp_payment_status (payment_status)`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(
+        `UPDATE expenses SET payment_status = 'paid', paid_amount = amount WHERE paid_amount IS NULL AND payment_status = 'unpaid'`
+      );
+    } catch (e) {
+      console.warn('  expense payment backfill:', e.message);
+    }
+
+    try {
+      await db.sequelize.query(
+        `ALTER TABLE purchase_orders ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'`
+      );
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN paid_amount DECIMAL(15,2) NULL`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN due_date DATE NULL`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE purchase_orders ADD INDEX idx_po_payment (payment_status)`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

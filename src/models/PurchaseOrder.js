@@ -23,6 +23,14 @@ module.exports = (sequelize, DataTypes) => {
       po_date: { type: DataTypes.DATEONLY, allowNull: false },
       expected_delivery: { type: DataTypes.STRING(255) },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'draft' },
+      payment_status: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: 'unpaid',
+        comment: 'unpaid | partial | paid',
+      },
+      paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true },
+      due_date: { type: DataTypes.DATEONLY, allowNull: true },
     },
     {
       tableName: 'purchase_orders',
@@ -35,6 +43,7 @@ module.exports = (sequelize, DataTypes) => {
         { fields: ['supplier_id'] },
         { fields: ['company_id'] },
         { fields: ['status'] },
+        { fields: ['payment_status'] },
       ],
     }
   );

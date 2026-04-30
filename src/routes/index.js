@@ -28,6 +28,8 @@ const workTypeRoutes = require('./workType.routes');
 const pdfRoutes = require('./pdf.routes');
 const tenantRoutes = require('./tenant.routes');
 const accountsRoutes = require('./accounts.routes');
+const receivablesRoutes = require('./receivables.routes');
+const payablesRoutes = require('./payables.routes');
 
 // PDF routes - must be before resource mounts so /quotations/:id/pdf matches
 router.use(pdfRoutes);
@@ -58,6 +60,8 @@ router.get('/', (req, res) => {
       'work-types': '/work-types',
       tenants: '/tenants',
       accounts: '/accounts',
+      receivables: '/receivables',
+      payables: '/payables',
       'accounts-expenses': '/accounts/expenses',
     },
   });
@@ -86,5 +90,7 @@ router.use('/work-orders', workOrderRoutes);
 router.use('/work-types', workTypeRoutes);
 router.use('/tenants', tenantRoutes);
 router.use('/accounts', accountsRoutes);
+router.use('/receivables', receivablesRoutes);
+router.use('/payables', payablesRoutes);
 
 module.exports = router;

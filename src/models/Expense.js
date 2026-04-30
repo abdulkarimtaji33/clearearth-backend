@@ -22,6 +22,14 @@ module.exports = (sequelize, DataTypes) => {
       notes: { type: DataTypes.TEXT },
       reference: { type: DataTypes.STRING(255), allowNull: true },
       reference_id: { type: DataTypes.STRING(255), allowNull: true },
+      payment_status: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: 'unpaid',
+        comment: 'unpaid | partial | paid',
+      },
+      paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true },
+      paid_at: { type: DataTypes.DATEONLY, allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
     },
     {
@@ -33,6 +41,7 @@ module.exports = (sequelize, DataTypes) => {
         { fields: ['tenant_id'] },
         { fields: ['expense_date'] },
         { fields: ['category'] },
+        { fields: ['payment_status'] },
       ],
     }
   );

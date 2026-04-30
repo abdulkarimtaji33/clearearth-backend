@@ -97,7 +97,7 @@ const _validateParty = async (tenantId, companyId, supplierId) => {
 };
 
 const create = async (tenantId, data) => {
-  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
+  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate } = data;
 
   await _validateParty(tenantId, companyId, supplierId);
   const hasC = companyId != null && companyId !== '';
@@ -126,6 +126,7 @@ const create = async (tenantId, data) => {
         po_date: poDate,
         expected_delivery: expectedDelivery || null,
         status: resolvedStatus,
+        due_date: dueDate != null && dueDate !== '' ? dueDate : null,
       },
       { transaction: t }
     );
@@ -167,7 +168,7 @@ const create = async (tenantId, data) => {
 
 const update = async (tenantId, poId, data) => {
   const po = await getById(tenantId, poId);
-  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status } = data;
+  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate } = data;
 
   let nextCompanyId = po.company_id;
   let nextSupplierId = po.supplier_id;
@@ -195,6 +196,7 @@ const update = async (tenantId, poId, data) => {
         po_date: poDate ?? po.po_date,
         expected_delivery: expectedDelivery !== undefined ? expectedDelivery : po.expected_delivery,
         status: status !== undefined ? status : po.status,
+        due_date: dueDate !== undefined ? (dueDate || null) : po.due_date,
       },
       { transaction: t }
     );

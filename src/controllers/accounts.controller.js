@@ -26,7 +26,7 @@ const getWorkOrder = asyncHandler(async (req, res) => {
 });
 
 const listExpenses = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dateFrom, dateTo, category } = req.query;
+  const { page, pageSize, search, dateFrom, dateTo, category, paymentStatus } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await expenseService.listLedgerExpenses(req.tenant.id, {
     ...pagination,
@@ -34,6 +34,7 @@ const listExpenses = asyncHandler(async (req, res) => {
     dateFrom,
     dateTo,
     category,
+    paymentStatus,
   });
   return ApiResponse.paginated(res, result.expenses, {
     page: pagination.page,
@@ -45,6 +46,11 @@ const listExpenses = asyncHandler(async (req, res) => {
 const createExpense = asyncHandler(async (req, res) => {
   const row = await expenseService.createManualExpense(req.tenant.id, req.user.id, req.body);
   return ApiResponse.created(res, row, 'Expense recorded');
+});
+
+const updateExpensePayment = asyncHandler(async (req, res) => {
+  const row = await expenseService.updateExpensePayment(req.tenant.id, req.params.id, req.body);
+  return ApiResponse.success(res, row, 'Expense payment updated');
 });
 
 const approveTaskExpense = asyncHandler(async (req, res) => {
@@ -72,6 +78,7 @@ module.exports = {
   getWorkOrder,
   listExpenses,
   createExpense,
+  updateExpensePayment,
   approveTaskExpense,
   rejectTaskExpense,
 };

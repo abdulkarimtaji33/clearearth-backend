@@ -24,6 +24,17 @@ const MANUAL_CATEGORIES = [
   'other',
 ];
 
+const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
+
+function deriveExpensePaymentStatus(amount, paidAmount) {
+  const total = parseFloat(amount) || 0;
+  const paid = parseFloat(paidAmount) || 0;
+  if (total <= 0) return paid > 0 ? 'paid' : 'unpaid';
+  if (paid <= 0) return 'unpaid';
+  if (paid >= total - 0.005) return 'paid';
+  return 'partial';
+}
+
 async function loadTaskExpenseInWorkOrder(tenantId, workOrderId, taskExpenseId) {
   const te = await db.WorkOrderTaskExpense.findByPk(taskExpenseId, {
     include: [
@@ -90,6 +101,9 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
         reference: WO_EXPENSE_REFERENCE,
         reference_id: String(workOrderId),
         created_by: userId,
+        payment_status: 'unpaid',
+        paid_amount: null,
+        paid_at: null,
       },
       { transaction: t }
     );
@@ -118,6 +132,9 @@ const createManualExpense = async (tenantId, userId, body) => {
     notes,
     reference,
     referenceId,
+    paymentStatus,
+    paidAmount,
+    paidAt,
   } = body;
 
   const cat = category != null ? String(category).trim().toLowerCase() : '';
@@ -126,10 +143,24 @@ const createManualExpense = async (tenantId, userId, body) => {
   }
   if (!expenseDate) throw ApiError.badRequest('expenseDate is required');
   const amt = parseFloat(amount);
-  if (!Number.isFinite(amt) || amt < 0) throw ApiError.badRequest('Valid amount is required');
+  if (!Number.isFinite(amt) || amt <= 0) throw ApiError.badRequest('Amount must be greater than zero');
 
   const ref = reference != null && String(reference).trim() !== '' ? String(reference).trim() : MANUAL_EXPENSE_REFERENCE;
   const refId = referenceId != null && String(referenceId).trim() !== '' ? String(referenceId).trim() : null;
+
+  let paid = paidAmount != null && paidAmount !== '' ? parseFloat(paidAmount) : null;
+  if (paid != null && (!Number.isFinite(paid) || paid < 0)) throw ApiError.badRequest('paidAmount must be a valid number');
+  if (paid != null && paid > amt) paid = amt;
+
+  let ps = paymentStatus != null ? String(paymentStatus).toLowerCase().trim() : null;
+  if (ps && !PAYMENT_STATUSES.includes(ps)) {
+    throw ApiError.badRequest(`paymentStatus must be one of: ${PAYMENT_STATUSES.join(', ')}`);
+  }
+  if (!ps) ps = deriveExpensePaymentStatus(amt, paid);
+  if (ps === 'paid' && (paid == null || paid === 0)) paid = amt;
+  if (ps === 'partial' && (paid == null || paid <= 0)) {
+    throw ApiError.badRequest('paidAmount is required when paymentStatus is partial');
+  }
 
   const row = await db.Expense.create({
     tenant_id: tenantId,
@@ -143,17 +174,64 @@ const createManualExpense = async (tenantId, userId, body) => {
     reference: ref,
     reference_id: refId,
     created_by: userId,
+    payment_status: ps,
+    paid_amount: paid,
+    paid_at: paidAt || (ps === 'paid' ? expenseDate : null),
   });
 
   return row;
 };
 
+const updateExpensePayment = async (tenantId, expenseId, body) => {
+  const exp = await db.Expense.findOne({ where: { id: expenseId, tenant_id: tenantId } });
+  if (!exp) throw ApiError.notFound('Expense not found');
+
+  const total = parseFloat(exp.amount) || 0;
+  let paid = parseFloat(exp.paid_amount) || 0;
+
+  if (body.amount != null && body.amount !== '') {
+    const add = parseFloat(body.amount);
+    if (!Number.isFinite(add) || add <= 0) throw ApiError.badRequest('amount must be a positive number');
+    paid = Math.min(total, paid + add);
+  }
+  if (body.paidAmount != null && body.paidAmount !== '') {
+    const set = parseFloat(body.paidAmount);
+    if (!Number.isFinite(set) || set < 0) throw ApiError.badRequest('paidAmount must be valid');
+    paid = Math.min(total, set);
+  }
+
+  const ps = deriveExpensePaymentStatus(total, paid);
+  const paidAt = body.paidAt != null && String(body.paidAt).trim() !== '' ? String(body.paidAt).trim().slice(0, 10) : exp.paid_at;
+
+  await exp.update({
+    paid_amount: paid > 0 ? paid : null,
+    payment_status: ps,
+    paid_at: ps === 'paid' ? (paidAt || exp.expense_date) : paid > 0 ? paidAt || exp.paid_at : null,
+    payment_method: body.paymentMethod !== undefined ? body.paymentMethod || null : exp.payment_method,
+  });
+
+  return exp.reload({
+    include: [
+      { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+      {
+        model: db.WorkOrderTaskExpense,
+        as: 'taskExpense',
+        required: false,
+        attributes: ['id', 'description', 'amount'],
+      },
+    ],
+  });
+};
+
 const listLedgerExpenses = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dateFrom, dateTo, category } = filters;
+  const { offset, limit, search, dateFrom, dateTo, category, paymentStatus } = filters;
   const where = { tenant_id: tenantId };
   applyDateOnlyColumnFilter(where, 'expense_date', dateFrom, dateTo);
   if (category && String(category).trim() !== '') {
     where.category = String(category).trim();
+  }
+  if (paymentStatus && String(paymentStatus).trim() !== '') {
+    where.payment_status = String(paymentStatus).trim().toLowerCase();
   }
   if (search) {
     const s = `%${String(search).trim()}%`;
@@ -232,6 +310,8 @@ module.exports = {
   approveTaskExpense,
   rejectTaskExpense,
   createManualExpense,
+  updateExpensePayment,
   listLedgerExpenses,
   STATUSES,
+  PAYMENT_STATUSES,
 };

@@ -114,6 +114,53 @@ const getById = async (tenantId, supplierId) => {
     return row;
   });
 
+  const payablesService = require('./payables.service');
+  const [purchaseOrders, expenses] = await Promise.all([
+    db.PurchaseOrder.findAll({
+      where: { tenant_id: tenantId, supplier_id: supplierId, status: 'approved' },
+      include: [
+        {
+          model: db.PurchaseOrderItem,
+          as: 'items',
+          include: [{ model: db.ProductService, as: 'productService', attributes: ['id', 'name'] }],
+        },
+        { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+      ],
+      order: [['created_at', 'DESC']],
+      limit: 100,
+    }),
+    db.Expense.findAll({
+      where: {
+        tenant_id: tenantId,
+        [Op.or]: [
+          { reference: 'supplier', reference_id: String(supplierId) },
+          ...(plain.company_name
+            ? [{ paid_to: { [Op.like]: `%${String(plain.company_name).replace(/%/g, '\\%')}%` } }]
+            : []),
+        ],
+      },
+      attributes: ['id', 'category', 'amount', 'expense_date', 'paid_to', 'payment_status', 'paid_amount', 'payment_method', 'reference', 'reference_id'],
+      order: [['expense_date', 'DESC']],
+      limit: 80,
+    }),
+  ]);
+
+  let payablesOutstanding = 0;
+  for (const po of purchaseOrders) {
+    payablesOutstanding += payablesService.balanceDue(po.get({ plain: true }));
+  }
+
+  plain.finance = {
+    purchaseOrders: purchaseOrders.map(p => {
+      const o = p.get({ plain: true });
+      o.po_total = payablesService.poTotal(o);
+      o.balance_due = payablesService.balanceDue(o);
+      return o;
+    }),
+    expenses: expenses.map(e => e.get({ plain: true })),
+    payablesOutstanding,
+  };
+
   return plain;
 };
 

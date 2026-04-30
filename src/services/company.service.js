@@ -77,6 +77,102 @@ const getAll = async (tenantId, filters) => {
   return { companies: rows, total: count };
 };
 
+async function loadCompanyFinanceSnapshot(tenantId, companyId) {
+  const deals = await db.Deal.findAll({
+    where: { tenant_id: tenantId, company_id: companyId },
+    attributes: ['id'],
+    paranoid: true,
+  });
+  const dealIds = deals.map(d => d.id);
+  if (!dealIds.length) {
+    return {
+      quotations: [],
+      proformaInvoices: [],
+      taxInvoices: [],
+      workOrders: [],
+      receivablesOutstanding: 0,
+      receivablesAging: { current: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0 },
+    };
+  }
+
+  const receivablesService = require('./receivables.service');
+
+  const [quotations, proformaInvoices, workOrders, taxInvoices] = await Promise.all([
+    db.Quotation.findAll({
+      where: { tenant_id: tenantId, deal_id: { [Op.in]: dealIds } },
+      attributes: ['id', 'deal_id', 'quotation_date', 'status', 'quotation_amount', 'currency'],
+      order: [['created_at', 'DESC']],
+      limit: 80,
+    }),
+    db.ProformaInvoice.findAll({
+      where: { tenant_id: tenantId, deal_id: { [Op.in]: dealIds } },
+      attributes: ['id', 'deal_id', 'quotation_id', 'proforma_number', 'invoice_date', 'due_date', 'total', 'currency'],
+      include: [
+        {
+          model: db.TaxInvoice,
+          as: 'taxInvoice',
+          required: false,
+          attributes: ['id', 'tax_invoice_number', 'payment_status', 'invoice_date', 'total', 'paid_amount'],
+        },
+      ],
+      order: [['created_at', 'DESC']],
+      limit: 80,
+    }),
+    db.WorkOrder.findAll({
+      where: { tenant_id: tenantId, deal_id: { [Op.in]: dealIds } },
+      attributes: ['id', 'deal_id', 'title', 'status', 'created_at'],
+      order: [['created_at', 'DESC']],
+      limit: 80,
+      paranoid: true,
+    }),
+    db.TaxInvoice.findAll({
+      where: { tenant_id: tenantId, payment_status: { [Op.in]: ['unpaid', 'partial'] } },
+      attributes: ['id', 'tax_invoice_number', 'invoice_date', 'due_date', 'total', 'paid_amount', 'payment_status', 'currency'],
+      include: [
+        {
+          model: db.ProformaInvoice,
+          as: 'proformaInvoice',
+          required: true,
+          attributes: ['id', 'proforma_number', 'deal_id'],
+          where: { deal_id: { [Op.in]: dealIds } },
+        },
+      ],
+      order: [['invoice_date', 'DESC']],
+      limit: 120,
+    }),
+  ]);
+
+  let receivablesOutstanding = 0;
+  const receivablesAging = { current: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0 };
+  for (const ti of taxInvoices) {
+    const bal = receivablesService.balanceDue(ti.get ? ti.get({ plain: true }) : ti);
+    if (bal <= 0.005) continue;
+    receivablesOutstanding += bal;
+    const plain = ti.get({ plain: true });
+    const dOpen = Math.floor(
+      (new Date() - new Date(`${plain.invoice_date}T12:00:00`)) / 86400000,
+    );
+    const b = dOpen <= 30 ? 'current' : dOpen <= 60 ? '31_60' : dOpen <= 90 ? '61_90' : 'over_90';
+    if (b === 'current') receivablesAging.current += bal;
+    else if (b === '31_60') receivablesAging.bucket_31_60 += bal;
+    else if (b === '61_90') receivablesAging.bucket_61_90 += bal;
+    else receivablesAging.bucket_over_90 += bal;
+  }
+
+  return {
+    quotations: quotations.map(q => q.get({ plain: true })),
+    proformaInvoices: proformaInvoices.map(p => p.get({ plain: true })),
+    taxInvoices: taxInvoices.map(t => {
+      const o = t.get({ plain: true });
+      o.balance_due = receivablesService.balanceDue(o);
+      return o;
+    }),
+    workOrders: workOrders.map(w => w.get({ plain: true })),
+    receivablesOutstanding,
+    receivablesAging,
+  };
+}
+
 const getById = async (tenantId, companyId, scope = {}) => {
   const where = await _buildCompanyWhereForSales(tenantId, companyId, scope.scopeUserId);
   const company = await db.Company.findOne({
@@ -101,7 +197,9 @@ const getById = async (tenantId, companyId, scope = {}) => {
     ],
   });
   if (!company) throw ApiError.notFound('Company not found');
-  return company;
+  const plain = company.get({ plain: true });
+  plain.finance = await loadCompanyFinanceSnapshot(tenantId, companyId);
+  return plain;
 };
 
 const create = async (tenantId, data, scope = {}) => {
@@ -163,7 +261,7 @@ const create = async (tenantId, data, scope = {}) => {
     }
   }
 
-  return getById(tenantId, company.id);
+  return getById(tenantId, company.id, scope);
 };
 
 const update = async (tenantId, companyId, data, scope = {}) => {
@@ -235,7 +333,7 @@ const update = async (tenantId, companyId, data, scope = {}) => {
     }
   }
 
-  return getById(tenantId, companyId);
+  return getById(tenantId, companyId, scope);
 };
 
 const remove = async (tenantId, companyId, scope = {}) => {
@@ -264,7 +362,7 @@ const addContact = async (tenantId, companyId, contactId, role, isPrimary, scope
     await link.update({ role: role || link.role, is_primary: isPrimary !== undefined ? isPrimary : link.is_primary });
   }
 
-  return getById(tenantId, companyId);
+  return getById(tenantId, companyId, scope);
 };
 
 const removeContact = async (tenantId, companyId, contactId, scope = {}) => {
@@ -278,7 +376,7 @@ const removeContact = async (tenantId, companyId, contactId, scope = {}) => {
     await company.update({ primary_contact_id: null });
   }
 
-  return getById(tenantId, companyId);
+  return getById(tenantId, companyId, scope);
 };
 
 async function _upsertContactLinks(companyId, contacts) {

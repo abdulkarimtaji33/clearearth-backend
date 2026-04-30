@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.get('/expenses', authorize('deals.read'), accountsController.listExpenses);
 router.post('/expenses', authorize('deals.update'), accountsController.createExpense);
+router.patch('/expenses/:id/payment', authorize('deals.update'), accountsController.updateExpensePayment);
 router.get('/work-orders', authorize('deals.read'), accountsController.listWorkOrders);
 router.get('/work-orders/:id', authorize('deals.read'), accountsController.getWorkOrder);
 router.post(
