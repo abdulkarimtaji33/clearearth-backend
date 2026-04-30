@@ -1069,6 +1069,23 @@ async function runMigration() {
       }
     }
 
+    // ── deal_items FK constraint (ON DELETE CASCADE) ─────────────────────────
+    console.log('Ensuring deal_items FK constraint...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE deal_items
+          ADD CONSTRAINT fk_deal_items_deal
+          FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+      console.log('  Added FK constraint on deal_items.deal_id');
+    } catch (e) {
+      if (isDuplicateSchemaError(e) || e.message?.includes('Duplicate key name') || e.message?.includes('fk_deal_items_deal')) {
+        console.log('  FK constraint already exists');
+      } else {
+        throw e;
+      }
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
