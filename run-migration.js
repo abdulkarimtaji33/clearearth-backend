@@ -1023,6 +1023,52 @@ async function runMigration() {
       if (!isDuplicateSchemaError(e)) throw e;
     }
 
+    // ── Operations Manager role ──────────────────────────────────────────────
+    // Permissions: deals.* (full - needed to manage work orders) + deals.read for deal view
+    console.log('Ensuring operations_manager role exists...');
+    {
+      const [[omRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
+      if (!omRow?.id) {
+        await db.sequelize.query(`
+          INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
+          VALUES (NULL, 'operations_manager', 'Operations Manager', 'Full access to Operations (work orders); view-only deals', 1, 'active', NOW(), NOW())
+        `);
+        const [[newOm]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
+        if (newOm?.id) {
+          const [dealPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE module = 'deals'`);
+          for (const p of dealPerms) {
+            await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [newOm.id, p.id] });
+          }
+          console.log('  Created operations_manager role');
+        }
+      } else {
+        console.log('  operations_manager role already exists');
+      }
+    }
+
+    // ── Accounts role ────────────────────────────────────────────────────────
+    // Permissions: deals.* (full - needed to manage invoices/expenses/receivables/payables) + deals.read for deal view
+    console.log('Ensuring accounts role exists...');
+    {
+      const [[acRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' AND tenant_id IS NULL LIMIT 1`);
+      if (!acRow?.id) {
+        await db.sequelize.query(`
+          INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
+          VALUES (NULL, 'accounts', 'Accounts', 'Full access to Accounts (invoices, receivables, payables, expenses); view-only deals', 1, 'active', NOW(), NOW())
+        `);
+        const [[newAc]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' AND tenant_id IS NULL LIMIT 1`);
+        if (newAc?.id) {
+          const [dealPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE module = 'deals'`);
+          for (const p of dealPerms) {
+            await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [newAc.id, p.id] });
+          }
+          console.log('  Created accounts role');
+        }
+      } else {
+        console.log('  accounts role already exists');
+      }
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
