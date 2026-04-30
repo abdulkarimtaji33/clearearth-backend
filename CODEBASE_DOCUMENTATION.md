@@ -7,7 +7,7 @@
 
 ## 1. Project overview
 
-Multi-tenant ERP for UAE recycling/waste: CRM (leads, contacts, companies, suppliers), deals (line items, VAT, WDS, inspections), quotations, **proforma invoices**, **tax invoices**, purchase orders, work orders (with per-task expenses and Accounts approval), **posted expenses ledger** (work-order lines + manual entries), roles/permissions, PDFs (Puppeteer), uploads. JWT carries `userId` and `tenantId`; data scoped by `tenant_id`. **Sales** users are scoped to own records via `scopeHelper` + services.
+Multi-tenant ERP for UAE recycling/waste: CRM (leads, contacts, companies, suppliers), deals (line items, VAT, WDS, inspections), quotations, **proforma invoices**, **tax invoices**, purchase orders, work orders (with per-task expenses and Accounts approval), **posted expenses ledger** (work-order lines + manual entries), **Receivables** (outstanding tax invoices with payment recording + aging summary), **Payables** (outstanding approved POs with payment recording + aging summary), **expense payment tracking** (`payment_status`, `paid_amount`, `paid_at`), **PO payment-status and due-date tracking**, **Company finance snapshot** (deals, quotations, invoices, work orders enriched on `getById`), **Supplier finance snapshot** (POs, expenses, outstanding payables on `getById`), roles/permissions, PDFs (Puppeteer), uploads. JWT carries `userId` and `tenantId`; data scoped by `tenant_id`. **Sales** users are scoped to own records via `scopeHelper` + services.
 
 ---
 
@@ -225,8 +225,9 @@ All routes **authenticate**; permissions as listed. **GET `/accounts/work-orders
 
 | Method | Path | Auth | Permission | Handler | Brief |
 |--------|------|------|------------|---------|--------|
-| GET | `/accounts/expenses` | Yes | `deals.read` | `listExpenses` | Paginated **expenses** ledger (work-order–sourced and manual); filters: search, category, date range |
-| POST | `/accounts/expenses` | Yes | `deals.update` | `createExpense` | **Manual** ledger row (`category`, `amount`, `expenseDate`, optional `paidTo`, `paymentMethod`, `notes`; `reference` defaults to `manual`) |
+| GET | `/accounts/expenses` | Yes | `deals.read` | `listExpenses` | Paginated **expenses** ledger (work-order–sourced and manual); filters: search, category, date range, `paymentStatus` |
+| POST | `/accounts/expenses` | Yes | `deals.update` | `createExpense` | **Manual** ledger row (`category`, `amount`, `expenseDate`, optional `paidTo`, `paymentMethod`, `notes`, `paymentStatus`, `paidAmount`, `paidAt`; `reference` defaults to `manual`) |
+| PATCH | `/accounts/expenses/:id/payment` | Yes | `deals.update` | `updateExpensePayment` | Record partial or full payment on an expense: body `{ amount, paymentDate? }` → updates `paid_amount` and `payment_status` (`unpaid` / `partial` / `paid`) |
 | GET | `/accounts/work-orders` | Yes | `deals.read` | `listWorkOrders` | Work orders for Accounts (prepared by scope for sales) |
 | GET | `/accounts/work-orders/:id` | Yes | `deals.read` | `getWorkOrder` | Same payload as WO detail; tasks include `expenses` with `accounts_status` |
 | POST | `/accounts/work-orders/:workOrderId/task-expenses/:taskExpenseId/approve` | Yes | `deals.update` | `approveTaskExpense` | Approve line → **Expense** row + `accounts_status` on task expense |
@@ -263,7 +264,27 @@ All routes **authenticate**; permissions as listed. **GET `/accounts/work-orders
 
 **Task payload (create/update `tasks[]`):** `dealId`, `title`, `notes`, `status` on WO; each task supports `workTypeId` (preferred, tenant-scoped `work_types.id`), `typeOfWork` (legacy free text if no id), **`expenses[]`** `{ amount, description? }` (or legacy single **`expense`**), `estimatedDuration`, `startDate`, `endDate`, `assignedTo`, `status`, `notes`. Service resolves `type_of_work` + `work_type_id` from `workTypeId` when present.
 
-### 3.23 Work types (catalog) — `/work-types`
+### 3.23 Receivables — `/receivables`
+
+Outstanding tax invoices (balance_due > 0) with payment recording and aging. All routes `authenticate`.
+
+| Method | Path | Auth | Permission | Handler | Brief |
+|--------|------|------|------------|---------|--------|
+| GET | `/receivables` | Yes | `deals.read` | `list` | Paginated outstanding receivables; filters: `companyId`, `dateFrom`, `dateTo`, `search`; each row includes `balance_due`, `overdue_days` |
+| GET | `/receivables/aging-summary` | Yes | `deals.read` | `agingSummary` | Aging buckets (current, 31-60, 61-90, 90+ days) per company with per-row breakdown |
+| POST | `/receivables/:id/payment` | Yes | `deals.update` | `recordPayment` | Body `{ amount, paymentDate?, notes? }` → updates `paid_amount` on the tax invoice; recalculates `payment_status` |
+
+### 3.24 Payables — `/payables`
+
+Outstanding approved purchase orders (balance_due > 0) with payment recording and aging. All routes `authenticate`.
+
+| Method | Path | Auth | Permission | Handler | Brief |
+|--------|------|------|------------|---------|--------|
+| GET | `/payables` | Yes | `deals.read` | `list` | Paginated outstanding payables; filters: `supplierId`, `dateFrom`, `dateTo`, `search`; each row includes `balance_due`, `overdue_days` |
+| GET | `/payables/aging-summary` | Yes | `deals.read` | `agingSummary` | Aging buckets (current, 31-60, 61-90, 90+ days) per supplier with per-row breakdown |
+| POST | `/payables/:id/payment` | Yes | `deals.update` | `recordPayment` | Body `{ amount, dueDate?, notes? }` → updates `paid_amount` + optional `due_date` on the PO; recalculates `payment_status` |
+
+### 3.25 Work types (catalog) — `/work-types`
 
 Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/index.js`.
 
@@ -275,7 +296,7 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | PUT | `/work-types/:id` | Yes | `deals.update` | `update` | Same; **`isDefault`** toggles that row only (no clearing of other types) |
 | DELETE | `/work-types/:id` | Yes | `deals.delete` | `remove` | Blocked if referenced by `work_order_tasks.work_type_id` |
 
-### 3.24 Tenants — `/tenants`
+### 3.26 Tenants — `/tenants`
 
 | Method | Path | Auth | Permission | Handler | Brief |
 |--------|------|------|------------|---------|--------|
@@ -394,7 +415,9 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `workType.controller.js` | `getAll`, `getById`, `create`, `update`, `remove` | `workType.service` — CRUD for `WorkType` |
 | `proformaInvoice.controller.js` | `previewFromQuotation`, `getAll`, `getById`, `create`, `update`, `remove` | `proformaInvoice.service`; `getSalesScope` on preview/list/getById |
 | `taxInvoice.controller.js` | `previewFromProforma`, `getAll`, `getById`, `create`, `update`, `remove` | `taxInvoice.service`; `getSalesScope` on preview/list/getById |
-| `accounts.controller.js` | `listWorkOrders`, `getWorkOrder`, `listExpenses`, `createExpense`, `approveTaskExpense`, `rejectTaskExpense` | `workOrder.service` + `expense.service` |
+| `accounts.controller.js` | `listWorkOrders`, `getWorkOrder`, `listExpenses`, `createExpense`, `approveTaskExpense`, `rejectTaskExpense`, `updateExpensePayment` | `workOrder.service` + `expense.service`; `updateExpensePayment` records a payment against an individual expense row |
+| `receivables.controller.js` | `list`, `recordPayment`, `agingSummary` | Thin wrappers over `receivables.service`; `getSalesScope` not applied (finance module — all records visible) |
+| `payables.controller.js` | `list`, `recordPayment`, `agingSummary` | Thin wrappers over `payables.service` |
 
 ---
 
@@ -428,14 +451,14 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `update` | |
 | | `remove` | |
 | `company.service.js` | `getAll` | Sales: accessible company IDs |
-| | `getById` | |
+| | `getById` | Includes contacts; appends **`plain.finance`** via `loadCompanyFinanceSnapshot`: deals (count + recent), quotations, proforma invoices, tax invoices, work orders |
 | | `create` | |
 | | `update` | |
 | | `remove` | |
 | | `addContact` | `company_contacts` junction |
 | | `removeContact` | |
 | `supplier.service.js` | `getAll` | Search/filters |
-| | `getById` | Includes contacts |
+| | `getById` | Includes contacts; appends **`plain.finance`**: purchase orders (count + recent), expenses linked to supplier, outstanding payables balance |
 | | `create` | Optional nested contacts |
 | | `update` | |
 | | `remove` | |
@@ -478,13 +501,20 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | | `update`, `remove` | Patch / delete |
 | `expense.service.js` | `approveTaskExpense` | Validates pending task expense; creates **`Expense`** row (`work_order_task_expense_id` linked); sets approved |
 | | `rejectTaskExpense` | Sets `accounts_status` rejected |
-| | `createManualExpense` | Manual ledger row (`work_order_task_expense_id` null); categories: travel, utility, fuel, materials, equipment, professional, other |
-| | `listLedgerExpenses` | Paginated **Expense** with optional `taskExpense` join (null for manual rows) |
+| | `createManualExpense` | Manual ledger row (`work_order_task_expense_id` null); supports `paymentStatus` (`unpaid`/`partial`/`paid`), `paidAmount`, `paidAt`; amount must be > 0 |
+| | `updateExpensePayment` | Record a payment against an expense: cumulates `paid_amount`, sets `payment_status` → `partial` or `paid`; rejects if new total exceeds `amount` |
+| | `listLedgerExpenses` | Paginated **Expense** with optional `taskExpense` join; supports `paymentStatus` filter |
+| `receivables.service.js` | `listReceivables` | Tax invoices with `balance_due > 0`; filters: `companyId`, `dateFrom`, `dateTo`, `search`; computes `balance_due = total - paid_amount`, `overdue_days` |
+| | `recordPayment` | Applies payment to a tax invoice: adds to `paid_amount`, sets `payment_status` (`unpaid`/`partial`/`paid`) |
+| | `getAgingSummary` | Groups outstanding receivables by company into aging buckets (current 0-30, 31-60, 61-90, 90+) |
+| `payables.service.js` | `listPayables` | Approved POs with `balance_due > 0`; filters: `supplierId`, `dateFrom`, `dateTo`, `search`; computes `balance_due`, `overdue_days` from `due_date` |
+| | `recordPayment` | Applies payment to a PO: updates `paid_amount` + optional `due_date`; sets `payment_status` |
+| | `getAgingSummary` | Groups outstanding payables by supplier into aging buckets (current 0-30, 31-60, 61-90, 90+) |
 | `purchaseOrder.service.js` | `getAll` | Search on supplier/company names |
 | | `getById` | |
 | | `_validateParty` | Exactly one of company or supplier |
-| | `create` | Transaction items + PO terms; default `status` = `approved` if `supplier_id`, else `draft` |
-| | `update` | Replace items/terms if provided |
+| | `create` | Transaction items + PO terms; default `status` = `approved` if `supplier_id`, else `draft`; accepts `dueDate`, `paymentStatus`, `paidAmount` |
+| | `update` | Replace items/terms if provided; updates `due_date` when `dueDate` sent |
 | | `remove` | |
 | `inspectionRequest.service.js` | `getAll` | Deals with inspection request; role-based visibility |
 | | `getById` | |
@@ -662,6 +692,13 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `createAccountsExpense(data)` | POST `/accounts/expenses` |
 | `approveAccountsTaskExpense(workOrderId, taskExpenseId, data)` | POST `/accounts/work-orders/:workOrderId/task-expenses/:taskExpenseId/approve` |
 | `rejectAccountsTaskExpense(workOrderId, taskExpenseId)` | POST `/accounts/work-orders/:workOrderId/task-expenses/:taskExpenseId/reject` |
+| `patchAccountsExpensePayment(id, data)` | PATCH `/accounts/expenses/:id/payment` |
+| `getReceivables(params)` | GET `/receivables` |
+| `postReceivablePayment(id, data)` | POST `/receivables/:id/payment` |
+| `getReceivablesAgingSummary(params)` | GET `/receivables/aging-summary` |
+| `getPayables(params)` | GET `/payables` |
+| `postPayablePayment(id, data)` | POST `/payables/:id/payment` |
+| `getPayablesAgingSummary(params)` | GET `/payables/aging-summary` |
 | `getPurchaseOrders(params)` | GET `/purchase-orders` |
 | `getPurchaseOrder(id)` | GET `/purchase-orders/:id` |
 | `createPurchaseOrder(data)` | POST `/purchase-orders` |
@@ -732,7 +769,9 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
 | `/erp/quotations/create`, `.../view/:id`, `.../edit/:id` | QuotationForm / **QuotationView** |
 | `/erp/proforma-invoices`, `.../create/:quotationId`, `.../view/:id` | Proforma list / create from quotation / view |
 | `/erp/tax-invoices`, `.../create/:proformaId`, `.../view/:id` | Tax invoice list / create from proforma / view |
-| `/erp/accounts/expenses`, `.../expenses/create`, `.../work-orders`, `.../work-orders/view/:id` | Posted expenses, manual expense form, Accounts work orders |
+| `/erp/accounts/expenses`, `.../expenses/create`, `.../work-orders`, `.../work-orders/view/:id` | Posted expenses (with payment status filter + "Record payment" dialog), manual expense form (with payment status on create), Accounts work orders |
+| `/erp/receivables`, `/erp/receivables/aging` | **ReceivablesList** (outstanding tax invoices, record payment dialog) / **AgingSummaryView** (aging buckets by company) |
+| `/erp/payables`, `/erp/payables/aging` | **PayablesList** (outstanding approved POs, record payment dialog) / **PayablesAgingSummaryView** (aging buckets by supplier) |
 | `/erp/purchase-orders`, `.../create`, `.../view/:id`, `.../edit/:id` | PurchaseOrderList / **PurchaseOrderView** / PurchaseOrderForm |
 | `/erp/client-purchase-orders`, `/erp/supplier-purchase-orders` | Approved PO lists (client vs vendor) |
 | `/erp/roles`, `.../create`, `.../edit/:id` | Roles |
@@ -773,13 +812,16 @@ Tenant-scoped labels for work-order task “type of work”. Mounted in `routes/
   - Add **`deal_inspection_requests.status`** ENUM + seed **`inspection_requests.update`** permission
   - Refresh lookup rows: **`deal_statuses`**, **`quotation_statuses`**, **`purchase_order_statuses`**
   - Other historical patches (companies/suppliers docs, reference codes, etc.)
+  - Add **`expenses.payment_status`** (ENUM `unpaid`/`partial`/`paid`, default `unpaid`), **`expenses.paid_amount`** (DECIMAL), **`expenses.paid_at`** (DATETIME), **`expenses.due_date`** (DATE)
+  - Add **`purchase_orders.payment_status`** (same ENUM), **`purchase_orders.paid_amount`** (DECIMAL), **`purchase_orders.due_date`** (DATE); backfills `payment_status = 'unpaid'` for existing rows
 - **`20260401000000-add-work-types.js`:** Creates `work_types` (FK to `tenants`, unique `(tenant_id, name)`), adds `work_order_tasks.work_type_id` FK to `work_types`.
+- **`20260428000000-add-expense-payment-status.js`:** Sequelize-style migration (reference only; same schema changes as `run-migration.js` for the expense payment columns).
 
 ---
 
 ## 11. Sequelize models (`src/models/*.js`)
 
-Each file default-exports a **factory** `(sequelize, DataTypes) => Model` with `Model.associate(db)`. No standalone functions. Files: `Tenant`, `User`, `Role`, `Permission`, `RolePermission`, `AuditLog`, `Contact`, `CompanyContact`, `Company`, `SupplierContact`, `Supplier`, `Lead`, `ProductService`, `Deal`, **`DealItem`** (includes **`unit_of_measure`**), `DealWds`, `DealWdsAttachment`, `DealInspectionRequest`, `DealInspectionReport`, `DealImage`, `DealTerm`, `MaterialType`, `termsAndConditions.model`, `Designation`, `IndustryType`, `UaeCity`, `Country`, `LeadSource`, `ContactRole`, `ServiceInterest`, `ProductCategory`, `UnitOfMeasure`, `DealStatus`, `PaymentStatus`, `Status`, `QuotationStatus`, `PurchaseOrderStatus`, `Quotation`, `PurchaseOrder`, `PurchaseOrderItem`, `PurchaseOrderTerm`, **`ProformaInvoice`**, **`ProformaInvoiceItem`**, **`TaxInvoice`**, **`TaxInvoiceItem`**, **`Expense`** (ledger; optional FK to **`work_order_task_expenses`** for approved lines), `WorkOrder`, **`WorkOrderTask`**, **`WorkOrderTaskExpense`** (Accounts approval fields; CASCADE delete with task), **`WorkType`** (includes **`is_default`**). `WorkOrderTask` belongs to `WorkType` (`work_type_id`); **`hasMany` `WorkOrderTaskExpense`**. Wired in `models/index.js`.
+Each file default-exports a **factory** `(sequelize, DataTypes) => Model` with `Model.associate(db)`. No standalone functions. Files: `Tenant`, `User`, `Role`, `Permission`, `RolePermission`, `AuditLog`, `Contact`, `CompanyContact`, `Company`, `SupplierContact`, `Supplier`, `Lead`, `ProductService`, `Deal`, **`DealItem`** (includes **`unit_of_measure`**), `DealWds`, `DealWdsAttachment`, `DealInspectionRequest`, `DealInspectionReport`, `DealImage`, `DealTerm`, `MaterialType`, `termsAndConditions.model`, `Designation`, `IndustryType`, `UaeCity`, `Country`, `LeadSource`, `ContactRole`, `ServiceInterest`, `ProductCategory`, `UnitOfMeasure`, `DealStatus`, `PaymentStatus`, `Status`, `QuotationStatus`, `PurchaseOrderStatus`, `Quotation`, **`PurchaseOrder`** (now includes **`payment_status`**, **`paid_amount`**, **`due_date`**), `PurchaseOrderItem`, `PurchaseOrderTerm`, **`ProformaInvoice`**, **`ProformaInvoiceItem`**, **`TaxInvoice`**, **`TaxInvoiceItem`**, **`Expense`** (ledger; optional FK to **`work_order_task_expenses`** for approved lines; now includes **`payment_status`**, **`paid_amount`**, **`paid_at`**), `WorkOrder`, **`WorkOrderTask`**, **`WorkOrderTaskExpense`** (Accounts approval fields; CASCADE delete with task), **`WorkType`** (includes **`is_default`**). `WorkOrderTask` belongs to `WorkType` (`work_type_id`); **`hasMany` `WorkOrderTaskExpense`**. Wired in `models/index.js`.
 
 ---
 
@@ -814,7 +856,12 @@ Exports objects only (no functions): `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATU
 - **Work orders:** **WorkOrderView** supports drag-reorder, sequential task unlock (previous completed or noted), inline **task notes** (PATCH notes endpoint), and **multiple expenses per task** on create/edit forms. **Manage types of work** (`WorkTypesManageDialog`) sends **`isDefault`** in **`/work-types`** create/update; **WorkOrderForm** seeds **one task per default** type (`is_default`) on new WOs (order follows list sort).
 - **Quotations:** List **Items** column uses nested **`deal.items`**; read-only **view** shows deal line items; links to **proforma** create/view where applicable.
 - **Proforma & tax invoices:** Create proforma from an approved quotation; create tax invoice from a proforma (one tax invoice per proforma). **Tax invoice** form may attach a file via **`uploadTaxInvoiceAttachment`**.
-- **Accounts:** **Posted expenses** lists ledger rows (work-order approvals + manual **Add expense**). **Accounts → Work orders** lists WOs and supports approve/reject on pending task expense lines.
+- **Accounts:** **Posted expenses** lists ledger rows (work-order approvals + manual **Add expense**) with a `paymentStatus` filter chip; each row has a **Record payment** button (hidden when `balance_due ≤ 0`) that opens a dialog to record partial/full payment. **ExpenseCreate** form includes a Settlement select, paid amount, and paid-at date (with validation for partial payments). **Accounts → Work orders** lists WOs and supports approve/reject on pending task expense lines.
+- **Receivables:** **ReceivablesList** shows outstanding tax invoices with `balance_due`, `overdue_days`, currency; **Record payment** dialog validates amount > 0 and ≤ balance_due, strips commas from input. **AgingSummaryView** shows totals per bucket (current, 31-60, 61-90, 90+) as cards + per-company table.
+- **Payables:** **PayablesList** shows outstanding approved POs; **Record payment** dialog also accepts an optional updated due date. **PayablesAgingSummaryView** mirrors the receivables aging layout per supplier.
+- **Company view:** Tabbed layout (Overview, Invoices, Receivables, Work Orders); Invoices tab shows Quotations, Proforma Invoices, Tax Invoices; Receivables tab shows outstanding balances; currency pulled from each record (not hardcoded).
+- **Supplier view:** Tabbed layout (Overview, Purchase Orders, Expenses, Payables); each tab lists related records; currency pulled from each record.
+- **Work order view:** For completed work orders, shows **Create Proforma Invoice**, **Create Tax Invoice**, and **View Tax Invoice** buttons; proforma/tax invoice lookup is scoped to the WO's deal and sorted by `created_at` descending to always reference the correct quotation.
 
 ---
 
