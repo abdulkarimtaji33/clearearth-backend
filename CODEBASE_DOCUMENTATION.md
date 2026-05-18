@@ -867,12 +867,12 @@ Exports objects only (no functions): `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATU
 
 ## 16. Production VPS deployment (reference)
 
-**Server:** `root@72.60.223.25` (hostname `srv1457820`). **Paths:** `/var/www/clearearth-backend`, `/var/www/clearearth-frontend`. **Process manager:** PM2 app name **`clearearth-api`** (Express on `127.0.0.1:3000`). **Web:** nginx default vhost serves **`/var/www/clearearth-frontend/dist`**; `location /api` and `/uploads` reverse-proxy to port 3000.
+**Server:** `root@72.60.223.25` (hostname `srv1457820`). **Paths:** `/var/www/clearearth-backend`, `/var/www/clearearth-frontend`. **Process manager:** PM2 app name **`clearearth-api`** (Express on `127.0.0.1:3000`). **Web:** nginx listens on **8080** for **`/var/www/clearearth-frontend/dist`** plus `location /api` and `/uploads` → port 3000; port **80** does not serve this SPA.
 
 **Typical deploy after `git push` to `main`:**
 
 1. **Backend:** `cd /var/www/clearearth-backend && git pull && npm ci` (or `npm install`) **`&& npm run run-migration`** (same as `node run-migration.js`; idempotent; see §10) **`&& pm2 restart clearearth-api`**. Confirm: `pm2 logs clearearth-api --lines 30`. Use **`SKIP_MIGRATE=1`** in deploy script only when DB changes are not part of that release.
-2. **Frontend:** `cd /var/www/clearearth-frontend && git pull && npm ci && npm run build` (outputs to `dist/`). No separate PM2 for static assets; nginx already points at `dist`.
+2. **Frontend:** `cd /var/www/clearearth-frontend && git pull && npm ci && npm run build` (outputs to `dist/`). No separate PM2 for static assets; nginx serves `dist` on **8080**.
 
 See also repo **`DEPLOYMENT.md`**, **`DEPLOYMENT_GUIDE.md`**, and **`scripts/deploy-production.sh`** (optional `SKIP_MIGRATE` / `SKIP_NGINX_RELOAD`).
 

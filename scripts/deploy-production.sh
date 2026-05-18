@@ -3,7 +3,7 @@
 # Server layout:
 #   /var/www/clearearth-backend   — API repo, PM2 name clearearth-api, node src/server.js, port from .env (nginx → 3000)
 #   /var/www/clearearth-frontend  — SPA repo, Vite build → dist/, nginx root
-#   nginx: /etc/nginx/sites-available/clearearth → static + proxy /api and /uploads to Node
+#   nginx: /etc/nginx/sites-available/clearearth → listen :8080, static + proxy /api and /uploads to Node (port 80 not used for this app)
 #
 # Usage (Git Bash / WSL / macOS / Linux):
 #   chmod +x scripts/deploy-production.sh

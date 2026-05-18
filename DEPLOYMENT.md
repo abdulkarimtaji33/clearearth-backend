@@ -8,7 +8,9 @@
 | **Frontend path** | `/var/www/clearearth-frontend` |
 | **Backend path** | `/var/www/clearearth-backend` |
 | **API (Node)** | PM2 process `clearearth-api` → `src/server.js`, listens on port **3000** |
-| **Web** | Nginx serves static SPA from `/var/www/clearearth-frontend/dist`; `/api` and `/uploads` proxy to `http://127.0.0.1:3000` |
+| **Frontend URL** | `http://72.60.223.25:8080/` (SPA + same `/api` and `/uploads` proxies as before) |
+| **Port 80** | Clearearth is **not** served on `/`; keep default vhost empty or unrelated apps only (see `DEPLOYMENT_GUIDE.md`) |
+| **Web** | Nginx **:8080**: static SPA from `/var/www/clearearth-frontend/dist`; `/api` and `/uploads` → `http://127.0.0.1:3000` |
 | **Nginx site** | `/etc/nginx/sites-available/clearearth` (symlink `sites-enabled/clearearth`) |
 
 ## Git remotes (on server)
@@ -30,7 +32,7 @@ npm ci   # or: npm install
 npm run build
 ```
 
-Nginx already points at `dist/`; no restart needed for static files. Optional: `sudo nginx -t && sudo systemctl reload nginx`.
+Nginx serves `dist/` on **8080**; no restart needed for static files. After changing nginx: `sudo nginx -t && sudo systemctl reload nginx`. Open firewall if needed: `sudo ufw allow 8080/tcp`.
 
 ---
 

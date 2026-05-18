@@ -238,21 +238,29 @@ Create/edit Nginx site config:
 sudo nano /etc/nginx/sites-available/clearearth
 ```
 
-**Content** (replace `YOUR_SERVER_IP` with your IP or domain):
+**Content** (replace `YOUR_SERVER_IP` with your IP or domain). Clearearth SPA is on **port 8080**; **port 80** stays without this app (empty/no SPA at `http://IP/`).
 
 ```nginx
+# Port 80 — no Clearearth frontend (omit this block if another site already owns :80)
 server {
-    listen 80;
-    server_name YOUR_SERVER_IP;   # or yourdomain.com
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name YOUR_SERVER_IP _;
+    return 204;
+}
 
-    # Frontend (Vite build output)
+# Clearearth — SPA + API on a dedicated port
+server {
+    listen 8080;
+    listen [::]:8080;
+    server_name YOUR_SERVER_IP;
+
     root /var/www/clearearth-frontend/dist;
     index index.html;
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # API proxy
     location /api/ {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -262,7 +270,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Uploads (static files from backend)
     location /uploads/ {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -285,7 +292,8 @@ sudo systemctl reload nginx
 
 ```bash
 sudo ufw allow 22/tcp    # SSH
-sudo ufw allow 80/tcp    # HTTP
+sudo ufw allow 80/tcp    # HTTP (optional if you use :80)
+sudo ufw allow 8080/tcp # Clearearth frontend
 sudo ufw allow 443/tcp   # HTTPS (if adding SSL later)
 sudo ufw enable
 ```
@@ -317,12 +325,12 @@ After migration, super admin exists:
 | 8 | Backend .env | Copy .env.example, fill DB + JWT secrets |
 | 9 | Backend migrate | `node run-migration.js` |
 | 10 | Backend seed | `node src/database/seed.js` |
-| 11 | Frontend .env.production | `VITE_API_URL=http://YOUR_IP/api/v1` |
+| 11 | Frontend .env.production | `VITE_API_URL=/api/v1` (same origin on `:8080`) |
 | 12 | Frontend build | `npm run build` |
 | 13 | PM2 start | `pm2 start src/server.js --name clearearth-api` |
 | 14 | PM2 startup | `pm2 save` + `pm2 startup` |
 | 15 | Nginx config | Configure and reload |
-| 16 | Test | Open `http://YOUR_IP` |
+| 16 | Test | Open `http://YOUR_IP:8080` (`http://YOUR_IP` has no Clearearth SPA) |
 
 ---
 
