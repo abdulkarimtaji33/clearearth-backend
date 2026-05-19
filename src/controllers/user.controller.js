@@ -51,4 +51,9 @@ const remove = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'User deleted successfully');
 });
 
-module.exports = { getAll, getInspectors, getById, create, update, remove };
+const changePassword = asyncHandler(async (req, res) => {
+  const user = await userService.changePassword(req.tenant.id, req.params.id, req.body.password);
+  return ApiResponse.success(res, user, 'Password updated successfully');
+});
+
+module.exports = { getAll, getInspectors, getById, create, update, remove, changePassword };

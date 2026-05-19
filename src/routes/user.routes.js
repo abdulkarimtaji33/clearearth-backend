@@ -31,9 +31,16 @@ const updateUserValidation = [
   validate,
 ];
 
+const changePasswordValidation = [
+  param('id').isInt().withMessage('Valid user ID is required'),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  validate,
+];
+
 // Routes
 router.get('/', authorize('users.read'), userController.getAll);
 router.get('/inspectors', authorize('inspection_requests.read', 'inspection_reports.create', 'users.read'), userController.getInspectors);
+router.put('/:id/password', authorize('users.update'), changePasswordValidation, userController.changePassword);
 router.get('/:id', authorize('users.read'), userController.getById);
 router.post('/', authorize('users.create'), createUserValidation, userController.create);
 router.put('/:id', authorize('users.update'), updateUserValidation, userController.update);

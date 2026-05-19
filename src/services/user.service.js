@@ -116,4 +116,17 @@ const remove = async (tenantId, userId) => {
   await user.destroy();
 };
 
-module.exports = { getAll, getInspectors, getById, create, update, remove };
+const changePassword = async (tenantId, userId, password) => {
+  const user = await db.User.findOne({
+    where: { id: userId, tenant_id: tenantId },
+    include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
+  });
+  if (!user) throw ApiError.notFound('User not found');
+
+  const hashedPassword = await hashPassword(password);
+  await user.update({ password: hashedPassword });
+
+  return await getById(tenantId, userId);
+};
+
+module.exports = { getAll, getInspectors, getById, create, update, remove, changePassword };
