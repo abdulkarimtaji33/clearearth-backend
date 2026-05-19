@@ -5,6 +5,8 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
+const jeService = require('./journalEntry.service');
+const { EXPENSE_CATEGORY_TO_CODE } = require('./chartOfAccounts.service');
 
 const STATUSES = ['pending', 'approved', 'rejected'];
 
@@ -116,6 +118,24 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
       },
       { transaction: t }
     );
+
+    // GL: Dr Cost of Services (5000) / Cr Accrued Expenses (2200)
+    try {
+      const cosId    = await jeService.getSystemAccountId(tenantId, '5000');
+      const accruId  = await jeService.getSystemAccountId(tenantId, '2200');
+      await jeService.createJournalEntry(tenantId, userId, {
+        entryDate: expenseDate,
+        description: `Work Order Expense Approved — WO #${workOrderId}`,
+        sourceType: 'expense',
+        sourceId: exp.id,
+        lines: [
+          { accountId: cosId,   debit: amt, credit: 0 },
+          { accountId: accruId, debit: 0,   credit: amt },
+        ],
+      }, t);
+    } catch (jeErr) {
+      console.warn('[GL] expense (approve) journal entry skipped:', jeErr.message);
+    }
   });
 
   const workOrderService = require('./workOrder.service');
@@ -162,22 +182,54 @@ const createManualExpense = async (tenantId, userId, body) => {
     throw ApiError.badRequest('paidAmount is required when paymentStatus is partial');
   }
 
-  const row = await db.Expense.create({
-    tenant_id: tenantId,
-    work_order_task_expense_id: null,
-    category: cat,
-    amount: amt,
-    expense_date: expenseDate,
-    paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : null,
-    payment_method: paymentMethod || null,
-    notes: notes || null,
-    reference: ref,
-    reference_id: refId,
-    created_by: userId,
-    payment_status: ps,
-    paid_amount: paid,
-    paid_at: paidAt || (ps === 'paid' ? expenseDate : null),
-  });
+  const t = await db.sequelize.transaction();
+  let row;
+  try {
+    row = await db.Expense.create(
+      {
+        tenant_id: tenantId,
+        work_order_task_expense_id: null,
+        category: cat,
+        amount: amt,
+        expense_date: expenseDate,
+        paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : null,
+        payment_method: paymentMethod || null,
+        notes: notes || null,
+        reference: ref,
+        reference_id: refId,
+        created_by: userId,
+        payment_status: ps,
+        paid_amount: paid,
+        paid_at: paidAt || (ps === 'paid' ? expenseDate : null),
+      },
+      { transaction: t }
+    );
+
+    // GL: Dr expense account / Cr Accrued Expenses (2200) or Cash (1000) if paid immediately
+    try {
+      const expCode  = EXPENSE_CATEGORY_TO_CODE[cat] || '5100';
+      const expAccId = await jeService.getSystemAccountId(tenantId, expCode);
+      const creditCode = ps === 'paid' ? '1000' : '2200';
+      const creditId   = await jeService.getSystemAccountId(tenantId, creditCode);
+      await jeService.createJournalEntry(tenantId, userId, {
+        entryDate: expenseDate,
+        description: `Manual Expense — ${cat}`,
+        sourceType: 'expense',
+        sourceId: row.id,
+        lines: [
+          { accountId: expAccId, debit: amt, credit: 0 },
+          { accountId: creditId, debit: 0,   credit: amt },
+        ],
+      }, t);
+    } catch (jeErr) {
+      console.warn('[GL] manual expense journal entry skipped:', jeErr.message);
+    }
+
+    await t.commit();
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
 
   return row;
 };
@@ -203,12 +255,46 @@ const updateExpensePayment = async (tenantId, expenseId, body) => {
   const ps = deriveExpensePaymentStatus(total, paid);
   const paidAt = body.paidAt != null && String(body.paidAt).trim() !== '' ? String(body.paidAt).trim().slice(0, 10) : exp.paid_at;
 
-  await exp.update({
-    paid_amount: paid > 0 ? paid : null,
-    payment_status: ps,
-    paid_at: ps === 'paid' ? (paidAt || exp.expense_date) : paid > 0 ? paidAt || exp.paid_at : null,
-    payment_method: body.paymentMethod !== undefined ? body.paymentMethod || null : exp.payment_method,
-  });
+  const prevPaid = parseFloat(exp.paid_amount) || 0;
+  const delta    = Math.max(0, paid - prevPaid);
+
+  const t = await db.sequelize.transaction();
+  try {
+    await exp.update(
+      {
+        paid_amount: paid > 0 ? paid : null,
+        payment_status: ps,
+        paid_at: ps === 'paid' ? (paidAt || exp.expense_date) : paid > 0 ? paidAt || exp.paid_at : null,
+        payment_method: body.paymentMethod !== undefined ? body.paymentMethod || null : exp.payment_method,
+      },
+      { transaction: t }
+    );
+
+    // GL: Dr Accrued Expenses (2200) / Cr Cash (1000) — only for incremental payment
+    if (delta > 0.005) {
+      try {
+        const accruId = await jeService.getSystemAccountId(tenantId, '2200');
+        const cashId  = await jeService.getSystemAccountId(tenantId, '1000');
+        await jeService.createJournalEntry(tenantId, exp.created_by || 1, {
+          entryDate: paidAt || new Date().toISOString().slice(0, 10),
+          description: `Expense Payment — ${exp.category}`,
+          sourceType: 'expense_payment',
+          sourceId: exp.id,
+          lines: [
+            { accountId: accruId, debit: delta, credit: 0 },
+            { accountId: cashId,  debit: 0,     credit: delta },
+          ],
+        }, t);
+      } catch (jeErr) {
+        console.warn('[GL] expense_payment journal entry skipped:', jeErr.message);
+      }
+    }
+
+    await t.commit();
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
 
   return exp.reload({
     include: [

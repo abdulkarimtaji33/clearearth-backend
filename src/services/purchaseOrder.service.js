@@ -5,6 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
+const jeService = require('./journalEntry.service');
 
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo } = filters;
@@ -160,6 +161,29 @@ const create = async (tenantId, data) => {
       }
     }
 
+    // GL: Dr Cost of Services (5000) / Cr AP (2000) if created directly as 'approved'
+    if (resolvedStatus === 'approved') {
+      try {
+        const poTotal = items.reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
+        if (poTotal > 0.005) {
+          const cosId = await jeService.getSystemAccountId(tenantId, '5000');
+          const apId  = await jeService.getSystemAccountId(tenantId, '2000');
+          await jeService.createJournalEntry(tenantId, 1, {
+            entryDate: poDate || new Date().toISOString().slice(0, 10),
+            description: `PO Approved — PO #${newPo.id}`,
+            sourceType: 'purchase_order_approved',
+            sourceId: newPo.id,
+            lines: [
+              { accountId: cosId, debit: poTotal, credit: 0 },
+              { accountId: apId,  debit: 0,       credit: poTotal },
+            ],
+          }, t);
+        }
+      } catch (jeErr) {
+        console.warn('[GL] purchase_order_approved (create) journal entry skipped:', jeErr.message);
+      }
+    }
+
     return newPo;
   });
 
@@ -186,6 +210,8 @@ const update = async (tenantId, poId, data) => {
       if (!deal) throw ApiError.badRequest('Deal not found');
     }
   }
+
+  const prevStatus = po.status;
 
   await db.sequelize.transaction(async (t) => {
     await po.update(
@@ -233,6 +259,35 @@ const update = async (tenantId, poId, data) => {
             { transaction: t }
           );
         }
+      }
+    }
+
+    // GL: Dr Cost of Services (5000) / Cr Accounts Payable (2000) — only when status transitions to 'approved'
+    const nextStatus = status !== undefined ? status : po.status;
+    const becomingApproved = prevStatus !== 'approved' && nextStatus === 'approved';
+
+    if (becomingApproved) {
+      try {
+        // Re-fetch updated items for accurate total
+        const updatedItems = items && Array.isArray(items) ? items : po.items || [];
+        const poTotal = updatedItems.reduce((s, it) => s + (parseFloat(it.total || it.line_total || 0)), 0);
+
+        if (poTotal > 0.005) {
+          const cosId = await jeService.getSystemAccountId(tenantId, '5000');
+          const apId  = await jeService.getSystemAccountId(tenantId, '2000');
+          await jeService.createJournalEntry(tenantId, 1, {
+            entryDate: poDate || po.po_date || new Date().toISOString().slice(0, 10),
+            description: `PO Approved — PO #${po.id}`,
+            sourceType: 'purchase_order_approved',
+            sourceId: po.id,
+            lines: [
+              { accountId: cosId, debit: poTotal, credit: 0 },
+              { accountId: apId,  debit: 0,       credit: poTotal },
+            ],
+          }, t);
+        }
+      } catch (jeErr) {
+        console.warn('[GL] purchase_order_approved journal entry skipped:', jeErr.message);
       }
     }
   });

@@ -5,6 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
+const jeService = require('./journalEntry.service');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -123,13 +124,42 @@ const recordPayment = async (tenantId, poId, body) => {
   if (next >= total - 0.01) ps = 'paid';
   else if (next > 0) ps = 'partial';
 
+  const delta = next - cur;
   const updates = {
     paid_amount: next,
     payment_status: ps,
   };
   if (body.dueDate !== undefined) updates.due_date = body.dueDate || null;
 
-  await po.update(updates);
+  const t = await db.sequelize.transaction();
+  try {
+    await po.update(updates, { transaction: t });
+
+    // GL: Dr Accounts Payable (2000) / Cr Cash (1000)
+    if (delta > 0.005) {
+      try {
+        const apId   = await jeService.getSystemAccountId(tenantId, '2000');
+        const cashId = await jeService.getSystemAccountId(tenantId, '1000');
+        await jeService.createJournalEntry(tenantId, 1, {
+          entryDate: body.paymentDate || new Date().toISOString().slice(0, 10),
+          description: `PO Payment — PO #${poId}`,
+          sourceType: 'po_payment',
+          sourceId: poId,
+          lines: [
+            { accountId: apId,   debit: delta, credit: 0 },
+            { accountId: cashId, debit: 0,     credit: delta },
+          ],
+        }, t);
+      } catch (jeErr) {
+        console.warn('[GL] po_payment journal entry skipped:', jeErr.message);
+      }
+    }
+
+    await t.commit();
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
 
   return db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId },

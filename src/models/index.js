@@ -72,6 +72,13 @@ const WorkOrderTaskExpense = require('./WorkOrderTaskExpense')(sequelize, DataTy
 const Expense = require('./Expense')(sequelize, DataTypes);
 const WorkType = require('./WorkType')(sequelize, DataTypes);
 
+// Accounting / GL
+const FiscalYear = require('./FiscalYear')(sequelize, DataTypes);
+const AccountingPeriod = require('./AccountingPeriod')(sequelize, DataTypes);
+const ChartOfAccounts = require('./ChartOfAccounts')(sequelize, DataTypes);
+const JournalEntry = require('./JournalEntry')(sequelize, DataTypes);
+const JournalEntryLine = require('./JournalEntryLine')(sequelize, DataTypes);
+
 // Create db object with all models
 const db = {
   sequelize,
@@ -126,6 +133,11 @@ const db = {
   WorkOrderTaskExpense,
   Expense,
   WorkType,
+  FiscalYear,
+  AccountingPeriod,
+  ChartOfAccounts,
+  JournalEntry,
+  JournalEntryLine,
 };
 
 // Define Associations

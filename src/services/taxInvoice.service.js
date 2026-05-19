@@ -7,6 +7,7 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
 const proformaInvoiceService = require('./proformaInvoice.service');
+const jeService = require('./journalEntry.service');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -241,6 +242,33 @@ const create = async (tenantId, userId, body, scope = {}) => {
 
     if (rows.length) {
       await db.TaxInvoiceItem.bulkCreate(rows, { transaction: t });
+    }
+
+    // GL: Dr Accounts Receivable (1100) / Cr Service Revenue (4000) + VAT Payable (2100)
+    try {
+      const arId  = await jeService.getSystemAccountId(tenantId, '1100');
+      const revId = await jeService.getSystemAccountId(tenantId, '4000');
+      const vatId = await jeService.getSystemAccountId(tenantId, '2100');
+      const total    = parseFloat(plain.total) || 0;
+      const subtotal = parseFloat(plain.subtotal) || 0;
+      const vatAmt   = parseFloat(plain.vat_amount) || 0;
+      const jeLines = [
+        { accountId: arId,  debit: total,    credit: 0,       description: `AR: ${taxInvoiceNumber}` },
+        { accountId: revId, debit: 0,        credit: subtotal, description: `Revenue: ${taxInvoiceNumber}` },
+      ];
+      if (vatAmt > 0.005) {
+        jeLines.push({ accountId: vatId, debit: 0, credit: vatAmt, description: `VAT: ${taxInvoiceNumber}` });
+      }
+      await jeService.createJournalEntry(tenantId, userId, {
+        entryDate: invoiceDate || new Date().toISOString().slice(0, 10),
+        description: `Tax Invoice ${taxInvoiceNumber}`,
+        sourceType: 'tax_invoice',
+        sourceId: header.id,
+        lines: jeLines,
+      }, t);
+    } catch (jeErr) {
+      // GL not seeded yet — don't block invoice creation
+      console.warn('[GL] tax_invoice journal entry skipped:', jeErr.message);
     }
 
     await t.commit();

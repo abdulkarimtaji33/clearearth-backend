@@ -5,6 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
+const jeService = require('./journalEntry.service');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -114,16 +115,50 @@ const recordPayment = async (tenantId, taxInvoiceId, body) => {
   if (next >= total - 0.01) ps = 'paid';
   else if (next > 0) ps = 'partial';
 
-  await row.update({
-    paid_amount: next,
-    payment_status: ps,
-    payment_method: body.paymentMethod !== undefined ? body.paymentMethod || null : row.payment_method,
-    reference_no: body.referenceNo !== undefined ? body.referenceNo || null : row.reference_no,
-    remarks:
-      body.paymentDate && String(body.paymentDate).trim()
-        ? [row.remarks, `Payment ${String(body.paymentDate).trim()}`].filter(Boolean).join('\n')
-        : row.remarks,
-  });
+  const delta = next - cur;
+
+  const t = await db.sequelize.transaction();
+  try {
+    await row.update(
+      {
+        paid_amount: next,
+        payment_status: ps,
+        payment_method: body.paymentMethod !== undefined ? body.paymentMethod || null : row.payment_method,
+        reference_no: body.referenceNo !== undefined ? body.referenceNo || null : row.reference_no,
+        remarks:
+          body.paymentDate && String(body.paymentDate).trim()
+            ? [row.remarks, `Payment ${String(body.paymentDate).trim()}`].filter(Boolean).join('\n')
+            : row.remarks,
+      },
+      { transaction: t }
+    );
+
+    // GL: Dr Cash (1000) / Cr Accounts Receivable (1100)
+    if (delta > 0.005) {
+      try {
+        const cashId = await jeService.getSystemAccountId(tenantId, '1000');
+        const arId   = await jeService.getSystemAccountId(tenantId, '1100');
+        const payDate = body.paymentDate || new Date().toISOString().slice(0, 10);
+        await jeService.createJournalEntry(tenantId, row.created_by || 1, {
+          entryDate: payDate,
+          description: `Payment Received — Invoice ${row.tax_invoice_number || taxInvoiceId}`,
+          sourceType: 'payment_received',
+          sourceId: taxInvoiceId,
+          lines: [
+            { accountId: cashId, debit: delta, credit: 0 },
+            { accountId: arId,   debit: 0,     credit: delta },
+          ],
+        }, t);
+      } catch (jeErr) {
+        console.warn('[GL] payment_received journal entry skipped:', jeErr.message);
+      }
+    }
+
+    await t.commit();
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
 
   const taxInvoiceService = require('./taxInvoice.service');
   return taxInvoiceService.getById(tenantId, taxInvoiceId, {});

@@ -8,9 +8,9 @@
 | **Frontend path** | `/var/www/clearearth-frontend` |
 | **Backend path** | `/var/www/clearearth-backend` |
 | **API (Node)** | PM2 process `clearearth-api` → `src/server.js`, listens on port **3000** |
-| **Frontend URL** | `http://72.60.223.25:8080/` (SPA + same `/api` and `/uploads` proxies as before) |
-| **Port 80** | Clearearth is **not** served on `/`; keep default vhost empty or unrelated apps only (see `DEPLOYMENT_GUIDE.md`) |
-| **Web** | Nginx **:8080**: static SPA from `/var/www/clearearth-frontend/dist`; `/api` and `/uploads` → `http://127.0.0.1:3000` |
+| **Frontend URL** | `http://72.60.223.25:3333/` only (**not** `http://72.60.223.25/` bare port 80) |
+| **Port 80** | Do **not** serve Clearearth on the main IP. Remove or rewrite any `:80` vhost that proxies or roots to this SPA. |
+| **Web** | Nginx **:3333**: static SPA from `/var/www/clearearth-frontend/dist`; `/api` and `/uploads` → `http://127.0.0.1:3000` |
 | **Nginx site** | `/etc/nginx/sites-available/clearearth` (symlink `sites-enabled/clearearth`) |
 
 ## Git remotes (on server)
@@ -32,7 +32,7 @@ npm ci   # or: npm install
 npm run build
 ```
 
-Nginx serves `dist/` on **8080**; no restart needed for static files. After changing nginx: `sudo nginx -t && sudo systemctl reload nginx`. Open firewall if needed: `sudo ufw allow 8080/tcp`.
+Nginx serves `dist/` on **3333**; after changing nginx: `sudo nginx -t && sudo systemctl reload nginx`. Open firewall: `sudo ufw allow 3333/tcp` (remove `8080`/`80` rules for Clearearth if no longer wanted).
 
 ---
 
@@ -57,6 +57,7 @@ pm2 list   # confirm clearearth-api online
 ```bash
 nginx -t
 pm2 show clearearth-api
+curl -sI http://127.0.0.1:3333/ | head -5
 ```
 
 `curl http://127.0.0.1:3000/...` may 404 if there is no root route; use a real API path or the browser against the domain/IP.

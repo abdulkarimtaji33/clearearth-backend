@@ -1824,6 +1824,121 @@ CREATE TABLE `work_types` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 
+--
+-- Table structure for table `fiscal_years`
+--
+CREATE TABLE IF NOT EXISTS `fiscal_years` (
+  `id`         int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id`  int(11) NOT NULL,
+  `name`       varchar(50) NOT NULL,
+  `start_date` date NOT NULL,
+  `end_date`   date NOT NULL,
+  `status`     varchar(20) NOT NULL DEFAULT 'open',
+  `created_by` int(11) NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_fy_tenant` (`tenant_id`),
+  CONSTRAINT `fk_fy_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Table structure for table `accounting_periods`
+--
+CREATE TABLE IF NOT EXISTS `accounting_periods` (
+  `id`             int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id`      int(11) NOT NULL,
+  `fiscal_year_id` int(11) NOT NULL,
+  `period_number`  int(11) NOT NULL,
+  `name`           varchar(30) NOT NULL,
+  `start_date`     date NOT NULL,
+  `end_date`       date NOT NULL,
+  `status`         varchar(20) NOT NULL DEFAULT 'open',
+  `closed_by`      int(11) DEFAULT NULL,
+  `closed_at`      datetime DEFAULT NULL,
+  `created_at`     datetime NOT NULL,
+  `updated_at`     datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ap_fy_period` (`tenant_id`,`fiscal_year_id`,`period_number`),
+  CONSTRAINT `fk_ap_fy` FOREIGN KEY (`fiscal_year_id`) REFERENCES `fiscal_years` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Table structure for table `chart_of_accounts`
+--
+CREATE TABLE IF NOT EXISTS `chart_of_accounts` (
+  `id`             int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id`      int(11) NOT NULL,
+  `code`           varchar(20) NOT NULL,
+  `name`           varchar(150) NOT NULL,
+  `type`           varchar(20) NOT NULL,
+  `sub_type`       varchar(40) DEFAULT NULL,
+  `normal_balance` varchar(6) NOT NULL,
+  `is_group`       tinyint(1) NOT NULL DEFAULT 0,
+  `parent_id`      int(11) DEFAULT NULL,
+  `is_system`      tinyint(1) NOT NULL DEFAULT 0,
+  `is_active`      tinyint(1) NOT NULL DEFAULT 1,
+  `description`    text DEFAULT NULL,
+  `sort_order`     int(11) DEFAULT 0,
+  `created_at`     datetime NOT NULL,
+  `updated_at`     datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_coa_tenant_code` (`tenant_id`,`code`),
+  KEY `idx_coa_tenant` (`tenant_id`),
+  KEY `idx_coa_type` (`type`),
+  CONSTRAINT `fk_coa_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`),
+  CONSTRAINT `fk_coa_parent` FOREIGN KEY (`parent_id`) REFERENCES `chart_of_accounts` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Table structure for table `journal_entries`
+--
+CREATE TABLE IF NOT EXISTS `journal_entries` (
+  `id`             int(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id`      int(11) NOT NULL,
+  `entry_number`   varchar(30) NOT NULL,
+  `entry_date`     date NOT NULL,
+  `description`    varchar(500) NOT NULL,
+  `source_type`    varchar(40) NOT NULL,
+  `source_id`      int(11) DEFAULT NULL,
+  `status`         varchar(20) NOT NULL DEFAULT 'posted',
+  `auto_reverse`   tinyint(1) NOT NULL DEFAULT 0,
+  `reverse_date`   date DEFAULT NULL,
+  `reversed_by_id` int(11) DEFAULT NULL,
+  `voided_at`      datetime DEFAULT NULL,
+  `voided_by`      int(11) DEFAULT NULL,
+  `created_by`     int(11) NOT NULL,
+  `created_at`     datetime NOT NULL,
+  `updated_at`     datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_je_tenant_number` (`tenant_id`,`entry_number`),
+  KEY `idx_je_entry_date` (`entry_date`),
+  KEY `idx_je_source` (`source_type`,`source_id`),
+  KEY `idx_je_status` (`status`),
+  CONSTRAINT `fk_je_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`),
+  CONSTRAINT `fk_je_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Table structure for table `journal_entry_lines`
+--
+CREATE TABLE IF NOT EXISTS `journal_entry_lines` (
+  `id`               int(11) NOT NULL AUTO_INCREMENT,
+  `journal_entry_id` int(11) NOT NULL,
+  `account_id`       int(11) NOT NULL,
+  `debit`            decimal(15,2) NOT NULL DEFAULT 0.00,
+  `credit`           decimal(15,2) NOT NULL DEFAULT 0.00,
+  `description`      varchar(500) DEFAULT NULL,
+  `sort_order`       int(11) DEFAULT 0,
+  `created_at`       datetime NOT NULL,
+  `updated_at`       datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_jel_je` (`journal_entry_id`),
+  KEY `idx_jel_account` (`account_id`),
+  CONSTRAINT `fk_jel_je` FOREIGN KEY (`journal_entry_id`) REFERENCES `journal_entries` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_jel_account` FOREIGN KEY (`account_id`) REFERENCES `chart_of_accounts` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

@@ -1086,6 +1086,166 @@ async function runMigration() {
       }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // ACCOUNTING MODULE — GL / JOURNAL / REPORTS
+    // ═══════════════════════════════════════════════════════════════════════
+
+    console.log('Creating fiscal_years table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS fiscal_years (
+        id         INT NOT NULL AUTO_INCREMENT,
+        tenant_id  INT NOT NULL,
+        name       VARCHAR(50) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date   DATE NOT NULL,
+        status     VARCHAR(20) NOT NULL DEFAULT 'open',
+        created_by INT NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY idx_fy_tenant (tenant_id),
+        CONSTRAINT fk_fy_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log('Creating accounting_periods table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS accounting_periods (
+        id             INT NOT NULL AUTO_INCREMENT,
+        tenant_id      INT NOT NULL,
+        fiscal_year_id INT NOT NULL,
+        period_number  INT NOT NULL,
+        name           VARCHAR(30) NOT NULL,
+        start_date     DATE NOT NULL,
+        end_date       DATE NOT NULL,
+        status         VARCHAR(20) NOT NULL DEFAULT 'open',
+        closed_by      INT DEFAULT NULL,
+        closed_at      DATETIME DEFAULT NULL,
+        created_at     DATETIME NOT NULL,
+        updated_at     DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_ap_fy_period (tenant_id, fiscal_year_id, period_number),
+        CONSTRAINT fk_ap_fy FOREIGN KEY (fiscal_year_id) REFERENCES fiscal_years(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log('Creating chart_of_accounts table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS chart_of_accounts (
+        id             INT NOT NULL AUTO_INCREMENT,
+        tenant_id      INT NOT NULL,
+        code           VARCHAR(20) NOT NULL,
+        name           VARCHAR(150) NOT NULL,
+        type           VARCHAR(20) NOT NULL,
+        sub_type       VARCHAR(40) DEFAULT NULL,
+        normal_balance VARCHAR(6) NOT NULL,
+        is_group       TINYINT(1) NOT NULL DEFAULT 0,
+        parent_id      INT DEFAULT NULL,
+        is_system      TINYINT(1) NOT NULL DEFAULT 0,
+        is_active      TINYINT(1) NOT NULL DEFAULT 1,
+        description    TEXT DEFAULT NULL,
+        sort_order     INT DEFAULT 0,
+        created_at     DATETIME NOT NULL,
+        updated_at     DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_coa_tenant_code (tenant_id, code),
+        KEY idx_coa_tenant (tenant_id),
+        KEY idx_coa_type (type),
+        CONSTRAINT fk_coa_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+        CONSTRAINT fk_coa_parent FOREIGN KEY (parent_id) REFERENCES chart_of_accounts(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log('Creating journal_entries table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS journal_entries (
+        id             INT NOT NULL AUTO_INCREMENT,
+        tenant_id      INT NOT NULL,
+        entry_number   VARCHAR(30) NOT NULL,
+        entry_date     DATE NOT NULL,
+        description    VARCHAR(500) NOT NULL,
+        source_type    VARCHAR(40) NOT NULL,
+        source_id      INT DEFAULT NULL,
+        status         VARCHAR(20) NOT NULL DEFAULT 'posted',
+        auto_reverse   TINYINT(1) NOT NULL DEFAULT 0,
+        reverse_date   DATE DEFAULT NULL,
+        reversed_by_id INT DEFAULT NULL,
+        voided_at      DATETIME DEFAULT NULL,
+        voided_by      INT DEFAULT NULL,
+        created_by     INT NOT NULL,
+        created_at     DATETIME NOT NULL,
+        updated_at     DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_je_tenant_number (tenant_id, entry_number),
+        KEY idx_je_entry_date (entry_date),
+        KEY idx_je_source (source_type, source_id),
+        KEY idx_je_status (status),
+        CONSTRAINT fk_je_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+        CONSTRAINT fk_je_created_by FOREIGN KEY (created_by) REFERENCES users(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log('Creating journal_entry_lines table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS journal_entry_lines (
+        id               INT NOT NULL AUTO_INCREMENT,
+        journal_entry_id INT NOT NULL,
+        account_id       INT NOT NULL,
+        debit            DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        credit           DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        description      VARCHAR(500) DEFAULT NULL,
+        sort_order       INT DEFAULT 0,
+        created_at       DATETIME NOT NULL,
+        updated_at       DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY idx_jel_je (journal_entry_id),
+        KEY idx_jel_account (account_id),
+        CONSTRAINT fk_jel_je FOREIGN KEY (journal_entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
+        CONSTRAINT fk_jel_account FOREIGN KEY (account_id) REFERENCES chart_of_accounts(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log('Adding deleted_at (paranoid) to accounting tables...');
+    for (const tbl of ['fiscal_years', 'accounting_periods', 'chart_of_accounts', 'journal_entries', 'journal_entry_lines']) {
+      try {
+        await db.sequelize.query(`ALTER TABLE \`${tbl}\` ADD COLUMN deleted_at DATETIME DEFAULT NULL`);
+        console.log(`  Added deleted_at to ${tbl}`);
+      } catch (e) {
+        if (isDuplicateSchemaError(e)) console.log(`  deleted_at already present in ${tbl}`);
+        else throw e;
+      }
+    }
+
+    console.log('Assigning permissions to accounts role...');
+    const [[accountsRole]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' LIMIT 1`);
+    if (accountsRole) {
+      // Permissions the accounts role needs — match by name prefix or exact name
+      const namePrefixes = ['accounting.', 'deals.', 'reports.'];
+      const exactNames = [
+        'leads.read', 'companies.read', 'suppliers.read',
+        'contacts.read', 'dashboard.read',
+      ];
+      const prefixConditions = namePrefixes.map(() => 'name LIKE ?').join(' OR ');
+      const exactConditions = exactNames.map(() => 'name = ?').join(' OR ');
+      const [permRows] = await db.sequelize.query(
+        `SELECT id FROM permissions WHERE (${prefixConditions}) OR (${exactConditions})`,
+        { replacements: [...namePrefixes.map((p) => `${p}%`), ...exactNames] }
+      );
+      let added = 0;
+      for (const perm of permRows) {
+        try {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+            { replacements: [accountsRole.id, perm.id] }
+          );
+          added++;
+        } catch (e) { /* ignore duplicate */ }
+      }
+      console.log(`  Assigned ${added} permissions to accounts role`);
+    } else {
+      console.log('  accounts role not found — skipping');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
