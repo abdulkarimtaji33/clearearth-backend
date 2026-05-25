@@ -19,6 +19,7 @@ async function main() {
     'ALTER TABLE work_order_task_expenses ADD COLUMN evidence_path VARCHAR(500) NULL',
     'ALTER TABLE work_order_task_expenses ADD COLUMN evidence_file_name VARCHAR(255) NULL',
     'ALTER TABLE work_order_task_expenses ADD COLUMN rejection_reason TEXT NULL',
+    'ALTER TABLE work_order_task_expenses ADD COLUMN paid_to VARCHAR(255) NULL',
   ];
 
   for (const q of alters) {

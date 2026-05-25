@@ -54,6 +54,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      paid_to: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Payee set by Operations when logging the expense line',
+      },
     },
     {
       tableName: 'work_order_task_expenses',

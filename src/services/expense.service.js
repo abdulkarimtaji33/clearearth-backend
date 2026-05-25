@@ -98,7 +98,9 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
         category: WO_EXPENSE_CATEGORY,
         amount: amt,
         expense_date: expenseDate,
-        paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : WO_EXPENSE_PAID_TO,
+        paid_to: paidTo != null && String(paidTo).trim() !== ''
+          ? String(paidTo).trim()
+          : (te.paid_to && String(te.paid_to).trim() !== '' ? String(te.paid_to).trim() : WO_EXPENSE_PAID_TO),
         payment_method: paymentMethod || null,
         notes: notes || null,
         reference: WO_EXPENSE_REFERENCE,
