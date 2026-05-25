@@ -34,6 +34,7 @@ const chartOfAccountsRoutes = require('./chartOfAccounts.routes');
 const journalRoutes = require('./journal.routes');
 const reportsRoutes = require('./reports.routes');
 const fiscalYearRoutes = require('./fiscalYear.routes');
+const notificationRoutes = require('./notification.routes');
 
 // PDF routes - must be before resource mounts so /quotations/:id/pdf matches
 router.use(pdfRoutes);
@@ -100,5 +101,6 @@ router.use('/chart-of-accounts', chartOfAccountsRoutes);
 router.use('/journal', journalRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/fiscal-years', fiscalYearRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

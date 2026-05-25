@@ -39,13 +39,13 @@ const getById = asyncHandler(async (req, res) => {
 
 const create = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
-  const deal = await dealService.create(req.tenant.id, req.body, scope);
+  const deal = await dealService.create(req.tenant.id, req.body, scope, req.user);
   return ApiResponse.created(res, deal, 'Deal created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
-  const deal = await dealService.update(req.tenant.id, req.params.id, req.body, scope);
+  const deal = await dealService.update(req.tenant.id, req.params.id, req.body, scope, req.user);
   return ApiResponse.success(res, deal, 'Deal updated successfully');
 });
 

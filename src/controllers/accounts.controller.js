@@ -68,7 +68,8 @@ const rejectTaskExpense = asyncHandler(async (req, res) => {
   const wo = await expenseService.rejectTaskExpense(
     req.tenant.id,
     req.params.workOrderId,
-    req.params.taskExpenseId
+    req.params.taskExpenseId,
+    req.body?.reason
   );
   return ApiResponse.success(res, wo, 'Expense rejected');
 });

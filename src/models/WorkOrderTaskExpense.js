@@ -42,6 +42,18 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' },
       },
+      evidence_path: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      evidence_file_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      rejection_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       tableName: 'work_order_task_expenses',

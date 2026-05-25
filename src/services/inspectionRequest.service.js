@@ -3,11 +3,16 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const notificationService = require('./notification.service');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
+const VALID_INSPECTION_STATUSES = ['request_submitted', 'team_assigned', 'inspection_completed', 'report_submitted'];
+const VALID_PRIORITIES = ['critical', 'high', 'medium', 'low'];
+const VALID_RESPONSE_STATUSES = ['pending', 'accepted', 'rejected'];
+
 const getAll = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dealId, scopeUserId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, dealId, status, priority, responseStatus, scopeUserId, dateFrom, dateTo } = filters;
 
   const dealWhere = { tenant_id: tenantId };
   if (scopeUserId) dealWhere.assigned_to = scopeUserId;
@@ -24,6 +29,9 @@ const getAll = async (tenantId, filters = {}) => {
   }
 
   const requestWhere = {};
+  if (status) requestWhere.status = status;
+  if (priority) requestWhere.priority = priority;
+  if (responseStatus) requestWhere.response_status = responseStatus;
   applyCreatedAtFilter(requestWhere, dateFrom, dateTo);
 
   const { count, rows } = await db.DealInspectionRequest.findAndCountAll({
@@ -34,7 +42,7 @@ const getAll = async (tenantId, filters = {}) => {
         as: 'deal',
         where: dealWhere,
         required: true,
-        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status', 'total', 'currency'],
+        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status', 'total', 'currency', 'inspection_required'],
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
@@ -48,10 +56,14 @@ const getAll = async (tenantId, filters = {}) => {
       },
       { model: db.MaterialType, as: 'materialType', attributes: ['id', 'value', 'display_name'], required: false },
       { model: db.User, as: 'requestedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+      { model: db.User, as: 'respondedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
     ],
     offset,
     limit,
-    order: [['created_at', 'DESC']],
+    order: [
+      [db.sequelize.literal(`FIELD(priority, 'critical', 'high', 'medium', 'low')`), 'ASC'],
+      ['created_at', 'DESC'],
+    ],
     distinct: true,
   });
 
@@ -86,14 +98,13 @@ const getById = async (tenantId, requestId, scope = {}) => {
       },
       { model: db.MaterialType, as: 'materialType', attributes: ['id', 'value', 'display_name'], required: false },
       { model: db.User, as: 'requestedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+      { model: db.User, as: 'respondedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
     ],
   });
 
   if (!request) throw ApiError.notFound('Inspection request not found');
   return request;
 };
-
-const VALID_INSPECTION_STATUSES = ['request_submitted', 'team_assigned', 'inspection_completed', 'report_submitted'];
 
 const updateStatus = async (tenantId, requestId, status, scope = {}) => {
   if (!VALID_INSPECTION_STATUSES.includes(status)) {
@@ -104,4 +115,58 @@ const updateStatus = async (tenantId, requestId, status, scope = {}) => {
   return request;
 };
 
-module.exports = { getAll, getById, updateStatus };
+const updatePriority = async (tenantId, requestId, priority, scope = {}) => {
+  if (!VALID_PRIORITIES.includes(priority)) {
+    throw ApiError.badRequest(`Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}`);
+  }
+  const request = await getById(tenantId, requestId, scope);
+  await request.update({ priority });
+  return request;
+};
+
+const acceptRequest = async (tenantId, requestId, scope = {}, actor = null) => {
+  const request = await getById(tenantId, requestId, scope);
+  if (request.response_status === 'rejected') {
+    throw ApiError.badRequest('Cannot accept a rejected request');
+  }
+  await request.update({
+    response_status: 'accepted',
+    responded_by: actor?.id || null,
+    responded_at: new Date(),
+    rejection_reason: null,
+  });
+  return request;
+};
+
+const rejectRequest = async (tenantId, requestId, reason, scope = {}, actor = null) => {
+  if (!reason || !String(reason).trim()) {
+    throw ApiError.badRequest('Rejection reason is required');
+  }
+  const request = await getById(tenantId, requestId, scope);
+  await request.update({
+    response_status: 'rejected',
+    rejection_reason: String(reason).trim(),
+    responded_by: actor?.id || null,
+    responded_at: new Date(),
+  });
+
+  try {
+    await notificationService.notifyInspectionRejected(tenantId, request, String(reason).trim(), actor);
+  } catch (err) {
+    console.warn('[Notification] inspection rejected skipped:', err.message);
+  }
+
+  return request;
+};
+
+module.exports = {
+  getAll,
+  getById,
+  updateStatus,
+  updatePriority,
+  acceptRequest,
+  rejectRequest,
+  VALID_INSPECTION_STATUSES,
+  VALID_PRIORITIES,
+  VALID_RESPONSE_STATUSES,
+};

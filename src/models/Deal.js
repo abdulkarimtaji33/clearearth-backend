@@ -183,6 +183,7 @@ module.exports = (sequelize, DataTypes) => {
     Deal.hasOne(models.DealInspectionReport, { foreignKey: 'deal_id', as: 'inspectionReport' });
     Deal.hasMany(models.DealImage, { foreignKey: 'deal_id', as: 'images' });
     Deal.hasMany(models.WorkOrder, { foreignKey: 'deal_id', as: 'workOrders' });
+    Deal.hasMany(models.ProformaInvoice, { foreignKey: 'deal_id', as: 'proformaInvoices' });
   };
 
   return Deal;

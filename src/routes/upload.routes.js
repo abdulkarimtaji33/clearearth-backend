@@ -10,5 +10,6 @@ router.post('/company-document', authenticate, uploadSingle('file'), uploadContr
 router.post('/wds-attachment', authenticate, uploadSingle('file'), uploadController.uploadWdsAttachment);
 router.post('/tenant-logo', authenticate, uploadSingle('file'), uploadController.uploadTenantLogo);
 router.post('/tax-invoice-attachment', authenticate, uploadSingle('file'), uploadController.uploadTaxInvoiceAttachment);
+router.post('/expense-evidence', authenticate, uploadSingle('file'), uploadController.uploadExpenseEvidence);
 
 module.exports = router;

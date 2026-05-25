@@ -69,6 +69,28 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 'request_submitted',
       },
+      priority: {
+        type: DataTypes.ENUM('critical', 'high', 'medium', 'low'),
+        allowNull: false,
+        defaultValue: 'medium',
+      },
+      response_status: {
+        type: DataTypes.ENUM('pending', 'accepted', 'rejected'),
+        allowNull: false,
+        defaultValue: 'pending',
+      },
+      rejection_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      responded_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      responded_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: 'deal_inspection_requests',
@@ -85,6 +107,7 @@ module.exports = (sequelize, DataTypes) => {
     DealInspectionRequest.belongsTo(models.Deal, { foreignKey: 'deal_id', as: 'deal' });
     DealInspectionRequest.belongsTo(models.MaterialType, { foreignKey: 'material_type_id', as: 'materialType' });
     DealInspectionRequest.belongsTo(models.User, { foreignKey: 'requested_by', as: 'requestedByUser' });
+    DealInspectionRequest.belongsTo(models.User, { foreignKey: 'responded_by', as: 'respondedByUser' });
   };
 
   return DealInspectionRequest;

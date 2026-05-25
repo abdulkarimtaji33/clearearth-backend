@@ -37,7 +37,7 @@ const getAll = async (tenantId, filters) => {
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
       { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
-      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category'], required: false },
+      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category', 'price', 'unit_of_measure', 'currency'], required: false },
     ],
     offset,
     limit,
@@ -58,7 +58,7 @@ const getById = async (tenantId, leadId, scope = {}) => {
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
       { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
-      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category'], required: false },
+      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category', 'price', 'unit_of_measure', 'currency'], required: false },
     ],
   });
   if (!lead) throw ApiError.notFound('Lead not found');

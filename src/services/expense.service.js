@@ -375,7 +375,7 @@ const listLedgerExpenses = async (tenantId, filters = {}) => {
   return { expenses: rows, total };
 };
 
-const rejectTaskExpense = async (tenantId, workOrderId, taskExpenseId) => {
+const rejectTaskExpense = async (tenantId, workOrderId, taskExpenseId, reason) => {
   const te = await loadTaskExpenseInWorkOrder(tenantId, workOrderId, taskExpenseId);
 
   if (te.accounts_status === 'approved') {
@@ -386,6 +386,7 @@ const rejectTaskExpense = async (tenantId, workOrderId, taskExpenseId) => {
     accounts_status: 'rejected',
     accounts_approved_at: null,
     accounts_approved_by: null,
+    rejection_reason: reason != null && String(reason).trim() !== '' ? String(reason).trim() : null,
   });
 
   const workOrderService = require('./workOrder.service');

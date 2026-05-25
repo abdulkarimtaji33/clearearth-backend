@@ -1,5 +1,6 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const notificationService = require('./notification.service');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
@@ -63,6 +64,26 @@ const getAll = async (tenantId, filters) => {
     { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
     { model: db.Supplier, as: 'downstreamPartner', attributes: ['id', 'company_name'], required: false },
     { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+    {
+      model: db.DealInspectionRequest,
+      as: 'inspectionRequest',
+      attributes: ['id', 'status', 'response_status', 'priority'],
+      required: false,
+    },
+    {
+      model: db.ProformaInvoice,
+      as: 'proformaInvoices',
+      attributes: ['id', 'proforma_number', 'total', 'currency', 'invoice_date'],
+      required: false,
+      include: [
+        {
+          model: db.TaxInvoice,
+          as: 'taxInvoice',
+          attributes: ['id', 'tax_invoice_number', 'total', 'payment_status', 'paid_amount'],
+          required: false,
+        },
+      ],
+    },
     {
       model: db.DealItem,
       as: 'items',
@@ -155,6 +176,18 @@ const getById = async (tenantId, dealId, scope = {}) => {
           },
         ],
       },
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoices',
+        required: false,
+        include: [
+          {
+            model: db.TaxInvoice,
+            as: 'taxInvoice',
+            required: false,
+          },
+        ],
+      },
     ],
   });
   if (!deal) throw ApiError.notFound('Deal not found');
@@ -167,7 +200,7 @@ const getById = async (tenantId, dealId, scope = {}) => {
   return deal;
 };
 
-const create = async (tenantId, data, scope = {}) => {
+const create = async (tenantId, data, scope = {}, actor = null) => {
   const transaction = await db.sequelize.transaction();
 
   try {
@@ -175,8 +208,27 @@ const create = async (tenantId, data, scope = {}) => {
 
     await _validateDownstreamSupplier(tenantId, data.supplierId, data.downstreamPartnerSupplierId);
 
+    let items = data.items || [];
+    if (items.length === 0 && data.leadId) {
+      const lead = await db.Lead.findOne({
+        where: { id: data.leadId, tenant_id: tenantId },
+        include: [{ model: db.ProductService, as: 'productService', required: false }],
+        transaction,
+      });
+      if (lead?.product_service_id) {
+        const ps = lead.productService;
+        const unitPrice = ps?.price ? parseFloat(ps.price) : (lead.estimated_value ? parseFloat(lead.estimated_value) : 0);
+        items = [{
+          productServiceId: lead.product_service_id,
+          quantity: 1,
+          unitPrice,
+          unitOfMeasure: ps?.unit_of_measure || null,
+        }];
+      }
+    }
+
     // Calculate totals
-    const totals = calculateDealTotals(data.items || [], data.vatPercentage || 5);
+    const totals = calculateDealTotals(items, data.vatPercentage || 5);
 
     // Create deal
     const deal = await db.Deal.create(
@@ -237,6 +289,7 @@ const create = async (tenantId, data, scope = {}) => {
           supporting_documents: insp.supportingDocuments || null,
           requested_by: insp.requestedBy || null,
           notes: insp.notes || null,
+          priority: insp.priority || 'medium',
         },
         { transaction }
       );
@@ -281,12 +334,12 @@ const create = async (tenantId, data, scope = {}) => {
     }
 
     // Create deal items
-    if (data.items && data.items.length > 0) {
-      const invalidItems = data.items.filter((item) => !item.productServiceId);
+    if (items.length > 0) {
+      const invalidItems = items.filter((item) => !item.productServiceId);
       if (invalidItems.length > 0) {
         throw ApiError.badRequest('Each line item must have a product/service selected');
       }
-      const itemsToCreate = data.items.map(item => ({
+      const itemsToCreate = items.map(item => ({
         deal_id: deal.id,
         product_service_id: item.productServiceId,
         quantity: item.quantity,
@@ -341,7 +394,7 @@ const create = async (tenantId, data, scope = {}) => {
   }
 };
 
-const update = async (tenantId, dealId, data, scope = {}) => {
+const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
   const transaction = await db.sequelize.transaction();
 
   try {
@@ -349,9 +402,15 @@ const update = async (tenantId, dealId, data, scope = {}) => {
     if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
     const deal = await db.Deal.findOne({
       where: dealWhere,
+      include: [
+        { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+        { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+      ],
       transaction,
     });
     if (!deal) throw ApiError.notFound('Deal not found');
+
+    const previousStatus = deal.status;
 
     const nextSupplierId = data.supplierId !== undefined ? data.supplierId : deal.supplier_id;
     const nextDownstreamId = data.downstreamPartnerSupplierId !== undefined ? data.downstreamPartnerSupplierId : deal.downstream_partner_supplier_id;
@@ -499,6 +558,7 @@ const update = async (tenantId, dealId, data, scope = {}) => {
         supporting_documents: insp.supportingDocuments || null,
         requested_by: insp.requestedBy || null,
         notes: insp.notes || null,
+        priority: insp.priority || existingInsp?.priority || 'medium',
       };
       if (existingInsp) {
         await existingInsp.update(inspPayload, { transaction });
@@ -565,6 +625,16 @@ const update = async (tenantId, dealId, data, scope = {}) => {
     }
 
     await transaction.commit();
+
+    const newStatus = data.status !== undefined ? data.status : previousStatus;
+    if (['won', 'lost'].includes(newStatus) && previousStatus !== newStatus) {
+      try {
+        await notificationService.notifyDealStatusChange(tenantId, deal, previousStatus, newStatus, actor);
+      } catch (err) {
+        console.warn('[Notification] deal status change skipped:', err.message);
+      }
+    }
+
     return await getById(tenantId, dealId);
   } catch (error) {
     if (!transaction.finished) {

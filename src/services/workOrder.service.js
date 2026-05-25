@@ -36,6 +36,8 @@ const buildExpenseLines = (task) => {
         description: ex.description != null && String(ex.description).trim() !== '' ? String(ex.description).trim() : null,
         amount: amt,
         sort_order: i,
+        evidence_path: ex.evidencePath || ex.evidence_path || null,
+        evidence_file_name: ex.evidenceFileName || ex.evidence_file_name || null,
       });
     });
   } else if (task.expense != null && task.expense !== '') {
