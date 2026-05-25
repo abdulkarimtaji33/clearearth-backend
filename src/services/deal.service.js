@@ -71,6 +71,12 @@ const getAll = async (tenantId, filters) => {
       required: false,
     },
     {
+      model: db.DealInspectionReport,
+      as: 'inspectionReport',
+      attributes: ['id'],
+      required: false,
+    },
+    {
       model: db.ProformaInvoice,
       as: 'proformaInvoices',
       attributes: ['id', 'proforma_number', 'total', 'currency', 'invoice_date'],
@@ -705,6 +711,11 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}) => {
     await existing.update(payload);
   } else {
     await db.DealInspectionReport.create(payload);
+  }
+
+  const inspectionRequest = await db.DealInspectionRequest.findOne({ where: { deal_id: dealId } });
+  if (inspectionRequest && inspectionRequest.status !== 'report_submitted') {
+    await inspectionRequest.update({ status: 'report_submitted' });
   }
 
   return await getById(tenantId, dealId);

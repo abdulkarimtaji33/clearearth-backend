@@ -1390,6 +1390,15 @@ async function runMigration() {
       console.log('  Operations Manager role: operations.* + deals.read enforced');
     }
 
+    console.log('Backfill inspection request status where report exists...');
+    const [backfillResult] = await db.sequelize.query(`
+      UPDATE deal_inspection_requests dir
+      INNER JOIN deal_inspection_reports dr ON dr.deal_id = dir.deal_id
+      SET dir.status = 'report_submitted'
+      WHERE dir.status IS NULL OR dir.status != 'report_submitted'
+    `);
+    console.log(`  Updated ${backfillResult?.affectedRows ?? 0} inspection request(s)`);
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
