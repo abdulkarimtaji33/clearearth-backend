@@ -1246,6 +1246,51 @@ async function runMigration() {
       console.log('  accounts role not found — skipping');
     }
 
+    console.log('ERP enhancements: inspection priority/accept-reject, expense evidence, notifications...');
+    for (const col of [
+      `ALTER TABLE deal_inspection_requests ADD COLUMN priority ENUM('critical','high','medium','low') NOT NULL DEFAULT 'medium'`,
+      `ALTER TABLE deal_inspection_requests ADD COLUMN response_status ENUM('pending','accepted','rejected') NOT NULL DEFAULT 'pending'`,
+      `ALTER TABLE deal_inspection_requests ADD COLUMN rejection_reason TEXT NULL`,
+      `ALTER TABLE deal_inspection_requests ADD COLUMN responded_by INT NULL`,
+      `ALTER TABLE deal_inspection_requests ADD COLUMN responded_at DATETIME NULL`,
+      `ALTER TABLE work_order_task_expenses ADD COLUMN evidence_path VARCHAR(500) NULL`,
+      `ALTER TABLE work_order_task_expenses ADD COLUMN evidence_file_name VARCHAR(255) NULL`,
+      `ALTER TABLE work_order_task_expenses ADD COLUMN rejection_reason TEXT NULL`,
+    ]) {
+      try {
+        await db.sequelize.query(col);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+      }
+    }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE deal_inspection_requests
+        ADD CONSTRAINT fk_insp_responded_by FOREIGN KEY (responded_by) REFERENCES users(id)
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+    }
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        user_id INT NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        entity_type VARCHAR(50) NULL,
+        entity_id INT NULL,
+        is_read TINYINT(1) NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        KEY idx_notif_tenant_user_read (tenant_id, user_id, is_read),
+        KEY idx_notif_tenant_user_created (tenant_id, user_id, created_at),
+        CONSTRAINT fk_notif_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+        CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
