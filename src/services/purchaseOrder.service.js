@@ -98,7 +98,7 @@ const _validateParty = async (tenantId, companyId, supplierId) => {
 };
 
 const create = async (tenantId, data) => {
-  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate } = data;
+  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, workOrderId, documentType } = data;
 
   await _validateParty(tenantId, companyId, supplierId);
   const hasC = companyId != null && companyId !== '';
@@ -128,6 +128,8 @@ const create = async (tenantId, data) => {
         expected_delivery: expectedDelivery || null,
         status: resolvedStatus,
         due_date: dueDate != null && dueDate !== '' ? dueDate : null,
+        work_order_id: workOrderId || null,
+        document_type: documentType === 'bill' ? 'bill' : 'quotation',
       },
       { transaction: t }
     );
@@ -300,4 +302,45 @@ const remove = async (tenantId, poId) => {
   await po.destroy();
 };
 
-module.exports = { getAll, getById, create, update, remove };
+const ensurePurchaseBillForWorkOrder = async (tenantId, workOrderId) => {
+  const existing = await db.PurchaseOrder.findOne({
+    where: { tenant_id: tenantId, work_order_id: workOrderId, document_type: 'bill' },
+  });
+  if (existing) return existing;
+
+  const wo = await db.WorkOrder.findOne({
+    where: { id: workOrderId, tenant_id: tenantId },
+    include: [{
+      model: db.Deal,
+      as: 'deal',
+      include: [{ model: db.DealItem, as: 'items' }],
+    }],
+  });
+  if (!wo?.deal || wo.deal.deal_type !== 'offer_to_purchase') return null;
+
+  const supplierId = wo.deal.downstream_partner_supplier_id || wo.deal.supplier_id;
+  if (!supplierId) return null;
+
+  const dealItems = wo.deal.items || [];
+  if (dealItems.length === 0) return null;
+
+  const items = dealItems.map((it) => ({
+    productServiceId: it.product_service_id,
+    itemDescription: it.notes || null,
+    quantity: String(it.quantity ?? ''),
+    price: String(it.unit_price ?? ''),
+    total: String(it.line_total ?? ''),
+  }));
+
+  return create(tenantId, {
+    dealId: wo.deal_id,
+    supplierId,
+    poDate: new Date().toISOString().slice(0, 10),
+    items,
+    status: 'approved',
+    documentType: 'bill',
+    workOrderId,
+  });
+};
+
+module.exports = { getAll, getById, create, update, remove, ensurePurchaseBillForWorkOrder };

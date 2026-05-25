@@ -1024,7 +1024,7 @@ async function runMigration() {
     }
 
     // ── Operations Manager role ──────────────────────────────────────────────
-    // Permissions: deals.* (full - needed to manage work orders) + deals.read for deal view
+    // Permissions: operations.* (work orders) + deals.read (view-only deals)
     console.log('Ensuring operations_manager role exists...');
     {
       const [[omRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
@@ -1035,9 +1035,13 @@ async function runMigration() {
         `);
         const [[newOm]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
         if (newOm?.id) {
-          const [dealPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE module = 'deals'`);
-          for (const p of dealPerms) {
+          const [opsPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name LIKE 'operations.%'`);
+          for (const p of opsPerms) {
             await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [newOm.id, p.id] });
+          }
+          const [[dealRead]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'deals.read' LIMIT 1`);
+          if (dealRead?.id) {
+            await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [newOm.id, dealRead.id] });
           }
           console.log('  Created operations_manager role');
         }
@@ -1047,7 +1051,7 @@ async function runMigration() {
     }
 
     // ── Accounts role ────────────────────────────────────────────────────────
-    // Permissions: deals.* (full - needed to manage invoices/expenses/receivables/payables) + deals.read for deal view
+    // Permissions: deals.read (view-only) + accounting.* for invoices/expenses/receivables/payables
     console.log('Ensuring accounts role exists...');
     {
       const [[acRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' AND tenant_id IS NULL LIMIT 1`);
@@ -1058,9 +1062,9 @@ async function runMigration() {
         `);
         const [[newAc]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' AND tenant_id IS NULL LIMIT 1`);
         if (newAc?.id) {
-          const [dealPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE module = 'deals'`);
-          for (const p of dealPerms) {
-            await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [newAc.id, p.id] });
+          const [[dealRead]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'deals.read' LIMIT 1`);
+          if (dealRead?.id) {
+            await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [newAc.id, dealRead.id] });
           }
           console.log('  Created accounts role');
         }
@@ -1220,9 +1224,9 @@ async function runMigration() {
     const [[accountsRole]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' LIMIT 1`);
     if (accountsRole) {
       // Permissions the accounts role needs — match by name prefix or exact name
-      const namePrefixes = ['accounting.', 'deals.', 'reports.'];
+      const namePrefixes = ['accounting.', 'reports.'];
       const exactNames = [
-        'leads.read', 'companies.read', 'suppliers.read',
+        'deals.read', 'leads.read', 'companies.read', 'suppliers.read',
         'contacts.read', 'dashboard.read',
       ];
       const prefixConditions = namePrefixes.map(() => 'name LIKE ?').join(' OR ');
@@ -1290,6 +1294,101 @@ async function runMigration() {
         CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    console.log('Batch 3: purchase bill columns, permission fixes...');
+    try {
+      await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN work_order_id INT NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  work_order_id:', e.message); }
+    try {
+      await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN document_type VARCHAR(20) NOT NULL DEFAULT 'quotation'`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  document_type:', e.message); }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE purchase_orders ADD CONSTRAINT fk_po_work_order FOREIGN KEY (work_order_id) REFERENCES work_orders(id)
+      `);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  fk_po_work_order:', e.message); }
+
+    try {
+      await db.sequelize.query(`
+        INSERT INTO permissions (name, display_name, module, action, description)
+        VALUES ('leads.approve', 'Approve Leads', 'leads', 'approve', 'Permission to approve leads')
+      `);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  leads.approve:', e.message); }
+
+    const inspUpdateRoles = ['sales_manager', 'sales', 'inspection_team', 'operations_manager', 'admin', 'tenant_admin'];
+    const [[inspUpdatePerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'inspection_requests.update' LIMIT 1`);
+    if (inspUpdatePerm?.id) {
+      for (const roleName of inspUpdateRoles) {
+        const [[roleRow]] = await db.sequelize.query(
+          `SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`,
+          { replacements: [roleName] }
+        );
+        if (roleRow?.id) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+            { replacements: [roleRow.id, inspUpdatePerm.id] }
+          );
+        }
+      }
+      console.log('  Backfilled inspection_requests.update to roles');
+    }
+
+    const [[leadsApprovePerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'leads.approve' LIMIT 1`);
+    if (leadsApprovePerm?.id) {
+      for (const roleName of ['sales_manager', 'admin', 'tenant_admin']) {
+        const [[roleRow]] = await db.sequelize.query(
+          `SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`,
+          { replacements: [roleName] }
+        );
+        if (roleRow?.id) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+            { replacements: [roleRow.id, leadsApprovePerm.id] }
+          );
+        }
+      }
+      console.log('  Backfilled leads.approve to sales_manager');
+    }
+
+    await db.sequelize.query(`
+      DELETE rp FROM role_permissions rp
+      INNER JOIN permissions p ON p.id = rp.permission_id
+      INNER JOIN roles r ON r.id = rp.role_id
+      WHERE r.name = 'accounts' AND p.name IN ('deals.create', 'deals.update', 'deals.delete', 'deals.approve')
+    `);
+    const [[dealsReadPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'deals.read' LIMIT 1`);
+    const [[accountsRoleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' AND tenant_id IS NULL LIMIT 1`);
+    if (accountsRoleRow?.id && dealsReadPerm?.id) {
+      await db.sequelize.query(
+        `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+        { replacements: [accountsRoleRow.id, dealsReadPerm.id] }
+      );
+    }
+    console.log('  Accounts role: deals view-only enforced');
+
+    await db.sequelize.query(`
+      DELETE rp FROM role_permissions rp
+      INNER JOIN permissions p ON p.id = rp.permission_id
+      INNER JOIN roles r ON r.id = rp.role_id
+      WHERE r.name = 'operations_manager' AND p.name IN ('deals.create', 'deals.update', 'deals.delete', 'deals.approve')
+    `);
+    const [[omRoleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
+    if (omRoleRow?.id) {
+      const [opsPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name LIKE 'operations.%'`);
+      for (const p of opsPerms) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+          { replacements: [omRoleRow.id, p.id] }
+        );
+      }
+      if (dealsReadPerm?.id) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+          { replacements: [omRoleRow.id, dealsReadPerm.id] }
+        );
+      }
+      console.log('  Operations Manager role: operations.* + deals.read enforced');
+    }
 
     console.log('✅ Migration completed successfully!');
     process.exit(0);

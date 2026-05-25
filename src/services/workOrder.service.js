@@ -4,6 +4,7 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
+const purchaseOrderService = require('./purchaseOrder.service');
 
 const taskInclude = {
   model: db.WorkOrderTask,
@@ -136,12 +137,24 @@ const getById = async (tenantId, workOrderId) => {
       {
         model: db.Deal,
         as: 'deal',
-        attributes: ['id', 'deal_number', 'title', 'status', 'deal_type', 'deal_date', 'total', 'vat_percentage', 'vat_amount', 'subtotal', 'currency', 'is_rcm_applicable'],
+        attributes: ['id', 'deal_number', 'title', 'status', 'deal_type', 'deal_date', 'total', 'vat_percentage', 'vat_amount', 'subtotal', 'currency', 'is_rcm_applicable', 'downstream_partner_supplier_id', 'supplier_id'],
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
         ],
         required: false,
+      },
+      {
+        model: db.PurchaseOrder,
+        as: 'purchaseBill',
+        required: false,
+        include: [
+          {
+            model: db.PurchaseOrderItem,
+            as: 'items',
+            include: [{ model: db.ProductService, as: 'productService', attributes: ['id', 'name'], required: false }],
+          },
+        ],
       },
       taskInclude,
       { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
@@ -188,6 +201,9 @@ const update = async (tenantId, workOrderId, data) => {
   const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
   if (!workOrder) throw ApiError.notFound('Work order not found');
 
+  const prevStatus = workOrder.status;
+  const nextStatus = data.status !== undefined ? data.status : prevStatus;
+
   await db.sequelize.transaction(async (t) => {
     await workOrder.update(
       {
@@ -208,6 +224,14 @@ const update = async (tenantId, workOrderId, data) => {
       }
     }
   });
+
+  if (prevStatus !== 'completed' && nextStatus === 'completed') {
+    try {
+      await purchaseOrderService.ensurePurchaseBillForWorkOrder(tenantId, workOrderId);
+    } catch (err) {
+      console.warn('[WO] purchase bill auto-create skipped:', err.message);
+    }
+  }
 
   return getById(tenantId, workOrderId);
 };

@@ -31,6 +31,18 @@ module.exports = (sequelize, DataTypes) => {
       },
       paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true },
       due_date: { type: DataTypes.DATEONLY, allowNull: true },
+      work_order_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'work_orders', key: 'id' },
+        comment: 'Set when purchase bill is generated from a completed work order',
+      },
+      document_type: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: 'quotation',
+        comment: 'quotation | bill',
+      },
     },
     {
       tableName: 'purchase_orders',
@@ -53,6 +65,7 @@ module.exports = (sequelize, DataTypes) => {
     PurchaseOrder.belongsTo(models.Deal, { foreignKey: 'deal_id', as: 'deal' });
     PurchaseOrder.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
     PurchaseOrder.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+    PurchaseOrder.belongsTo(models.WorkOrder, { foreignKey: 'work_order_id', as: 'workOrder' });
     PurchaseOrder.hasMany(models.PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items' });
     PurchaseOrder.belongsToMany(models.TermsAndConditions, {
       through: models.PurchaseOrderTerm,

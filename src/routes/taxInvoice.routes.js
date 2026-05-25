@@ -7,13 +7,13 @@ router.use(authenticate);
 
 router.get(
   '/preview-from-proforma/:proformaInvoiceId',
-  authorize('deals.read'),
+  authorize('accounting.read', 'deals.read'),
   taxInvoiceController.previewFromProforma
 );
-router.get('/', authorize('deals.read'), taxInvoiceController.getAll);
-router.get('/:id', authorize('deals.read'), taxInvoiceController.getById);
-router.post('/', authorize('deals.create'), taxInvoiceController.create);
-router.put('/:id', authorize('deals.update'), taxInvoiceController.update);
-router.delete('/:id', authorize('deals.delete'), taxInvoiceController.remove);
+router.get('/', authorize('accounting.read', 'deals.read'), taxInvoiceController.getAll);
+router.get('/:id', authorize('accounting.read', 'deals.read'), taxInvoiceController.getById);
+router.post('/', authorize('accounting.create', 'deals.create'), taxInvoiceController.create);
+router.put('/:id', authorize('accounting.update', 'deals.update'), taxInvoiceController.update);
+router.delete('/:id', authorize('accounting.delete', 'deals.delete'), taxInvoiceController.remove);
 
 module.exports = router;
