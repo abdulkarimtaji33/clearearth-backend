@@ -33,14 +33,12 @@ const buildExpenseLines = (task) => {
     task.expenses.forEach((ex, i) => {
       const amt = ex.amount != null ? parseFloat(ex.amount) : NaN;
       if (!Number.isFinite(amt) || amt < 0) return;
-      const paidTo = ex.paidTo ?? ex.paid_to;
       lines.push({
         description: ex.description != null && String(ex.description).trim() !== '' ? String(ex.description).trim() : null,
         amount: amt,
         sort_order: i,
         evidence_path: ex.evidencePath || ex.evidence_path || null,
         evidence_file_name: ex.evidenceFileName || ex.evidence_file_name || null,
-        paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : null,
       });
     });
   } else if (task.expense != null && task.expense !== '') {
@@ -91,9 +89,6 @@ const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction) 
         description: line.description,
         amount: line.amount,
         sort_order: line.sort_order,
-        evidence_path: line.evidence_path || null,
-        evidence_file_name: line.evidence_file_name || null,
-        paid_to: line.paid_to || null,
       })),
       { transaction }
     );
