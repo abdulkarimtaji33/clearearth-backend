@@ -67,7 +67,7 @@ const getAll = async (tenantId, filters) => {
     {
       model: db.DealInspectionRequest,
       as: 'inspectionRequest',
-      attributes: ['id', 'status', 'response_status', 'priority'],
+      attributes: ['id', 'status', 'response_status', 'priority', 'rejection_reason'],
       required: false,
     },
     {
