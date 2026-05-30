@@ -61,6 +61,20 @@ const resolveTaskPayload = async (tenantId, task, transaction) => {
   } else {
     workTypeId = null;
   }
+
+  let assignedTo = task.assignedTo != null && task.assignedTo !== '' ? parseInt(task.assignedTo, 10) : null;
+  if (assignedTo != null) {
+    if (!Number.isFinite(assignedTo)) {
+      assignedTo = null;
+    } else {
+      const user = await db.User.findOne({
+        where: { id: assignedTo, tenant_id: tenantId, status: 'active' },
+        transaction,
+      });
+      if (!user) throw ApiError.badRequest('Assigned user not found');
+    }
+  }
+
   const status = task.status || 'not_started';
   const { expenseLines, expenseTotal } = buildExpenseLines(task);
   return {
@@ -71,12 +85,99 @@ const resolveTaskPayload = async (tenantId, task, transaction) => {
       estimated_duration: task.estimatedDuration || null,
       start_date: task.startDate || null,
       end_date: task.endDate || null,
-      assigned_to: task.assignedTo || null,
+      assigned_to: assignedTo,
       status,
       notes: task.notes || null,
     },
     expenseLines,
   };
+};
+
+const syncTaskExpenses = async (taskId, expenseLines, transaction) => {
+  const existing = await db.WorkOrderTaskExpense.findAll({
+    where: { work_order_task_id: taskId },
+    order: [['sort_order', 'ASC'], ['id', 'ASC']],
+    transaction,
+  });
+  const existingIds = existing.map((e) => e.id);
+  const ledgerRows = existingIds.length
+    ? await db.Expense.findAll({
+      where: { work_order_task_expense_id: { [Op.in]: existingIds } },
+      attributes: ['work_order_task_expense_id'],
+      transaction,
+    })
+    : [];
+  const linkedIds = new Set(ledgerRows.map((r) => r.work_order_task_expense_id));
+
+  if (linkedIds.size > 0) {
+    for (let i = 0; i < expenseLines.length; i += 1) {
+      const line = expenseLines[i];
+      const row = existing[i];
+      if (row) {
+        await row.update({
+          description: line.description,
+          amount: line.amount,
+          sort_order: line.sort_order ?? i,
+          evidence_path: line.evidence_path ?? row.evidence_path,
+          evidence_file_name: line.evidence_file_name ?? row.evidence_file_name,
+        }, { transaction });
+      } else {
+        await db.WorkOrderTaskExpense.create({
+          work_order_task_id: taskId,
+          description: line.description,
+          amount: line.amount,
+          sort_order: line.sort_order ?? i,
+          evidence_path: line.evidence_path || null,
+          evidence_file_name: line.evidence_file_name || null,
+        }, { transaction });
+      }
+    }
+    return;
+  }
+
+  await db.WorkOrderTaskExpense.destroy({ where: { work_order_task_id: taskId }, transaction });
+  if (expenseLines.length > 0) {
+    await db.WorkOrderTaskExpense.bulkCreate(
+      expenseLines.map((line) => ({
+        work_order_task_id: taskId,
+        description: line.description,
+        amount: line.amount,
+        sort_order: line.sort_order,
+        evidence_path: line.evidence_path || null,
+        evidence_file_name: line.evidence_file_name || null,
+      })),
+      { transaction }
+    );
+  }
+};
+
+const safeDeleteTask = async (taskId, transaction) => {
+  const expenseRows = await db.WorkOrderTaskExpense.findAll({
+    where: { work_order_task_id: taskId },
+    attributes: ['id'],
+    transaction,
+  });
+  const expenseIds = expenseRows.map((e) => e.id);
+  if (expenseIds.length) {
+    const ledgerCount = await db.Expense.count({
+      where: { work_order_task_expense_id: { [Op.in]: expenseIds } },
+      transaction,
+    });
+    if (ledgerCount > 0) {
+      throw ApiError.badRequest('Cannot remove a task that has linked accounting expenses');
+    }
+    await db.WorkOrderTaskExpense.destroy({ where: { work_order_task_id: taskId }, transaction });
+  }
+  await db.WorkOrderTask.destroy({ where: { id: taskId }, transaction });
+};
+
+const updateTaskInPlace = async (tenantId, taskId, task, transaction) => {
+  const row = await db.WorkOrderTask.findOne({ where: { id: taskId }, transaction });
+  if (!row) throw ApiError.badRequest('Task not found');
+  const { payload, expenseLines } = await resolveTaskPayload(tenantId, task, transaction);
+  await row.update(payload, { transaction });
+  await syncTaskExpenses(taskId, expenseLines, transaction);
+  return row;
 };
 
 const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction) => {
@@ -216,10 +317,26 @@ const update = async (tenantId, workOrderId, data) => {
     );
 
     if (data.tasks !== undefined) {
-      await db.WorkOrderTask.destroy({ where: { work_order_id: workOrderId }, transaction: t });
-      if (data.tasks.length > 0) {
-        for (const task of data.tasks) {
+      const existingTasks = await db.WorkOrderTask.findAll({
+        where: { work_order_id: workOrderId },
+        transaction: t,
+      });
+      const existingById = new Map(existingTasks.map((row) => [row.id, row]));
+      const keptIds = new Set();
+
+      for (const task of data.tasks) {
+        const taskId = task.id != null ? parseInt(task.id, 10) : null;
+        if (taskId && existingById.has(taskId)) {
+          keptIds.add(taskId);
+          await updateTaskInPlace(tenantId, taskId, task, t);
+        } else {
           await createTaskWithExpenses(tenantId, task, workOrderId, t);
+        }
+      }
+
+      for (const existing of existingTasks) {
+        if (!keptIds.has(existing.id)) {
+          await safeDeleteTask(existing.id, t);
         }
       }
     }

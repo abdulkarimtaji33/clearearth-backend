@@ -41,7 +41,12 @@ const errorHandler = (err, req, res, next) => {
 
   // Handle Sequelize Foreign Key Constraint Errors
   if (err.name === 'SequelizeForeignKeyConstraintError') {
-    error = ApiError.badRequest('Invalid reference to related resource');
+    const msg = String(err.message || '');
+    if (msg.includes('fk_exp_wote') || msg.includes('work_order_task_expense')) {
+      error = ApiError.badRequest('Cannot update this work order because a task expense is linked to accounting records');
+    } else {
+      error = ApiError.badRequest('Invalid reference to related resource');
+    }
   }
 
   // Handle JWT Errors
