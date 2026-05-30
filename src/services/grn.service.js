@@ -19,8 +19,12 @@ const grnIncludes = [
       {
         model: db.Lead,
         as: 'lead',
-        attributes: ['id', 'company_name', 'contact_name', 'email', 'phone'],
+        attributes: ['id', 'lead_number', 'email', 'phone', 'company_id', 'contact_id'],
         required: false,
+        include: [
+          { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+          { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
+        ],
       },
       {
         model: db.User,
