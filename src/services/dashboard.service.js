@@ -156,31 +156,53 @@ async function getSalesManagerOverview(tenantId) {
 }
 
 async function getInspectionOverview(tenantId, userId) {
-  const requests = await db.DealInspectionRequest.findAll({
-    include: [
-      { model: db.Deal, as: 'deal', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'deal_number', 'title'] },
-      { model: db.MaterialType, as: 'materialType', required: false },
-    ],
-    where: {
-      status: { [Op.notIn]: ['report_submitted', 'inspection_completed'] },
-    },
-    order: [['created_at', 'DESC']],
-    limit: 50,
-  });
+  const weekStart = daysAgo(7);
 
-  const newCount = requests.filter((r) => r.status === 'request_submitted').length;
-  const inProgress = requests.filter((r) => r.status === 'team_assigned').length;
+  const [openRequests, completedThisWeek, completedThisMonth] = await Promise.all([
+    db.DealInspectionRequest.findAll({
+      include: [
+        { model: db.Deal, as: 'deal', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'deal_number', 'title'] },
+        { model: db.MaterialType, as: 'materialType', required: false },
+      ],
+      where: {
+        status: { [Op.notIn]: ['report_submitted', 'inspection_completed'] },
+      },
+      order: [
+        [db.sequelize.literal(`FIELD(priority, 'critical', 'high', 'medium', 'low')`), 'ASC'],
+        ['created_at', 'ASC'],
+      ],
+      limit: 50,
+    }),
+    db.DealInspectionRequest.count({
+      include: [{ model: db.Deal, as: 'deal', required: true, where: { tenant_id: tenantId } }],
+      where: {
+        status: { [Op.in]: ['report_submitted', 'inspection_completed'] },
+        updated_at: { [Op.gte]: weekStart },
+      },
+    }).catch(() => 0),
+    db.DealInspectionRequest.count({
+      include: [{ model: db.Deal, as: 'deal', required: true, where: { tenant_id: tenantId } }],
+      where: {
+        status: { [Op.in]: ['report_submitted', 'inspection_completed'] },
+        updated_at: { [Op.gte]: monthStart() },
+      },
+    }).catch(() => 0),
+  ]);
+
+  const newCount = openRequests.filter((r) => r.status === 'request_submitted').length;
+  const inProgress = openRequests.filter((r) => r.status === 'team_assigned').length;
 
   return {
     role: 'inspection_team',
     kpis: [
       { label: 'New requests', value: newCount, format: 'number', highlight: newCount > 0 },
       { label: 'In progress', value: inProgress, format: 'number' },
-      { label: 'Open queue', value: requests.length, format: 'number' },
+      { label: 'Completed this week', value: completedThisWeek, format: 'number' },
+      { label: 'Completed this month', value: completedThisMonth, format: 'number' },
     ],
-    actionables: requests.slice(0, 15).map((r) => ({
+    actionables: openRequests.slice(0, 15).map((r) => ({
       id: `insp-${r.id}`,
-      label: `${r.deal?.deal_number || 'Deal'} — ${r.status?.replace(/_/g, ' ')}`,
+      label: `${r.deal?.deal_number || 'Deal'} — ${r.deal?.title || ''} (${(r.status || '').replace(/_/g, ' ')})`,
       href: `/erp/inspection-requests/${r.id}`,
       priority: r.priority,
     })),
@@ -188,10 +210,12 @@ async function getInspectionOverview(tenantId, userId) {
 }
 
 async function getOperationsOverview(tenantId) {
-  const [woInProgress, overdueTasks, pendingExpenses, draftGrns, unassignedPickups] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [woInProgress, overdueTasks, pendingExpenses, draftGrns, unassignedPickups, overdueTaskRows, driverActivity] = await Promise.all([
     db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'in_progress' } }),
     db.WorkOrderTask.count({
-      where: { status: { [Op.ne]: 'completed' }, end_date: { [Op.lt]: new Date().toISOString().slice(0, 10) } },
+      where: { status: { [Op.ne]: 'completed' }, end_date: { [Op.lt]: today } },
       include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId } }],
     }).catch(() => 0),
     db.WorkOrderTaskExpense.count({
@@ -204,37 +228,91 @@ async function getOperationsOverview(tenantId) {
       include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'title'] }],
       limit: 10,
     }).catch(() => []),
+    db.WorkOrderTask.findAll({
+      where: { status: { [Op.ne]: 'completed' }, end_date: { [Op.lt]: today } },
+      include: [
+        { model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'title'] },
+        { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+      ],
+      order: [['end_date', 'ASC']],
+      limit: 10,
+    }).catch(() => []),
+    db.WorkOrderTask.findAll({
+      where: {
+        assigned_to: { [Op.ne]: null },
+        [Op.or]: [{ type_of_work: { [Op.like]: '%pickup%' } }],
+        status: { [Op.ne]: 'completed' },
+      },
+      include: [
+        { model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'title'] },
+        { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+      ],
+      limit: 10,
+    }).catch(() => []),
   ]);
 
   return {
     role: 'operations_manager',
     kpis: [
       { label: 'Work orders in progress', value: woInProgress, format: 'number' },
-      { label: 'Overdue tasks', value: overdueTasks, format: 'number' },
+      { label: 'Overdue tasks', value: overdueTasks, format: 'number', highlight: overdueTasks > 0 },
       { label: 'Expenses pending', value: pendingExpenses, format: 'number' },
       { label: 'GRNs pending', value: draftGrns, format: 'number' },
     ],
     actionables: [
-      pendingExpenses > 0 && { id: 'exp', label: `${pendingExpenses} expense(s) need approval`, href: '/erp/accounts/work-orders' },
-      draftGrns > 0 && { id: 'grn', label: `${draftGrns} GRN(s) pending`, href: '/erp/grn' },
-      ...unassignedPickups.map((t) => ({ id: `pickup-${t.id}`, label: `Assign pickup: ${t.workOrder?.title || 'WO'}`, href: `/erp/work-orders/edit/${t.work_order_id}` })),
+      pendingExpenses > 0 && { id: 'exp', label: `${pendingExpenses} expense(s) need approval`, count: pendingExpenses, href: '/erp/accounts/work-orders' },
+      draftGrns > 0 && { id: 'grn', label: `${draftGrns} GRN(s) pending review`, count: draftGrns, href: '/erp/grn' },
+      ...unassignedPickups.map((t) => ({ id: `pickup-${t.id}`, label: `Unassigned pickup: ${t.workOrder?.title || 'WO'}`, href: `/erp/work-orders/edit/${t.work_order_id}` })),
     ].filter(Boolean),
+    overdueTasks: overdueTaskRows.map((t) => {
+      const plain = t.get({ plain: true });
+      return {
+        taskId: plain.id,
+        workOrderId: plain.work_order_id,
+        workOrderTitle: plain.workOrder?.title || `WO #${plain.work_order_id}`,
+        assignedTo: plain.assignedUser
+          ? `${plain.assignedUser.first_name} ${plain.assignedUser.last_name}`
+          : 'Unassigned',
+        endDate: plain.end_date,
+        status: plain.status,
+        typeOfWork: plain.type_of_work,
+      };
+    }),
+    driverActivity: driverActivity.map((t) => {
+      const plain = t.get({ plain: true });
+      return {
+        taskId: plain.id,
+        workOrderTitle: plain.workOrder?.title || `WO #${plain.work_order_id}`,
+        driverName: plain.assignedUser
+          ? `${plain.assignedUser.first_name} ${plain.assignedUser.last_name}`
+          : 'Unknown',
+        status: plain.status,
+        startDate: plain.start_date,
+      };
+    }),
   };
 }
 
 async function getDriverOverview(tenantId, userId) {
   const pickups = await driverService.listPickups(tenantId, userId);
   const today = new Date().toISOString().slice(0, 10);
-  const active = pickups.filter((p) => p.taskStatus !== 'completed');
+
+  const overdue   = pickups.filter((p) => p.priority === 'overdue');
+  const todayList = pickups.filter((p) => p.priority === 'today');
+  const upcoming  = pickups.filter((p) => p.priority === 'upcoming');
   const completedToday = pickups.filter((p) => p.taskStatus === 'completed' && p.endDate === today);
 
   return {
     role: 'driver',
     kpis: [
-      { label: 'Active pickups', value: active.length, format: 'number' },
-      { label: 'Completed today', value: completedToday.length, format: 'number' },
+      { label: 'Overdue', value: overdue.length, format: 'number', highlight: overdue.length > 0, color: 'error' },
+      { label: 'Due today', value: todayList.length, format: 'number', highlight: todayList.length > 0, color: 'warning' },
+      { label: 'Upcoming', value: upcoming.length, format: 'number' },
+      { label: 'Done today', value: completedToday.length, format: 'number', color: 'success' },
     ],
-    pickups: active,
+    overdue,
+    today: todayList,
+    upcoming,
     completedToday,
   };
 }

@@ -6,6 +6,7 @@ const { authenticate, authorizeRole } = require('../middlewares/auth');
 router.use(authenticate);
 
 router.get('/pickups', authorizeRole('driver', 'admin', 'tenant_admin', 'operations_manager'), driverController.listPickups);
+router.post('/pickups/:taskId/start', authorizeRole('driver', 'admin', 'tenant_admin', 'operations_manager'), driverController.startPickup);
 router.post('/pickups/:taskId/complete', authorizeRole('driver', 'admin', 'tenant_admin', 'operations_manager'), driverController.markPickedUp);
 
 module.exports = router;
