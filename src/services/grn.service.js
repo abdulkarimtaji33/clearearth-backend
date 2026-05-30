@@ -10,7 +10,40 @@ const GRN_STATUSES = ['draft', 'submitted', 'approved'];
 
 const grnIncludes = [
   { model: db.WorkOrder, as: 'workOrder', attributes: ['id', 'title', 'status'], required: false },
-  { model: db.Deal, as: 'deal', attributes: ['id', 'deal_number', 'title'], required: false },
+  {
+    model: db.Deal,
+    as: 'deal',
+    attributes: ['id', 'deal_number', 'title', 'status', 'assigned_to', 'lead_id'],
+    required: false,
+    include: [
+      {
+        model: db.Lead,
+        as: 'lead',
+        attributes: ['id', 'company_name', 'contact_name', 'email', 'phone'],
+        required: false,
+      },
+      {
+        model: db.User,
+        as: 'assignedUser',
+        attributes: ['id', 'first_name', 'last_name', 'email'],
+        required: false,
+      },
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoices',
+        attributes: ['id', 'proforma_number'],
+        required: false,
+        include: [
+          {
+            model: db.TaxInvoice,
+            as: 'taxInvoice',
+            attributes: ['id', 'tax_invoice_number', 'payment_status', 'total'],
+            required: false,
+          },
+        ],
+      },
+    ],
+  },
   { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
   { model: db.User, as: 'approvedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
   {
@@ -115,6 +148,7 @@ const createGrn = async (tenantId, userId, body) => {
   if (workOrderId) {
     const wo = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
     if (!wo) throw ApiError.notFound('Work order not found');
+    if (wo.status !== 'completed') throw ApiError.badRequest('GRN can only be created for completed work orders');
     resolvedDealId = resolvedDealId || wo.deal_id;
   }
 

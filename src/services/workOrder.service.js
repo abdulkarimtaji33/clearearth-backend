@@ -305,6 +305,15 @@ const update = async (tenantId, workOrderId, data) => {
   const prevStatus = workOrder.status;
   const nextStatus = data.status !== undefined ? data.status : prevStatus;
 
+  if (nextStatus === 'completed' && prevStatus !== 'completed') {
+    const incompleteTasks = await db.WorkOrderTask.count({
+      where: { work_order_id: workOrderId, status: { [db.Sequelize.Op.ne]: 'completed' } },
+    });
+    if (incompleteTasks > 0) {
+      throw ApiError.badRequest(`Cannot complete work order: ${incompleteTasks} task(s) are not yet completed`);
+    }
+  }
+
   await db.sequelize.transaction(async (t) => {
     await workOrder.update(
       {
