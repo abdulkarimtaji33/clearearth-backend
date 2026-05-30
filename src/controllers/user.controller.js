@@ -31,6 +31,16 @@ const getInspectors = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, users);
 });
 
+const getDrivers = asyncHandler(async (req, res) => {
+  const users = await userService.getDrivers(req.tenant.id);
+  return ApiResponse.success(res, users);
+});
+
+const getAssignees = asyncHandler(async (req, res) => {
+  const users = await userService.getAssignees(req.tenant.id);
+  return ApiResponse.success(res, users);
+});
+
 const getById = asyncHandler(async (req, res) => {
   const user = await userService.getById(req.tenant.id, req.params.id);
   return ApiResponse.success(res, user);
@@ -56,4 +66,4 @@ const changePassword = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, user, 'Password updated successfully');
 });
 
-module.exports = { getAll, getInspectors, getById, create, update, remove, changePassword };
+module.exports = { getAll, getInspectors, getDrivers, getAssignees, getById, create, update, remove, changePassword };

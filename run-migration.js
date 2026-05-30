@@ -1498,8 +1498,8 @@ async function runMigration() {
 
     console.log('Seeding driver role...');
     await db.sequelize.query(`
-      INSERT INTO roles (name, display_name, description, tenant_id, is_system, created_at, updated_at)
-      SELECT 'driver', 'Driver', 'Pickup and delivery driver', NULL, 1, NOW(), NOW()
+      INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)
+      SELECT NULL, 'driver', 'Driver', 'Pickup and delivery driver', 1, 'active', NOW(), NOW()
       FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'driver' AND tenant_id IS NULL)
     `);
     const [[driverRole]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'driver' AND tenant_id IS NULL LIMIT 1`);
@@ -1514,6 +1514,88 @@ async function runMigration() {
         }
       }
       console.log('  Driver role seeded with deals.read + operations.read');
+    }
+
+    console.log('Backfill operations_manager users.read for task assignment...');
+    const [[omRoleForUsers]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
+    const [[usersReadPermOm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'users.read' LIMIT 1`);
+    if (omRoleForUsers?.id && usersReadPermOm?.id) {
+      await db.sequelize.query(
+        `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+        { replacements: [omRoleForUsers.id, usersReadPermOm.id] }
+      );
+      console.log('  operations_manager granted users.read');
+    }
+
+    console.log('Seeding GRN permissions...');
+    const grnPerms = [
+      ['grn.read',   'Read GRN',   'grn', 'read',   'View goods received notes'],
+      ['grn.create', 'Create GRN', 'grn', 'create', 'Create goods received notes'],
+      ['grn.update', 'Update GRN', 'grn', 'update', 'Update / approve goods received notes'],
+    ];
+    for (const [name, displayName, mod, act, desc] of grnPerms) {
+      try {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO permissions (name, display_name, module, action, description) VALUES (?, ?, ?, ?, ?)`,
+          { replacements: [name, displayName, mod, act, desc] }
+        );
+      } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  grn perm:', e.message); }
+    }
+
+    console.log('Assigning GRN permissions to operations_manager, admin, tenant_admin...');
+    const grnPermRoles = ['operations_manager', 'admin', 'tenant_admin'];
+    const [grnPermRows] = await db.sequelize.query(`SELECT id FROM permissions WHERE name LIKE 'grn.%'`);
+    for (const roleName of grnPermRoles) {
+      const [[roleRow]] = await db.sequelize.query(
+        `SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`,
+        { replacements: [roleName] }
+      );
+      if (roleRow?.id) {
+        for (const p of grnPermRows) {
+          try {
+            await db.sequelize.query(
+              `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+              { replacements: [roleRow.id, p.id] }
+            );
+          } catch (e) { /* ignore */ }
+        }
+        console.log(`  Assigned grn.* to ${roleName}`);
+      }
+    }
+
+    // grn.read for inspection_team and driver (read-only view)
+    for (const roleName of ['inspection_team', 'driver', 'sales', 'sales_manager']) {
+      const [[roleRow]] = await db.sequelize.query(
+        `SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`,
+        { replacements: [roleName] }
+      );
+      const [[grnRead]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'grn.read' LIMIT 1`);
+      if (roleRow?.id && grnRead?.id) {
+        try {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+            { replacements: [roleRow.id, grnRead.id] }
+          );
+        } catch (e) { /* ignore */ }
+      }
+    }
+    console.log('  grn.read assigned to inspection_team, driver, sales, sales_manager');
+
+    console.log('Ensuring all admin/tenant_admin roles have ALL permissions...');
+    {
+      const [adminRolesAll] = await db.sequelize.query(`SELECT id, name FROM roles WHERE name IN ('admin', 'tenant_admin')`);
+      const [allPermsAll] = await db.sequelize.query(`SELECT id FROM permissions`);
+      for (const role of adminRolesAll) {
+        for (const perm of allPermsAll) {
+          try {
+            await db.sequelize.query(
+              `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+              { replacements: [role.id, perm.id] }
+            );
+          } catch (e) { /* ignore */ }
+        }
+        console.log(`  Re-synced all ${allPermsAll.length} permissions to ${role.name}`);
+      }
     }
 
     console.log('✅ Migration completed successfully!');

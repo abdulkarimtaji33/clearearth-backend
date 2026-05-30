@@ -50,6 +50,31 @@ const getInspectors = async (tenantId) => {
   return users;
 };
 
+const getDrivers = async (tenantId) => {
+  const driverRole = await db.Role.findOne({
+    where: { [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }], name: 'driver' },
+    attributes: ['id'],
+  });
+  if (!driverRole) return [];
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, role_id: driverRole.id, status: 'active' },
+    attributes: ['id', 'first_name', 'last_name', 'email', 'phone'],
+    include: [{ model: db.Role, as: 'role', attributes: ['id', 'name', 'display_name'] }],
+    order: [['first_name', 'ASC']],
+  });
+  return users;
+};
+
+const getAssignees = async (tenantId) => {
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, status: 'active' },
+    attributes: ['id', 'first_name', 'last_name', 'email'],
+    include: [{ model: db.Role, as: 'role', attributes: ['id', 'name', 'display_name'] }],
+    order: [['first_name', 'ASC']],
+  });
+  return users;
+};
+
 const getById = async (tenantId, userId) => {
   const user = await db.User.findOne({
     where: { id: userId, tenant_id: tenantId },
@@ -129,4 +154,4 @@ const changePassword = async (tenantId, userId, password) => {
   return await getById(tenantId, userId);
 };
 
-module.exports = { getAll, getInspectors, getById, create, update, remove, changePassword };
+module.exports = { getAll, getInspectors, getDrivers, getAssignees, getById, create, update, remove, changePassword };

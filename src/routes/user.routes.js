@@ -40,6 +40,8 @@ const changePasswordValidation = [
 // Routes
 router.get('/', authorize('users.read'), userController.getAll);
 router.get('/inspectors', authorize('inspection_requests.read', 'inspection_reports.create', 'users.read'), userController.getInspectors);
+router.get('/drivers', authorize('operations.read', 'deals.read', 'operations.update', 'users.read'), userController.getDrivers);
+router.get('/assignees', authorize('operations.read', 'deals.read', 'users.read'), userController.getAssignees);
 router.put('/:id/password', authorize('users.update'), changePasswordValidation, userController.changePassword);
 router.get('/:id', authorize('users.read'), userController.getById);
 router.post('/', authorize('users.create'), createUserValidation, userController.create);
