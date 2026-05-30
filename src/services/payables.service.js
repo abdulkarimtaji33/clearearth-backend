@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const { resolvePaymentAccount } = require('../utils/paymentAccount');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -109,7 +110,11 @@ const listPayables = async (tenantId, filters = {}) => {
 const recordPayment = async (tenantId, poId, body) => {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId, status: 'approved' },
-    include: [{ model: db.PurchaseOrderItem, as: 'items', required: false }],
+    include: [
+      { model: db.PurchaseOrderItem, as: 'items', required: false },
+      { model: db.Supplier, as: 'supplier', attributes: ['company_name'], required: false },
+      { model: db.Company, as: 'company', attributes: ['company_name'], required: false },
+    ],
   });
   if (!po) throw ApiError.notFound('Payable purchase order not found');
 
@@ -135,19 +140,23 @@ const recordPayment = async (tenantId, poId, body) => {
   try {
     await po.update(updates, { transaction: t });
 
-    // GL: Dr Accounts Payable (2000) / Cr Cash (1000)
+    // GL: Dr Accounts Payable (2000) / Cr payment account
     if (delta > 0.005) {
       try {
-        const apId   = await jeService.getSystemAccountId(tenantId, '2000');
-        const cashId = await jeService.getSystemAccountId(tenantId, '1000');
+        const apId = await jeService.getSystemAccountId(tenantId, '2000');
+        const payAcct = await resolvePaymentAccount(tenantId, {
+          paymentMethod: body.paymentMethod,
+          paymentAccountId: body.paymentAccountId,
+        });
         await jeService.createJournalEntry(tenantId, 1, {
           entryDate: body.paymentDate || new Date().toISOString().slice(0, 10),
           description: `PO Payment — PO #${poId}`,
           sourceType: 'po_payment',
           sourceId: poId,
+          paidTo: body.paidTo ?? po.supplier?.company_name ?? po.company?.company_name ?? null,
           lines: [
-            { accountId: apId,   debit: delta, credit: 0 },
-            { accountId: cashId, debit: 0,     credit: delta },
+            { accountId: apId, debit: delta, credit: 0 },
+            { accountId: payAcct.accountId, debit: 0, credit: delta },
           ],
         }, t);
       } catch (jeErr) {

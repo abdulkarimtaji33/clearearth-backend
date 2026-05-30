@@ -14,9 +14,17 @@ const getTrialBalance = asyncHandler(async (req, res) => {
 });
 
 const getGeneralLedger = asyncHandler(async (req, res) => {
-  const { accountId, dateFrom, dateTo, page, pageSize } = req.query;
-  if (!accountId) throw ApiError.badRequest('accountId is required');
-  const result = await reportsService.getGeneralLedger(req.tenant.id, { accountId, dateFrom, dateTo, page: parseInt(page) || 1, pageSize: parseInt(pageSize) || 50 });
+  const { accountId, dateFrom, dateTo, page, pageSize, paidTo, receivedFrom, search } = req.query;
+  const result = await reportsService.getGeneralLedger(req.tenant.id, {
+    accountId: accountId || 'all',
+    dateFrom,
+    dateTo,
+    page: parseInt(page, 10) || 1,
+    pageSize: parseInt(pageSize, 10) || 50,
+    paidTo,
+    receivedFrom,
+    search,
+  });
   return ApiResponse.success(res, result);
 });
 

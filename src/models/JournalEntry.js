@@ -19,6 +19,8 @@ module.exports = (sequelize, DataTypes) => {
       reversed_by_id: { type: DataTypes.INTEGER, allowNull: true },
       voided_at: { type: DataTypes.DATE, allowNull: true },
       voided_by: { type: DataTypes.INTEGER, allowNull: true },
+      paid_to: { type: DataTypes.STRING(255), allowNull: true },
+      received_from: { type: DataTypes.STRING(255), allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: false },
     },
     {

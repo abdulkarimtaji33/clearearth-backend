@@ -62,7 +62,17 @@ async function nextEntryNumber(tenantId, transaction) {
  * @param {object} [transaction] - optional Sequelize transaction to join
  */
 async function createJournalEntry(tenantId, userId, data, transaction = null) {
-  const { entryDate, description, sourceType, sourceId, lines, autoReverse = false, reverseDate = null } = data;
+  const {
+    entryDate,
+    description,
+    sourceType,
+    sourceId,
+    lines,
+    autoReverse = false,
+    reverseDate = null,
+    paidTo = null,
+    receivedFrom = null,
+  } = data;
 
   if (!entryDate) throw new Error('entryDate is required for journal entry');
   if (!description) throw new Error('description is required for journal entry');
@@ -91,6 +101,8 @@ async function createJournalEntry(tenantId, userId, data, transaction = null) {
         status: 'posted',
         auto_reverse: autoReverse ? 1 : 0,
         reverse_date: autoReverse && reverseDate ? reverseDate : null,
+        paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : null,
+        received_from: receivedFrom != null && String(receivedFrom).trim() !== '' ? String(receivedFrom).trim() : null,
         created_by: userId,
       },
       { transaction: t }
@@ -243,7 +255,15 @@ const getJournalEntryById = async (tenantId, id) => {
 };
 
 const createManualEntry = async (tenantId, userId, body) => {
-  const { entryDate, description, lines, autoReverse = false, reverseDate = null } = body;
+  const {
+    entryDate,
+    description,
+    lines,
+    autoReverse = false,
+    reverseDate = null,
+    paidTo = null,
+    receivedFrom = null,
+  } = body;
   if (!entryDate) throw ApiError.badRequest('entryDate is required');
   if (!description) throw ApiError.badRequest('description is required');
   if (!Array.isArray(lines) || lines.length < 2) throw ApiError.badRequest('At least 2 lines required');
@@ -271,6 +291,8 @@ const createManualEntry = async (tenantId, userId, body) => {
     lines: parsedLines,
     autoReverse,
     reverseDate,
+    paidTo,
+    receivedFrom,
   });
 
   return getJournalEntryById(tenantId, entryId);

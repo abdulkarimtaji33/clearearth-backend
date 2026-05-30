@@ -1176,6 +1176,8 @@ async function runMigration() {
         reversed_by_id INT DEFAULT NULL,
         voided_at      DATETIME DEFAULT NULL,
         voided_by      INT DEFAULT NULL,
+        paid_to        VARCHAR(255) DEFAULT NULL,
+        received_from  VARCHAR(255) DEFAULT NULL,
         created_by     INT NOT NULL,
         created_at     DATETIME NOT NULL,
         updated_at     DATETIME NOT NULL,
@@ -1208,6 +1210,20 @@ async function runMigration() {
         CONSTRAINT fk_jel_account FOREIGN KEY (account_id) REFERENCES chart_of_accounts(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    console.log('Adding journal entry counterparty columns...');
+    for (const col of [
+      ['paid_to', 'VARCHAR(255) NULL'],
+      ['received_from', 'VARCHAR(255) NULL'],
+    ]) {
+      try {
+        await db.sequelize.query(`ALTER TABLE journal_entries ADD COLUMN ${col[0]} ${col[1]}`);
+        console.log(`  Added ${col[0]} to journal_entries`);
+      } catch (e) {
+        if (isDuplicateSchemaError(e)) console.log(`  ${col[0]} already present in journal_entries`);
+        else throw e;
+      }
+    }
 
     console.log('Adding deleted_at (paranoid) to accounting tables...');
     for (const tbl of ['fiscal_years', 'accounting_periods', 'chart_of_accounts', 'journal_entries', 'journal_entry_lines']) {

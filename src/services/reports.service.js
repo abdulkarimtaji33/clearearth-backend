@@ -64,7 +64,106 @@ const getTrialBalance = async (tenantId, { asOfDate }) => {
 
 // ─── General Ledger ───────────────────────────────────────────────────────────
 
-const getGeneralLedger = async (tenantId, { accountId, dateFrom, dateTo, page = 1, pageSize = 50 }) => {
+function buildGlLineFilters(tenantId, { accountId, dateFrom, dateTo, paidTo, receivedFrom, search }) {
+  const conditions = ['e.tenant_id = ?', "e.status = 'posted'"];
+  const replacements = [tenantId];
+
+  const viewAll = !accountId || String(accountId).toLowerCase() === 'all';
+  if (!viewAll) {
+    conditions.push('l.account_id = ?');
+    replacements.push(accountId);
+  }
+
+  if (dateFrom) {
+    conditions.push('e.entry_date >= ?');
+    replacements.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push('e.entry_date <= ?');
+    replacements.push(dateTo);
+  }
+  if (paidTo && String(paidTo).trim()) {
+    conditions.push('e.paid_to LIKE ?');
+    replacements.push(`%${String(paidTo).trim()}%`);
+  }
+  if (receivedFrom && String(receivedFrom).trim()) {
+    conditions.push('e.received_from LIKE ?');
+    replacements.push(`%${String(receivedFrom).trim()}%`);
+  }
+  if (search && String(search).trim()) {
+    const s = `%${String(search).trim()}%`;
+    conditions.push(`(
+      e.description LIKE ? OR e.entry_number LIKE ? OR l.description LIKE ?
+      OR e.paid_to LIKE ? OR e.received_from LIKE ? OR a.name LIKE ? OR a.code LIKE ?
+    )`);
+    replacements.push(s, s, s, s, s, s, s);
+  }
+
+  return { conditions, replacements, viewAll };
+}
+
+const getGeneralLedger = async (tenantId, {
+  accountId,
+  dateFrom,
+  dateTo,
+  page = 1,
+  pageSize = 50,
+  paidTo,
+  receivedFrom,
+  search,
+}) => {
+  const { conditions, replacements, viewAll } = buildGlLineFilters(tenantId, {
+    accountId,
+    dateFrom,
+    dateTo,
+    paidTo,
+    receivedFrom,
+    search,
+  });
+
+  if (viewAll) {
+    const countSql = `
+      SELECT COUNT(*) AS cnt
+      FROM journal_entry_lines l
+      JOIN journal_entries e ON e.id = l.journal_entry_id
+      JOIN chart_of_accounts a ON a.id = l.account_id AND a.tenant_id = e.tenant_id
+      WHERE ${conditions.join(' AND ')}
+    `;
+    const countRows = await querySelect(countSql, { replacements });
+    const total = n(countRows[0].cnt);
+    const offset = (page - 1) * pageSize;
+
+    const lines = await querySelect(`
+      SELECT
+        l.id AS line_id,
+        e.id AS journal_entry_id,
+        e.entry_date, e.entry_number, e.description AS entry_desc,
+        e.source_type, e.source_id,
+        e.paid_to, e.received_from,
+        a.id AS account_id, a.code AS account_code, a.name AS account_name,
+        l.debit, l.credit, l.description AS line_desc
+      FROM journal_entry_lines l
+      JOIN journal_entries e ON e.id = l.journal_entry_id
+      JOIN chart_of_accounts a ON a.id = l.account_id AND a.tenant_id = e.tenant_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY e.entry_date DESC, e.id DESC, l.sort_order ASC, l.id ASC
+      LIMIT ? OFFSET ?
+    `, { replacements: [...replacements, pageSize, offset] });
+
+    return {
+      view_all: true,
+      account: null,
+      date_from: dateFrom || null,
+      date_to: dateTo || null,
+      opening_balance: null,
+      closing_balance: null,
+      entries: lines.map((l) => ({ ...l, debit: n(l.debit), credit: n(l.credit), running_balance: null })),
+      total,
+      page,
+      page_size: pageSize,
+    };
+  }
+
   if (!accountId) throw new Error('accountId is required for General Ledger');
 
   const accountRows = await querySelect(
@@ -90,16 +189,11 @@ const getGeneralLedger = async (tenantId, { accountId, dateFrom, dateTo, page = 
       : n(ob.tc) - n(ob.td);
   }
 
-  // Period lines
-  const conditions = ['e.tenant_id = ?', "e.status = 'posted'", 'l.account_id = ?'];
-  const replacements = [tenantId, accountId];
-  if (dateFrom) { conditions.push('e.entry_date >= ?'); replacements.push(dateFrom); }
-  if (dateTo)   { conditions.push('e.entry_date <= ?'); replacements.push(dateTo); }
-
   const countSql = `
     SELECT COUNT(*) AS cnt
     FROM journal_entry_lines l
     JOIN journal_entries e ON e.id = l.journal_entry_id
+    JOIN chart_of_accounts a ON a.id = l.account_id AND a.tenant_id = e.tenant_id
     WHERE ${conditions.join(' AND ')}
   `;
   const countRows = await querySelect(countSql, { replacements });
@@ -108,26 +202,32 @@ const getGeneralLedger = async (tenantId, { accountId, dateFrom, dateTo, page = 
   const offset = (page - 1) * pageSize;
   const lines = await querySelect(`
     SELECT
+      l.id AS line_id,
+      e.id AS journal_entry_id,
       e.entry_date, e.entry_number, e.description AS entry_desc,
       e.source_type, e.source_id,
+      e.paid_to, e.received_from,
+      a.id AS account_id, a.code AS account_code, a.name AS account_name,
       l.debit, l.credit, l.description AS line_desc
     FROM journal_entry_lines l
     JOIN journal_entries e ON e.id = l.journal_entry_id
+    JOIN chart_of_accounts a ON a.id = l.account_id AND a.tenant_id = e.tenant_id
     WHERE ${conditions.join(' AND ')}
-    ORDER BY e.entry_date ASC, e.id ASC
+    ORDER BY e.entry_date ASC, e.id ASC, l.sort_order ASC, l.id ASC
     LIMIT ? OFFSET ?
   `, { replacements: [...replacements, pageSize, offset] });
 
   // Running balance
   let runBalance = openingBalance;
   const entries = lines.map((l) => {
-    const debit  = n(l.debit);
+    const debit = n(l.debit);
     const credit = n(l.credit);
     runBalance += account.normal_balance === 'debit' ? debit - credit : credit - debit;
     return { ...l, debit, credit, running_balance: runBalance };
   });
 
   return {
+    view_all: false,
     account,
     date_from: dateFrom || null,
     date_to: dateTo || null,

@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const { resolvePaymentAccount } = require('../utils/paymentAccount');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -101,6 +102,21 @@ const listReceivables = async (tenantId, filters = {}) => {
 const recordPayment = async (tenantId, taxInvoiceId, body) => {
   const row = await db.TaxInvoice.findOne({
     where: { id: taxInvoiceId, tenant_id: tenantId },
+    include: [
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoice',
+        required: false,
+        include: [
+          {
+            model: db.Deal,
+            as: 'deal',
+            required: false,
+            include: [{ model: db.Company, as: 'company', attributes: ['company_name'], required: false }],
+          },
+        ],
+      },
+    ],
   });
   if (!row) throw ApiError.notFound('Tax invoice not found');
 
@@ -133,20 +149,27 @@ const recordPayment = async (tenantId, taxInvoiceId, body) => {
       { transaction: t }
     );
 
-    // GL: Dr Cash (1000) / Cr Accounts Receivable (1100)
+    // GL: Dr payment account / Cr Accounts Receivable (1100)
     if (delta > 0.005) {
       try {
-        const cashId = await jeService.getSystemAccountId(tenantId, '1000');
-        const arId   = await jeService.getSystemAccountId(tenantId, '1100');
+        const arId = await jeService.getSystemAccountId(tenantId, '1100');
+        const payAcct = await resolvePaymentAccount(tenantId, {
+          paymentMethod: body.paymentMethod ?? row.payment_method,
+          paymentAccountId: body.paymentAccountId,
+        });
         const payDate = body.paymentDate || new Date().toISOString().slice(0, 10);
+        const clientName = row.proformaInvoice?.deal?.company?.company_name
+          || row.proformaInvoice?.deal?.title
+          || null;
         await jeService.createJournalEntry(tenantId, row.created_by || 1, {
           entryDate: payDate,
           description: `Payment Received — Invoice ${row.tax_invoice_number || taxInvoiceId}`,
           sourceType: 'payment_received',
           sourceId: taxInvoiceId,
+          receivedFrom: body.receivedFrom ?? clientName,
           lines: [
-            { accountId: cashId, debit: delta, credit: 0 },
-            { accountId: arId,   debit: 0,     credit: delta },
+            { accountId: payAcct.accountId, debit: delta, credit: 0 },
+            { accountId: arId, debit: 0, credit: delta },
           ],
         }, t);
       } catch (jeErr) {

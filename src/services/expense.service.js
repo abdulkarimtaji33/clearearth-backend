@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const { resolvePaymentAccount } = require('../utils/paymentAccount');
 const { EXPENSE_CATEGORY_TO_CODE } = require('./chartOfAccounts.service');
 
 const STATUSES = ['pending', 'approved', 'rejected'];
@@ -129,6 +130,7 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
         description: `Work Order Expense Approved — WO #${workOrderId}`,
         sourceType: 'expense',
         sourceId: exp.id,
+        paidTo: exp.paid_to || null,
         lines: [
           { accountId: cosId,   debit: amt, credit: 0 },
           { accountId: accruId, debit: 0,   credit: amt },
@@ -217,6 +219,7 @@ const createManualExpense = async (tenantId, userId, body) => {
         description: `Manual Expense — ${cat}`,
         sourceType: 'expense',
         sourceId: row.id,
+        paidTo: row.paid_to || null,
         lines: [
           { accountId: expAccId, debit: amt, credit: 0 },
           { accountId: creditId, debit: 0,   credit: amt },
@@ -271,19 +274,23 @@ const updateExpensePayment = async (tenantId, expenseId, body) => {
       { transaction: t }
     );
 
-    // GL: Dr Accrued Expenses (2200) / Cr Cash (1000) — only for incremental payment
+    // GL: Dr Accrued Expenses (2200) / Cr payment account — only for incremental payment
     if (delta > 0.005) {
       try {
         const accruId = await jeService.getSystemAccountId(tenantId, '2200');
-        const cashId  = await jeService.getSystemAccountId(tenantId, '1000');
+        const payAcct = await resolvePaymentAccount(tenantId, {
+          paymentMethod: body.paymentMethod ?? exp.payment_method,
+          paymentAccountId: body.paymentAccountId,
+        });
         await jeService.createJournalEntry(tenantId, exp.created_by || 1, {
           entryDate: paidAt || new Date().toISOString().slice(0, 10),
           description: `Expense Payment — ${exp.category}`,
           sourceType: 'expense_payment',
           sourceId: exp.id,
+          paidTo: exp.paid_to || null,
           lines: [
             { accountId: accruId, debit: delta, credit: 0 },
-            { accountId: cashId,  debit: 0,     credit: delta },
+            { accountId: payAcct.accountId, debit: 0, credit: delta },
           ],
         }, t);
       } catch (jeErr) {
