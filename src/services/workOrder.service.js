@@ -238,7 +238,7 @@ const getById = async (tenantId, workOrderId) => {
       {
         model: db.Deal,
         as: 'deal',
-        attributes: ['id', 'deal_number', 'title', 'status', 'deal_type', 'deal_date', 'total', 'vat_percentage', 'vat_amount', 'subtotal', 'currency', 'is_rcm_applicable', 'downstream_partner_supplier_id', 'supplier_id'],
+        attributes: ['id', 'deal_number', 'title', 'status', 'deal_type', 'deal_date', 'total', 'vat_percentage', 'vat_amount', 'subtotal', 'currency', 'is_rcm_applicable', 'downstream_partner_supplier_id', 'supplier_id', 'pickup_location', 'pickup_contact_name', 'pickup_contact_number'],
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
