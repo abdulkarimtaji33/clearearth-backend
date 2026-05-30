@@ -79,6 +79,11 @@ const AccountingPeriod = require('./AccountingPeriod')(sequelize, DataTypes);
 const ChartOfAccounts = require('./ChartOfAccounts')(sequelize, DataTypes);
 const JournalEntry = require('./JournalEntry')(sequelize, DataTypes);
 const JournalEntryLine = require('./JournalEntryLine')(sequelize, DataTypes);
+const PaymentTransaction = require('./PaymentTransaction')(sequelize, DataTypes);
+const Grn = require('./Grn')(sequelize, DataTypes);
+const GrnItem = require('./GrnItem')(sequelize, DataTypes);
+const GrnImage = require('./GrnImage')(sequelize, DataTypes);
+const Inventory = require('./Inventory')(sequelize, DataTypes);
 
 // Create db object with all models
 const db = {
@@ -140,6 +145,11 @@ const db = {
   ChartOfAccounts,
   JournalEntry,
   JournalEntryLine,
+  PaymentTransaction,
+  Grn,
+  GrnItem,
+  GrnImage,
+  Inventory,
 };
 
 // Define Associations

@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
@@ -107,7 +108,7 @@ const listPayables = async (tenantId, filters = {}) => {
   return { payables: plain, total: count };
 };
 
-const recordPayment = async (tenantId, poId, body) => {
+const recordPayment = async (tenantId, poId, body, userId = null) => {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId, status: 'approved' },
     include: [
@@ -142,18 +143,31 @@ const recordPayment = async (tenantId, poId, body) => {
 
     // GL: Dr Accounts Payable (2000) / Cr payment account
     if (delta > 0.005) {
+      const payDate = body.paymentDate || new Date().toISOString().slice(0, 10);
+      const paidTo = body.paidTo ?? po.supplier?.company_name ?? po.company?.company_name ?? null;
+      const payAcct = await resolvePaymentAccount(tenantId, {
+        paymentMethod: body.paymentMethod,
+        paymentAccountId: body.paymentAccountId,
+      });
+
+      await paymentTxService.createPaymentTransaction(tenantId, userId || 1, {
+        sourceType: 'payable',
+        sourceId: poId,
+        amount: delta,
+        paymentMethod: body.paymentMethod,
+        paymentAccountId: payAcct.accountId,
+        paidTo,
+        paidAt: payDate,
+      }, t);
+
       try {
         const apId = await jeService.getSystemAccountId(tenantId, '2000');
-        const payAcct = await resolvePaymentAccount(tenantId, {
-          paymentMethod: body.paymentMethod,
-          paymentAccountId: body.paymentAccountId,
-        });
         await jeService.createJournalEntry(tenantId, 1, {
-          entryDate: body.paymentDate || new Date().toISOString().slice(0, 10),
+          entryDate: payDate,
           description: `PO Payment — PO #${poId}`,
           sourceType: 'po_payment',
           sourceId: poId,
-          paidTo: body.paidTo ?? po.supplier?.company_name ?? po.company?.company_name ?? null,
+          paidTo,
           lines: [
             { accountId: apId, debit: delta, credit: 0 },
             { accountId: payAcct.accountId, debit: 0, credit: delta },
@@ -233,9 +247,16 @@ const getAgingSummary = async (tenantId, filters = {}) => {
   };
 };
 
+const listPayments = async (tenantId, poId) => {
+  const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
+  if (!po) throw ApiError.notFound('Purchase order not found');
+  return paymentTxService.listPaymentTransactions(tenantId, 'payable', poId);
+};
+
 module.exports = {
   listPayables,
   recordPayment,
+  listPayments,
   getAgingSummary,
   poTotal,
   balanceDue,

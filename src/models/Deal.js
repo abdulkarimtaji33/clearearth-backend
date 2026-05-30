@@ -144,6 +144,19 @@ module.exports = (sequelize, DataTypes) => {
       notes: {
         type: DataTypes.TEXT,
       },
+      pickup_location: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'Google Maps URL for collection',
+      },
+      pickup_contact_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      pickup_contact_number: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
     },
     {
       tableName: 'deals',

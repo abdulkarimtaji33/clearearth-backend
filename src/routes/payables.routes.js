@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.get('/aging-summary', authorize('accounting.read', 'deals.read'), payablesController.agingSummary);
 router.get('/', authorize('accounting.read', 'deals.read'), payablesController.list);
+router.get('/:id/payments', authorize('accounting.read', 'deals.read'), payablesController.listPayments);
 router.post('/:id/payment', authorize('accounting.update'), payablesController.recordPayment);
 
 module.exports = router;

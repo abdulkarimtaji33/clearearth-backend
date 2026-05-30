@@ -1415,6 +1415,107 @@ async function runMigration() {
     `);
     console.log(`  Updated ${backfillResult?.affectedRows ?? 0} inspection request(s)`);
 
+    console.log('Creating payment_transactions table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS payment_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        source_type VARCHAR(20) NOT NULL COMMENT 'receivable|payable|expense',
+        source_id INT NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        payment_method VARCHAR(255) NULL,
+        payment_account_id INT NULL,
+        reference_no VARCHAR(255) NULL,
+        paid_to VARCHAR(255) NULL,
+        received_from VARCHAR(255) NULL,
+        notes TEXT NULL,
+        paid_at DATE NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_tenant (tenant_id),
+        INDEX idx_source (source_type, source_id),
+        INDEX idx_paid_at (paid_at)
+      )
+    `);
+
+    console.log('Creating GRN tables...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS grns (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        grn_number VARCHAR(50) NOT NULL,
+        work_order_id INT NULL,
+        deal_id INT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        notes TEXT NULL,
+        created_by INT NULL,
+        approved_by INT NULL,
+        approved_at DATETIME NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_grn_tenant (tenant_id),
+        INDEX idx_grn_number (grn_number),
+        INDEX idx_grn_wo (work_order_id)
+      )
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS grn_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        grn_id INT NOT NULL,
+        item_name VARCHAR(255) NOT NULL,
+        material_type_id INT NULL,
+        quantity DECIMAL(15,2) NOT NULL DEFAULT 0,
+        unit_of_measure VARCHAR(20) DEFAULT 'kg',
+        notes TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_grn_items_grn (grn_id)
+      )
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS grn_images (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        grn_id INT NOT NULL,
+        image_url VARCHAR(500) NOT NULL,
+        original_name VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_grn_images_grn (grn_id)
+      )
+    `);
+
+    console.log('Adding deal collection fields...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deals ADD COLUMN pickup_location VARCHAR(500) NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_location:', e.message); }
+    try {
+      await db.sequelize.query(`ALTER TABLE deals ADD COLUMN pickup_contact_name VARCHAR(255) NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_contact_name:', e.message); }
+    try {
+      await db.sequelize.query(`ALTER TABLE deals ADD COLUMN pickup_contact_number VARCHAR(50) NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_contact_number:', e.message); }
+
+    console.log('Seeding driver role...');
+    await db.sequelize.query(`
+      INSERT INTO roles (name, display_name, description, tenant_id, is_system, created_at, updated_at)
+      SELECT 'driver', 'Driver', 'Pickup and delivery driver', NULL, 1, NOW(), NOW()
+      FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'driver' AND tenant_id IS NULL)
+    `);
+    const [[driverRole]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'driver' AND tenant_id IS NULL LIMIT 1`);
+    if (driverRole?.id) {
+      for (const permName of ['deals.read', 'operations.read']) {
+        const [[perm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = ? LIMIT 1`, { replacements: [permName] });
+        if (perm?.id) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+            { replacements: [driverRole.id, perm.id] }
+          );
+        }
+      }
+      console.log('  Driver role seeded with deals.read + operations.read');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

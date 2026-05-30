@@ -23,8 +23,13 @@ const list = asyncHandler(async (req, res) => {
 });
 
 const recordPayment = asyncHandler(async (req, res) => {
-  const row = await payablesService.recordPayment(req.tenant.id, req.params.id, req.body);
+  const row = await payablesService.recordPayment(req.tenant.id, req.params.id, req.body, req.user?.id);
   return ApiResponse.success(res, row, 'Payment recorded');
+});
+
+const listPayments = asyncHandler(async (req, res) => {
+  const rows = await payablesService.listPayments(req.tenant.id, req.params.id);
+  return ApiResponse.success(res, rows);
 });
 
 const agingSummary = asyncHandler(async (req, res) => {
@@ -32,4 +37,4 @@ const agingSummary = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, data);
 });
 
-module.exports = { list, recordPayment, agingSummary };
+module.exports = { list, recordPayment, listPayments, agingSummary };

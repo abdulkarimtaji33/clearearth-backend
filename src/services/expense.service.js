@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
 const { EXPENSE_CATEGORY_TO_CODE } = require('./chartOfAccounts.service');
 
@@ -238,7 +239,7 @@ const createManualExpense = async (tenantId, userId, body) => {
   return row;
 };
 
-const updateExpensePayment = async (tenantId, expenseId, body) => {
+const updateExpensePayment = async (tenantId, expenseId, body, userId = null) => {
   const exp = await db.Expense.findOne({ where: { id: expenseId, tenant_id: tenantId } });
   if (!exp) throw ApiError.notFound('Expense not found');
 
@@ -276,12 +277,23 @@ const updateExpensePayment = async (tenantId, expenseId, body) => {
 
     // GL: Dr Accrued Expenses (2200) / Cr payment account — only for incremental payment
     if (delta > 0.005) {
+      const payAcct = await resolvePaymentAccount(tenantId, {
+        paymentMethod: body.paymentMethod ?? exp.payment_method,
+        paymentAccountId: body.paymentAccountId,
+      });
+
+      await paymentTxService.createPaymentTransaction(tenantId, userId || exp.created_by || 1, {
+        sourceType: 'expense',
+        sourceId: exp.id,
+        amount: delta,
+        paymentMethod: body.paymentMethod ?? exp.payment_method,
+        paymentAccountId: payAcct.accountId,
+        paidTo: exp.paid_to || null,
+        paidAt: paidAt || new Date().toISOString().slice(0, 10),
+      }, t);
+
       try {
         const accruId = await jeService.getSystemAccountId(tenantId, '2200');
-        const payAcct = await resolvePaymentAccount(tenantId, {
-          paymentMethod: body.paymentMethod ?? exp.payment_method,
-          paymentAccountId: body.paymentAccountId,
-        });
         await jeService.createJournalEntry(tenantId, exp.created_by || 1, {
           entryDate: paidAt || new Date().toISOString().slice(0, 10),
           description: `Expense Payment — ${exp.category}`,
@@ -401,11 +413,18 @@ const rejectTaskExpense = async (tenantId, workOrderId, taskExpenseId, reason) =
   return workOrderService.getById(tenantId, workOrderId);
 };
 
+const listExpensePayments = async (tenantId, expenseId) => {
+  const exp = await db.Expense.findOne({ where: { id: expenseId, tenant_id: tenantId } });
+  if (!exp) throw ApiError.notFound('Expense not found');
+  return paymentTxService.listPaymentTransactions(tenantId, 'expense', expenseId);
+};
+
 module.exports = {
   approveTaskExpense,
   rejectTaskExpense,
   createManualExpense,
   updateExpensePayment,
+  listExpensePayments,
   listLedgerExpenses,
   STATUSES,
   PAYMENT_STATUSES,

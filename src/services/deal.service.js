@@ -464,6 +464,9 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
           return deal.terms_and_conditions_id;
         })(),
         notes: data.notes !== undefined ? data.notes : deal.notes,
+        pickup_location: data.pickupLocation !== undefined ? data.pickupLocation : deal.pickup_location,
+        pickup_contact_name: data.pickupContactName !== undefined ? data.pickupContactName : deal.pickup_contact_name,
+        pickup_contact_number: data.pickupContactNumber !== undefined ? data.pickupContactNumber : deal.pickup_contact_number,
       },
       { transaction }
     );

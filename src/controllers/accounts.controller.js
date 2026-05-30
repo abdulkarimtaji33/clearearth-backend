@@ -49,8 +49,13 @@ const createExpense = asyncHandler(async (req, res) => {
 });
 
 const updateExpensePayment = asyncHandler(async (req, res) => {
-  const row = await expenseService.updateExpensePayment(req.tenant.id, req.params.id, req.body);
+  const row = await expenseService.updateExpensePayment(req.tenant.id, req.params.id, req.body, req.user?.id);
   return ApiResponse.success(res, row, 'Expense payment updated');
+});
+
+const listExpensePayments = asyncHandler(async (req, res) => {
+  const rows = await expenseService.listExpensePayments(req.tenant.id, req.params.id);
+  return ApiResponse.success(res, rows);
 });
 
 const approveTaskExpense = asyncHandler(async (req, res) => {
@@ -80,6 +85,7 @@ module.exports = {
   listExpenses,
   createExpense,
   updateExpensePayment,
+  listExpensePayments,
   approveTaskExpense,
   rejectTaskExpense,
 };

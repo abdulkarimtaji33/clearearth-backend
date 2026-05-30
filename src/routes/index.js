@@ -35,6 +35,9 @@ const journalRoutes = require('./journal.routes');
 const reportsRoutes = require('./reports.routes');
 const fiscalYearRoutes = require('./fiscalYear.routes');
 const notificationRoutes = require('./notification.routes');
+const grnRoutes = require('./grn.routes');
+const driverRoutes = require('./driver.routes');
+const dashboardRoutes = require('./dashboard.routes');
 
 // PDF routes - must be before resource mounts so /quotations/:id/pdf matches
 router.use(pdfRoutes);
@@ -102,5 +105,8 @@ router.use('/journal', journalRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/fiscal-years', fiscalYearRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/grn', grnRoutes);
+router.use('/driver', driverRoutes);
+router.use('/dashboard', dashboardRoutes);
 
 module.exports = router;

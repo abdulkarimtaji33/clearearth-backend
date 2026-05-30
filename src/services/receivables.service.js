@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
@@ -99,7 +100,7 @@ const listReceivables = async (tenantId, filters = {}) => {
   return { receivables: plain, total: count };
 };
 
-const recordPayment = async (tenantId, taxInvoiceId, body) => {
+const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
   const row = await db.TaxInvoice.findOne({
     where: { id: taxInvoiceId, tenant_id: tenantId },
     include: [
@@ -151,16 +152,28 @@ const recordPayment = async (tenantId, taxInvoiceId, body) => {
 
     // GL: Dr payment account / Cr Accounts Receivable (1100)
     if (delta > 0.005) {
+      const payDate = body.paymentDate || new Date().toISOString().slice(0, 10);
+      const clientName = row.proformaInvoice?.deal?.company?.company_name
+        || row.proformaInvoice?.deal?.title
+        || null;
+      const payAcct = await resolvePaymentAccount(tenantId, {
+        paymentMethod: body.paymentMethod ?? row.payment_method,
+        paymentAccountId: body.paymentAccountId,
+      });
+
+      await paymentTxService.createPaymentTransaction(tenantId, userId || row.created_by || 1, {
+        sourceType: 'receivable',
+        sourceId: taxInvoiceId,
+        amount: delta,
+        paymentMethod: body.paymentMethod ?? row.payment_method,
+        paymentAccountId: payAcct.accountId,
+        referenceNo: body.referenceNo ?? row.reference_no,
+        receivedFrom: body.receivedFrom ?? clientName,
+        paidAt: payDate,
+      }, t);
+
       try {
         const arId = await jeService.getSystemAccountId(tenantId, '1100');
-        const payAcct = await resolvePaymentAccount(tenantId, {
-          paymentMethod: body.paymentMethod ?? row.payment_method,
-          paymentAccountId: body.paymentAccountId,
-        });
-        const payDate = body.paymentDate || new Date().toISOString().slice(0, 10);
-        const clientName = row.proformaInvoice?.deal?.company?.company_name
-          || row.proformaInvoice?.deal?.title
-          || null;
         await jeService.createJournalEntry(tenantId, row.created_by || 1, {
           entryDate: payDate,
           description: `Payment Received — Invoice ${row.tax_invoice_number || taxInvoiceId}`,
@@ -236,9 +249,16 @@ const getAgingSummary = async (tenantId, filters = {}) => {
   };
 };
 
+const listPayments = async (tenantId, taxInvoiceId) => {
+  const row = await db.TaxInvoice.findOne({ where: { id: taxInvoiceId, tenant_id: tenantId } });
+  if (!row) throw ApiError.notFound('Tax invoice not found');
+  return paymentTxService.listPaymentTransactions(tenantId, 'receivable', taxInvoiceId);
+};
+
 module.exports = {
   listReceivables,
   recordPayment,
+  listPayments,
   getAgingSummary,
   balanceDue,
 };
