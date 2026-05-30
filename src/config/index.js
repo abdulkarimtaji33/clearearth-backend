@@ -31,10 +31,12 @@ module.exports = {
   // File Upload
   upload: {
     path: process.env.UPLOAD_PATH || './uploads',
-    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 10485760, // 10MB
+    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 20971520, // 20MB
     allowedTypes: process.env.ALLOWED_FILE_TYPES
       ? process.env.ALLOWED_FILE_TYPES.split(',')
-      : ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp', 'application/pdf'],
+      : ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp', 'application/pdf',
+         'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+         'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
   },
 
   // Email

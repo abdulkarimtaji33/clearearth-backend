@@ -1598,6 +1598,21 @@ async function runMigration() {
       }
     }
 
+    console.log('Adding sort_order to work_order_tasks for drag-and-drop reordering...');
+    try {
+      await db.sequelize.query(`ALTER TABLE work_order_tasks ADD COLUMN sort_order INT NOT NULL DEFAULT 0`);
+      console.log('  Added sort_order column');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  sort_order column already exists');
+    }
+    try {
+      await db.sequelize.query(`UPDATE work_order_tasks SET sort_order = id WHERE sort_order = 0`);
+      console.log('  Initialised sort_order from id for existing rows');
+    } catch (e) {
+      console.warn('  Could not initialise sort_order:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

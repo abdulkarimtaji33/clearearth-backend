@@ -11,6 +11,7 @@ router.post('/', authorize('operations.create', 'deals.create'), workOrderContro
 router.put('/:id', authorize('operations.update', 'deals.update'), workOrderController.update);
 router.patch('/:id/tasks/:taskId/status', authorize('operations.update', 'deals.update'), workOrderController.updateTaskStatus);
 router.patch('/:id/tasks/:taskId/notes', authorize('operations.update', 'deals.update'), workOrderController.updateTaskNotes);
+router.patch('/:id/tasks/:taskId/assign', authorize('operations.update', 'deals.update'), workOrderController.updateTaskAssignment);
 router.delete('/:id', authorize('operations.delete', 'deals.delete'), workOrderController.remove);
 
 module.exports = router;

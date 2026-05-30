@@ -10,7 +10,7 @@ const taskInclude = {
   model: db.WorkOrderTask,
   as: 'tasks',
   separate: true,
-  order: [['id', 'ASC']],
+  order: [['sort_order', 'ASC'], ['id', 'ASC']],
   include: [
     { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
     { model: db.WorkType, as: 'workType', attributes: ['id', 'name'], required: false },
@@ -171,18 +171,19 @@ const safeDeleteTask = async (taskId, transaction) => {
   await db.WorkOrderTask.destroy({ where: { id: taskId }, transaction });
 };
 
-const updateTaskInPlace = async (tenantId, taskId, task, transaction) => {
+const updateTaskInPlace = async (tenantId, taskId, task, transaction, sortOrder = null) => {
   const row = await db.WorkOrderTask.findOne({ where: { id: taskId }, transaction });
   if (!row) throw ApiError.badRequest('Task not found');
   const { payload, expenseLines } = await resolveTaskPayload(tenantId, task, transaction);
-  await row.update(payload, { transaction });
+  const updatePayload = sortOrder !== null ? { ...payload, sort_order: sortOrder } : payload;
+  await row.update(updatePayload, { transaction });
   await syncTaskExpenses(taskId, expenseLines, transaction);
   return row;
 };
 
-const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction) => {
+const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction, sortOrder = 0) => {
   const { payload, expenseLines } = await resolveTaskPayload(tenantId, task, transaction);
-  const created = await db.WorkOrderTask.create({ ...payload, work_order_id: workOrderId }, { transaction });
+  const created = await db.WorkOrderTask.create({ ...payload, work_order_id: workOrderId, sort_order: sortOrder }, { transaction });
   if (expenseLines.length > 0) {
     await db.WorkOrderTaskExpense.bulkCreate(
       expenseLines.map((line) => ({
@@ -287,8 +288,8 @@ const create = async (tenantId, data, scope = {}) => {
     );
 
     if (tasks && tasks.length > 0) {
-      for (const task of tasks) {
-        await createTaskWithExpenses(tenantId, task, wo.id, t);
+      for (let i = 0; i < tasks.length; i++) {
+        await createTaskWithExpenses(tenantId, tasks[i], wo.id, t, i);
       }
     }
 
@@ -333,13 +334,14 @@ const update = async (tenantId, workOrderId, data) => {
       const existingById = new Map(existingTasks.map((row) => [row.id, row]));
       const keptIds = new Set();
 
-      for (const task of data.tasks) {
+      for (let i = 0; i < data.tasks.length; i++) {
+        const task = data.tasks[i];
         const taskId = task.id != null ? parseInt(task.id, 10) : null;
         if (taskId && existingById.has(taskId)) {
           keptIds.add(taskId);
-          await updateTaskInPlace(tenantId, taskId, task, t);
+          await updateTaskInPlace(tenantId, taskId, task, t, i);
         } else {
-          await createTaskWithExpenses(tenantId, task, workOrderId, t);
+          await createTaskWithExpenses(tenantId, task, workOrderId, t, i);
         }
       }
 
@@ -380,6 +382,24 @@ const updateTaskNotes = async (tenantId, workOrderId, taskId, notes) => {
   return task;
 };
 
+const updateTaskAssignment = async (tenantId, workOrderId, taskId, assignedTo) => {
+  const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
+  if (!workOrder) throw ApiError.notFound('Work order not found');
+  const task = await db.WorkOrderTask.findOne({ where: { id: taskId, work_order_id: workOrderId } });
+  if (!task) throw ApiError.notFound('Task not found');
+  const userId = assignedTo != null ? parseInt(assignedTo, 10) : null;
+  if (userId) {
+    const user = await db.User.findOne({ where: { id: userId, tenant_id: tenantId, status: 'active' } });
+    if (!user) throw ApiError.badRequest('Assigned user not found');
+  }
+  await task.update({ assigned_to: userId });
+  const updated = await db.WorkOrderTask.findOne({
+    where: { id: taskId },
+    include: [{ model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false }],
+  });
+  return updated;
+};
+
 const remove = async (tenantId, workOrderId) => {
   const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
   if (!workOrder) throw ApiError.notFound('Work order not found');
@@ -387,4 +407,4 @@ const remove = async (tenantId, workOrderId) => {
   await workOrder.destroy();
 };
 
-module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, remove };
+module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove };

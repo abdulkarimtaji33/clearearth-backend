@@ -28,20 +28,6 @@ const grnIncludes = [
         attributes: ['id', 'first_name', 'last_name', 'email'],
         required: false,
       },
-      {
-        model: db.ProformaInvoice,
-        as: 'proformaInvoices',
-        attributes: ['id', 'proforma_number'],
-        required: false,
-        include: [
-          {
-            model: db.TaxInvoice,
-            as: 'taxInvoice',
-            attributes: ['id', 'tax_invoice_number', 'payment_status', 'total'],
-            required: false,
-          },
-        ],
-      },
     ],
   },
   { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
@@ -49,9 +35,10 @@ const grnIncludes = [
   {
     model: db.GrnItem,
     as: 'items',
+    separate: true,
     include: [{ model: db.MaterialType, as: 'materialType', required: false }],
   },
-  { model: db.GrnImage, as: 'images' },
+  { model: db.GrnImage, as: 'images', separate: true },
 ];
 
 async function nextGrnNumber(tenantId, transaction) {
@@ -138,7 +125,31 @@ const getById = async (tenantId, id) => {
     include: grnIncludes,
   });
   if (!row) throw ApiError.notFound('GRN not found');
-  return row.get({ plain: true });
+  const plain = row.get({ plain: true });
+
+  // Enrich with invoice chain via a separate query to avoid complex nested JOIN issues
+  if (plain.deal?.id) {
+    try {
+      const proformas = await db.ProformaInvoice.findAll({
+        where: { deal_id: plain.deal.id },
+        attributes: ['id', 'proforma_number'],
+        include: [
+          {
+            model: db.TaxInvoice,
+            as: 'taxInvoice',
+            attributes: ['id', 'tax_invoice_number', 'payment_status', 'total'],
+            required: false,
+          },
+        ],
+        order: [['id', 'DESC']],
+      });
+      plain.deal.proformaInvoices = proformas.map((p) => p.get({ plain: true }));
+    } catch (_) {
+      plain.deal.proformaInvoices = [];
+    }
+  }
+
+  return plain;
 };
 
 const createGrn = async (tenantId, userId, body) => {

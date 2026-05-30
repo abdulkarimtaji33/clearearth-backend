@@ -50,9 +50,15 @@ const updateTaskNotes = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, task, 'Task notes updated');
 });
 
+const updateTaskAssignment = asyncHandler(async (req, res) => {
+  const { assignedTo } = req.body;
+  const task = await workOrderService.updateTaskAssignment(req.tenant.id, req.params.id, req.params.taskId, assignedTo);
+  return ApiResponse.success(res, task, 'Task assignment updated');
+});
+
 const remove = asyncHandler(async (req, res) => {
   await workOrderService.remove(req.tenant.id, req.params.id);
   return ApiResponse.success(res, null, 'Work order deleted successfully');
 });
 
-module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, remove };
+module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove };
