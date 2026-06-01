@@ -28,7 +28,6 @@ module.exports = (sequelize, DataTypes) => {
     Grn.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
     Grn.belongsTo(models.User, { foreignKey: 'approved_by', as: 'approvedByUser' });
     Grn.hasMany(models.GrnItem, { foreignKey: 'grn_id', as: 'items' });
-    Grn.hasMany(models.GrnImage, { foreignKey: 'grn_id', as: 'images' });
   };
 
   return Grn;

@@ -1613,6 +1613,31 @@ async function runMigration() {
       console.warn('  Could not initialise sort_order:', e.message);
     }
 
+    console.log('GRN images: link to line items...');
+    try {
+      await db.sequelize.query(`ALTER TABLE grn_images ADD COLUMN grn_item_id INT NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  grn_item_id:', e.message); }
+    try {
+      await db.sequelize.query(`
+        UPDATE grn_images gi
+        INNER JOIN (SELECT grn_id, MIN(id) AS first_item_id FROM grn_items GROUP BY grn_id) x ON x.grn_id = gi.grn_id
+        SET gi.grn_item_id = x.first_item_id
+        WHERE gi.grn_item_id IS NULL AND gi.grn_id IS NOT NULL
+      `);
+    } catch (e) { console.warn('  migrate grn images:', e.message); }
+    try {
+      await db.sequelize.query(`DELETE FROM grn_images WHERE grn_item_id IS NULL`);
+    } catch (e) { /* ignore */ }
+    try {
+      await db.sequelize.query(`ALTER TABLE grn_images DROP COLUMN grn_id`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  drop grn_id:', e.message); }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE grn_images MODIFY grn_item_id INT NOT NULL,
+        ADD CONSTRAINT fk_grn_images_item FOREIGN KEY (grn_item_id) REFERENCES grn_items(id) ON DELETE CASCADE
+      `);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  fk grn_item_id:', e.message); }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

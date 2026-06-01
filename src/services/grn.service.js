@@ -26,10 +26,12 @@ const grnIncludes = [
           { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
         ],
       },
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
       {
         model: db.User,
         as: 'assignedUser',
-        attributes: ['id', 'first_name', 'last_name', 'email'],
+        attributes: ['id', 'first_name', 'last_name', 'email', 'phone'],
         required: false,
       },
     ],
@@ -40,9 +42,12 @@ const grnIncludes = [
     model: db.GrnItem,
     as: 'items',
     separate: true,
-    include: [{ model: db.MaterialType, as: 'materialType', required: false }],
+    order: [['id', 'ASC']],
+    include: [
+      { model: db.MaterialType, as: 'materialType', required: false },
+      { model: db.GrnImage, as: 'images', separate: true, order: [['id', 'ASC']] },
+    ],
   },
-  { model: db.GrnImage, as: 'images', separate: true },
 ];
 
 async function nextGrnNumber(tenantId, transaction) {
@@ -156,17 +161,53 @@ const getById = async (tenantId, id) => {
   return plain;
 };
 
-const createGrn = async (tenantId, userId, body) => {
-  const { workOrderId, dealId, notes, items = [], images = [] } = body;
+async function createItemWithImages(grnId, item, transaction) {
+  const row = await db.GrnItem.create(
+    {
+      grn_id: grnId,
+      item_name: item.itemName || item.item_name || 'Item',
+      material_type_id: item.materialTypeId || item.material_type_id || null,
+      quantity: parseFloat(item.quantity) || 0,
+      unit_of_measure: item.unitOfMeasure || item.unit_of_measure || 'kg',
+      notes: item.notes || null,
+    },
+    { transaction }
+  );
+  const images = item.images || [];
+  if (Array.isArray(images) && images.length) {
+    await db.GrnImage.bulkCreate(
+      images.map((img) => ({
+        grn_item_id: row.id,
+        image_url: img.imageUrl || img.image_url,
+        original_name: img.originalName || img.original_name || null,
+      })),
+      { transaction }
+    );
+  }
+  return row;
+}
 
-  let resolvedDealId = dealId || null;
-  if (workOrderId) {
-    const wo = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
-    if (!wo) throw ApiError.notFound('Work order not found');
-    if (wo.status !== 'completed') throw ApiError.badRequest('GRN can only be created for completed work orders');
-    resolvedDealId = resolvedDealId || wo.deal_id;
+const createGrn = async (tenantId, userId, body) => {
+  const { workOrderId, notes, items = [] } = body;
+
+  if (!workOrderId) {
+    throw ApiError.badRequest('GRN must be created from a completed work order');
   }
 
+  const wo = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
+  if (!wo) throw ApiError.notFound('Work order not found');
+  if (wo.status !== 'completed') {
+    throw ApiError.badRequest('GRN can only be created for completed work orders');
+  }
+
+  const existingGrn = await db.Grn.findOne({
+    where: { tenant_id: tenantId, work_order_id: workOrderId },
+  });
+  if (existingGrn) {
+    throw ApiError.conflict('A GRN already exists for this work order');
+  }
+
+  const resolvedDealId = wo.deal_id || null;
   const t = await db.sequelize.transaction();
   try {
     const grnNumber = await nextGrnNumber(tenantId, t);
@@ -184,28 +225,9 @@ const createGrn = async (tenantId, userId, body) => {
     );
 
     if (Array.isArray(items) && items.length) {
-      await db.GrnItem.bulkCreate(
-        items.map((it) => ({
-          grn_id: grn.id,
-          item_name: it.itemName || it.item_name || 'Item',
-          material_type_id: it.materialTypeId || it.material_type_id || null,
-          quantity: parseFloat(it.quantity) || 0,
-          unit_of_measure: it.unitOfMeasure || it.unit_of_measure || 'kg',
-          notes: it.notes || null,
-        })),
-        { transaction: t }
-      );
-    }
-
-    if (Array.isArray(images) && images.length) {
-      await db.GrnImage.bulkCreate(
-        images.map((img) => ({
-          grn_id: grn.id,
-          image_url: img.imageUrl || img.image_url,
-          original_name: img.originalName || img.original_name || null,
-        })),
-        { transaction: t }
-      );
+      for (const it of items) {
+        await createItemWithImages(grn.id, it, t);
+      }
     }
 
     await t.commit();
@@ -233,18 +255,8 @@ const updateGrn = async (tenantId, id, body) => {
 
     if (Array.isArray(body.items)) {
       await db.GrnItem.destroy({ where: { grn_id: id }, transaction: t });
-      if (body.items.length) {
-        await db.GrnItem.bulkCreate(
-          body.items.map((it) => ({
-            grn_id: id,
-            item_name: it.itemName || it.item_name || 'Item',
-            material_type_id: it.materialTypeId || it.material_type_id || null,
-            quantity: parseFloat(it.quantity) || 0,
-            unit_of_measure: it.unitOfMeasure || it.unit_of_measure || 'kg',
-            notes: it.notes || null,
-          })),
-          { transaction: t }
-        );
+      for (const it of body.items) {
+        await createItemWithImages(id, it, t);
       }
     }
 
@@ -256,22 +268,25 @@ const updateGrn = async (tenantId, id, body) => {
   }
 };
 
-const addImages = async (tenantId, id, images) => {
-  const grn = await db.Grn.findOne({ where: { id, tenant_id: tenantId } });
+const addItemImages = async (tenantId, grnId, itemId, images) => {
+  const grn = await db.Grn.findOne({ where: { id: grnId, tenant_id: tenantId } });
   if (!grn) throw ApiError.notFound('GRN not found');
   if (grn.status === 'approved') throw ApiError.badRequest('Cannot add images to approved GRN');
+
+  const item = await db.GrnItem.findOne({ where: { id: itemId, grn_id: grnId } });
+  if (!item) throw ApiError.notFound('GRN line item not found');
 
   if (!Array.isArray(images) || !images.length) throw ApiError.badRequest('No images provided');
 
   await db.GrnImage.bulkCreate(
     images.map((img) => ({
-      grn_id: id,
+      grn_item_id: itemId,
       image_url: img.imageUrl || img.image_url,
       original_name: img.originalName || img.original_name || null,
     }))
   );
 
-  return getById(tenantId, id);
+  return getById(tenantId, grnId);
 };
 
 const approveGrn = async (tenantId, id, userId) => {
@@ -314,11 +329,24 @@ const approveGrn = async (tenantId, id, userId) => {
   }
 };
 
+const ensureGrnForWorkOrder = async (tenantId, workOrderId, userId = null) => {
+  const existing = await db.Grn.findOne({
+    where: { tenant_id: tenantId, work_order_id: workOrderId },
+  });
+  if (existing) return getById(tenantId, existing.id);
+
+  const wo = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
+  if (!wo || wo.status !== 'completed') return null;
+
+  return createGrn(tenantId, userId, { workOrderId, notes: null, items: [] });
+};
+
 module.exports = {
   listGrns,
   getById,
   createGrn,
   updateGrn,
-  addImages,
+  addItemImages,
   approveGrn,
+  ensureGrnForWorkOrder,
 };

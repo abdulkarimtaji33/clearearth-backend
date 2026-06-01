@@ -38,6 +38,7 @@ const notificationRoutes = require('./notification.routes');
 const grnRoutes = require('./grn.routes');
 const driverRoutes = require('./driver.routes');
 const dashboardRoutes = require('./dashboard.routes');
+const locationShareRoutes = require('./locationShare.routes');
 
 // PDF routes - must be before resource mounts so /quotations/:id/pdf matches
 router.use(pdfRoutes);
@@ -108,5 +109,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/grn', grnRoutes);
 router.use('/driver', driverRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/location-share', locationShareRoutes);
 
 module.exports = router;

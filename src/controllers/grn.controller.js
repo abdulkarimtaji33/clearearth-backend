@@ -37,7 +37,7 @@ const update = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, row, 'GRN updated');
 });
 
-const uploadImages = asyncHandler(async (req, res) => {
+const uploadItemImages = asyncHandler(async (req, res) => {
   const files = req.files || [];
   const images = files.map((f) => {
     const relativePath = path.relative(config.upload.path, f.path).replace(/\\/g, '/');
@@ -46,7 +46,7 @@ const uploadImages = asyncHandler(async (req, res) => {
       originalName: f.originalname,
     };
   });
-  const row = await grnService.addImages(req.tenant.id, req.params.id, images);
+  const row = await grnService.addItemImages(req.tenant.id, req.params.id, req.params.itemId, images);
   return ApiResponse.success(res, row, 'Images uploaded');
 });
 
@@ -55,4 +55,4 @@ const approve = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, row, 'GRN approved and inventory updated');
 });
 
-module.exports = { list, getById, create, update, uploadImages, approve };
+module.exports = { list, getById, create, update, uploadItemImages, approve };

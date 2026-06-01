@@ -5,6 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const purchaseOrderService = require('./purchaseOrder.service');
+const grnService = require('./grn.service');
 
 const taskInclude = {
   model: db.WorkOrderTask,
@@ -358,6 +359,11 @@ const update = async (tenantId, workOrderId, data) => {
       await purchaseOrderService.ensurePurchaseBillForWorkOrder(tenantId, workOrderId);
     } catch (err) {
       console.warn('[WO] purchase bill auto-create skipped:', err.message);
+    }
+    try {
+      await grnService.ensureGrnForWorkOrder(tenantId, workOrderId, null);
+    } catch (err) {
+      console.warn('[WO] GRN auto-create skipped:', err.message);
     }
   }
 

@@ -35,6 +35,7 @@ const DealInspectionRequest = require('./DealInspectionRequest')(sequelize, Data
 const DealInspectionReport = require('./DealInspectionReport')(sequelize, DataTypes);
 const DealImage = require('./DealImage')(sequelize, DataTypes);
 const DealTerm = require('./DealTerm')(sequelize, DataTypes);
+const DealLocationToken = require('./DealLocationToken')(sequelize, DataTypes);
 const MaterialType = require('./MaterialType')(sequelize, DataTypes);
 
 // Terms and Conditions
@@ -111,6 +112,7 @@ const db = {
   DealInspectionReport,
   DealImage,
   DealTerm,
+  DealLocationToken,
   MaterialType,
   TermsAndConditions,
   Designation,

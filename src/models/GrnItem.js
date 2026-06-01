@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
   GrnItem.associate = (models) => {
     GrnItem.belongsTo(models.Grn, { foreignKey: 'grn_id', as: 'grn' });
     GrnItem.belongsTo(models.MaterialType, { foreignKey: 'material_type_id', as: 'materialType' });
+    GrnItem.hasMany(models.GrnImage, { foreignKey: 'grn_item_id', as: 'images' });
   };
 
   return GrnItem;

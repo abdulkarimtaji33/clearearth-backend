@@ -3,7 +3,7 @@ module.exports = (sequelize, DataTypes) => {
     'GrnImage',
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      grn_id: { type: DataTypes.INTEGER, allowNull: false },
+      grn_item_id: { type: DataTypes.INTEGER, allowNull: false },
       image_url: { type: DataTypes.STRING(500), allowNull: false },
       original_name: { type: DataTypes.STRING(255), allowNull: true },
     },
@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   GrnImage.associate = (models) => {
-    GrnImage.belongsTo(models.Grn, { foreignKey: 'grn_id', as: 'grn' });
+    GrnImage.belongsTo(models.GrnItem, { foreignKey: 'grn_item_id', as: 'grnItem' });
   };
 
   return GrnImage;
