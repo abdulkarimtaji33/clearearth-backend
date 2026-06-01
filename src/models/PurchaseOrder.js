@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       po_date: { type: DataTypes.DATEONLY, allowNull: false },
       expected_delivery: { type: DataTypes.STRING(255) },
-      status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'draft' },
+      status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
       payment_status: {
         type: DataTypes.STRING(20),
         allowNull: false,

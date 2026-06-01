@@ -29,8 +29,8 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       status: {
-        type: DataTypes.ENUM('draft', 'in_progress', 'completed', 'cancelled'),
-        defaultValue: 'draft',
+        type: DataTypes.ENUM('new', 'in_progress', 'completed', 'cancelled'),
+        defaultValue: 'new',
       },
       created_by: {
         type: DataTypes.INTEGER,

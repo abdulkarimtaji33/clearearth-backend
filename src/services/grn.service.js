@@ -6,7 +6,7 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 
 const DEFAULT_WAREHOUSE_ID = 1;
-const GRN_STATUSES = ['draft', 'submitted', 'approved'];
+const GRN_STATUSES = ['new', 'submitted', 'approved'];
 
 const grnIncludes = [
   { model: db.WorkOrder, as: 'workOrder', attributes: ['id', 'title', 'status'], required: false },
@@ -217,7 +217,7 @@ const createGrn = async (tenantId, userId, body) => {
         grn_number: grnNumber,
         work_order_id: workOrderId || null,
         deal_id: resolvedDealId,
-        status: 'draft',
+        status: 'new',
         notes: notes || null,
         created_by: userId,
       },

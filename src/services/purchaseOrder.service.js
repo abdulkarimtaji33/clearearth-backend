@@ -114,7 +114,7 @@ const create = async (tenantId, data) => {
   }
 
   const explicitStatus = status && String(status).trim();
-  const defaultStatus = hasS ? 'approved' : 'draft';
+  const defaultStatus = hasS ? 'approved' : 'new';
   const resolvedStatus = explicitStatus || defaultStatus;
 
   const po = await db.sequelize.transaction(async (t) => {

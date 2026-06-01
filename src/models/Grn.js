@@ -7,7 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       grn_number: { type: DataTypes.STRING(50), allowNull: false },
       work_order_id: { type: DataTypes.INTEGER, allowNull: true },
       deal_id: { type: DataTypes.INTEGER, allowNull: true },
-      status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'draft' },
+      status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'new' },
       notes: { type: DataTypes.TEXT, allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: true },
       approved_by: { type: DataTypes.INTEGER, allowNull: true },

@@ -1447,7 +1447,7 @@ async function runMigration() {
         grn_number VARCHAR(50) NOT NULL,
         work_order_id INT NULL,
         deal_id INT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        status VARCHAR(20) NOT NULL DEFAULT 'new',
         notes TEXT NULL,
         created_by INT NULL,
         approved_by INT NULL,
@@ -1637,6 +1637,46 @@ async function runMigration() {
         ADD CONSTRAINT fk_grn_images_item FOREIGN KEY (grn_item_id) REFERENCES grn_items(id) ON DELETE CASCADE
       `);
     } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  fk grn_item_id:', e.message); }
+
+    console.log('Renaming draft status to new...');
+    try {
+      await db.sequelize.query(`UPDATE grns SET status = 'new' WHERE status = 'draft'`);
+      await db.sequelize.query(`ALTER TABLE grns MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'new'`);
+    } catch (e) { console.warn('  grns status:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE work_orders SET status = 'new' WHERE status = 'draft'`);
+      await db.sequelize.query(`
+        ALTER TABLE work_orders MODIFY COLUMN status
+        ENUM('draft','new','in_progress','completed','cancelled') NOT NULL DEFAULT 'new'
+      `);
+      await db.sequelize.query(`
+        ALTER TABLE work_orders MODIFY COLUMN status
+        ENUM('new','in_progress','completed','cancelled') NOT NULL DEFAULT 'new'
+      `);
+    } catch (e) { console.warn('  work_orders status:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE purchase_orders SET status = 'new' WHERE status = 'draft'`);
+      await db.sequelize.query(`ALTER TABLE purchase_orders MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'new'`);
+    } catch (e) { console.warn('  purchase_orders status:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE quotations SET status = 'new' WHERE status = 'draft'`);
+      await db.sequelize.query(`ALTER TABLE quotations MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'new'`);
+    } catch (e) { console.warn('  quotations status:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE deals SET status = 'new' WHERE status = 'draft'`);
+    } catch (e) { console.warn('  deals status:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE deal_statuses SET value = 'new', display_name = 'New' WHERE value = 'draft'`);
+      await db.sequelize.query(`DELETE FROM deal_statuses WHERE value = 'draft'`);
+    } catch (e) { console.warn('  deal_statuses:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE quotation_statuses SET value = 'new', display_name = 'New' WHERE value = 'draft'`);
+      await db.sequelize.query(`DELETE FROM quotation_statuses WHERE value = 'draft'`);
+    } catch (e) { console.warn('  quotation_statuses:', e.message); }
+    try {
+      await db.sequelize.query(`UPDATE purchase_order_statuses SET value = 'new', display_name = 'New' WHERE value = 'draft'`);
+      await db.sequelize.query(`DELETE FROM purchase_order_statuses WHERE value = 'draft'`);
+    } catch (e) { console.warn('  purchase_order_statuses:', e.message); }
 
     console.log('✅ Migration completed successfully!');
     process.exit(0);

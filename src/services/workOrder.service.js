@@ -282,7 +282,7 @@ const create = async (tenantId, data, scope = {}) => {
         deal_id: dealId || null,
         title: title || null,
         notes: notes || null,
-        status: status || 'draft',
+        status: status || 'new',
         created_by: scope.userId || null,
       },
       { transaction: t }

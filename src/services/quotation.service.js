@@ -106,7 +106,7 @@ const create = async (tenantId, data, scope = {}) => {
     quotation_date: quotationDate,
     quotation_amount: parseFloat(quotationAmount) || 0,
     currency: 'AED',
-    status: status || 'draft',
+    status: status || 'new',
     remarks: remarks || null,
   });
 

@@ -30,8 +30,8 @@ module.exports = {
       status: {
         type: Sequelize.STRING(20),
         allowNull: false,
-        defaultValue: 'draft',
-        comment: 'draft | submitted | approved',
+        defaultValue: 'new',
+        comment: 'new | submitted | approved',
       },
       notes: { type: Sequelize.TEXT, allowNull: true },
       created_by: {

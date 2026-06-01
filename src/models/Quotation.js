@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
       quotation_date: { type: DataTypes.DATEONLY, allowNull: false },
       quotation_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       currency: { type: DataTypes.STRING(10), defaultValue: 'AED' },
-      status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'draft' },
+      status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
       remarks: { type: DataTypes.TEXT },
     },
     {

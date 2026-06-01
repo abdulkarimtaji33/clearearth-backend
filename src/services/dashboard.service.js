@@ -37,7 +37,11 @@ async function countByStatus(model, tenantId, statusField = 'status', extraWhere
 
 async function getAdminOverview(tenantId) {
   const monthFrom = monthStart();
-  const [arSummary, apSummary, woByStatus, dealsByStatus, pendingExpenses, draftGrns, pendingPos, unassignedPickups, revenueRows] = await Promise.all([
+  const [
+    arSummary, apSummary, woByStatus, dealsByStatus,
+    pendingExpenses, draftGrns, pendingPos, unassignedPickups, revenueRows,
+    completedWOsThisMonth, wonDealsThisMonth, recentDeals, recentWorkOrders,
+  ] = await Promise.all([
     receivablesService.getAgingSummary(tenantId, {}),
     payablesService.getAgingSummary(tenantId, {}),
     countByStatus(db.WorkOrder, tenantId),
@@ -46,7 +50,7 @@ async function getAdminOverview(tenantId) {
       where: { accounts_status: 'pending' },
       include: [{ model: db.WorkOrderTask, as: 'workOrderTask', required: true, include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId } }] }],
     }).catch(() => 0),
-    db.Grn.count({ where: { tenant_id: tenantId, status: { [Op.in]: ['draft', 'submitted'] } } }).catch(() => 0),
+    db.Grn.count({ where: { tenant_id: tenantId, status: { [Op.in]: ['new', 'submitted'] } } }).catch(() => 0),
     db.PurchaseOrder.count({ where: { tenant_id: tenantId, status: 'pending' } }).catch(() => 0),
     db.WorkOrderTask.count({
       where: { assigned_to: null, [Op.or]: [{ type_of_work: { [Op.like]: '%pickup%' } }] },
@@ -57,6 +61,20 @@ async function getAdminOverview(tenantId) {
       attributes: [[fn('SUM', col('paid_amount')), 'total']],
       raw: true,
     }),
+    db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'completed', updated_at: { [Op.gte]: monthFrom } } }).catch(() => 0),
+    db.Deal.count({ where: { tenant_id: tenantId, status: 'won', updated_at: { [Op.gte]: monthFrom } } }).catch(() => 0),
+    db.Deal.findAll({
+      where: { tenant_id: tenantId },
+      attributes: ['id', 'deal_number', 'title', 'status', 'total', 'updated_at'],
+      order: [['updated_at', 'DESC']],
+      limit: 6,
+    }).catch(() => []),
+    db.WorkOrder.findAll({
+      where: { tenant_id: tenantId },
+      attributes: ['id', 'title', 'status', 'updated_at'],
+      order: [['updated_at', 'DESC']],
+      limit: 5,
+    }).catch(() => []),
   ]);
 
   const outstandingAr = Object.values(arSummary.buckets || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
@@ -70,6 +88,10 @@ async function getAdminOverview(tenantId) {
       { label: 'Outstanding AP', value: outstandingAp, format: 'currency' },
       { label: 'Open deals', value: OPEN_DEAL_STATUSES.reduce((s, st) => s + (dealsByStatus[st] || 0), 0), format: 'number' },
     ],
+    stats: {
+      completedWOsThisMonth,
+      wonDealsThisMonth,
+    },
     actionables: [
       { id: 'expenses', label: 'Expense approvals pending', count: pendingExpenses, href: '/erp/accounts/work-orders' },
       { id: 'grn', label: 'GRNs awaiting approval', count: draftGrns, href: '/erp/grn' },
@@ -80,6 +102,8 @@ async function getAdminOverview(tenantId) {
       workOrdersByStatus: woByStatus,
       dealsByStatus,
     },
+    recentDeals: recentDeals.map((d) => d.get({ plain: true })),
+    recentWorkOrders: recentWorkOrders.map((w) => w.get({ plain: true })),
   };
 }
 
@@ -222,7 +246,7 @@ async function getOperationsOverview(tenantId) {
       where: { accounts_status: 'pending' },
       include: [{ model: db.WorkOrderTask, as: 'workOrderTask', required: true, include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId } }] }],
     }).catch(() => 0),
-    db.Grn.count({ where: { tenant_id: tenantId, status: { [Op.in]: ['draft', 'submitted'] } } }).catch(() => 0),
+    db.Grn.count({ where: { tenant_id: tenantId, status: { [Op.in]: ['new', 'submitted'] } } }).catch(() => 0),
     db.WorkOrderTask.findAll({
       where: { assigned_to: null, type_of_work: { [Op.like]: '%pickup%' } },
       include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'title'] }],
@@ -361,6 +385,8 @@ async function getAccountsOverview(tenantId) {
       { label: 'Outstanding AP', value: outstandingAp, format: 'currency' },
       { label: 'Expense approvals', value: pendingExpenses, format: 'number' },
     ],
+    arAgingBuckets: arSummary.buckets || {},
+    apAgingBuckets: apSummary.buckets || {},
     actionables: [
       { id: 'recv', label: 'Review receivables', href: '/erp/receivables' },
       { id: 'pay', label: 'Review payables', href: '/erp/payables' },
