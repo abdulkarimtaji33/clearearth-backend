@@ -1644,11 +1644,11 @@ async function runMigration() {
       await db.sequelize.query(`ALTER TABLE grns MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'new'`);
     } catch (e) { console.warn('  grns status:', e.message); }
     try {
-      await db.sequelize.query(`UPDATE work_orders SET status = 'new' WHERE status = 'draft'`);
       await db.sequelize.query(`
         ALTER TABLE work_orders MODIFY COLUMN status
-        ENUM('draft','new','in_progress','completed','cancelled') NOT NULL DEFAULT 'new'
+        ENUM('draft','new','in_progress','completed','cancelled') NOT NULL DEFAULT 'draft'
       `);
+      await db.sequelize.query(`UPDATE work_orders SET status = 'new' WHERE status = 'draft'`);
       await db.sequelize.query(`
         ALTER TABLE work_orders MODIFY COLUMN status
         ENUM('new','in_progress','completed','cancelled') NOT NULL DEFAULT 'new'
