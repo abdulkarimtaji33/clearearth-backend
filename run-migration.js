@@ -1678,6 +1678,68 @@ async function runMigration() {
       await db.sequelize.query(`DELETE FROM purchase_order_statuses WHERE value = 'draft'`);
     } catch (e) { console.warn('  purchase_order_statuses:', e.message); }
 
+    console.log('Seeding quotations and purchase_orders permissions...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE permissions MODIFY COLUMN module ENUM(
+          'users','roles','contacts','companies','suppliers','leads','products','deals',
+          'inspection_requests','inspection_reports','quotations','purchase_orders',
+          'accounting','reports','operations','grn'
+        ) NOT NULL
+      `);
+    } catch (e) { console.warn('  permissions module enum:', e.message); }
+
+    const qpPerms = [
+      ['quotations.read', 'Read Quotations', 'quotations', 'read', 'View service quotations and orders'],
+      ['quotations.create', 'Create Quotations', 'quotations', 'create', 'Create service quotations'],
+      ['quotations.update', 'Update Quotations', 'quotations', 'update', 'Update service quotations'],
+      ['quotations.delete', 'Delete Quotations', 'quotations', 'delete', 'Delete service quotations'],
+      ['purchase_orders.read', 'Read Purchase Orders', 'purchase_orders', 'read', 'View purchase orders and PO quotations'],
+      ['purchase_orders.create', 'Create Purchase Orders', 'purchase_orders', 'create', 'Create purchase orders'],
+      ['purchase_orders.update', 'Update Purchase Orders', 'purchase_orders', 'update', 'Update purchase orders'],
+      ['purchase_orders.delete', 'Delete Purchase Orders', 'purchase_orders', 'delete', 'Delete purchase orders'],
+    ];
+    for (const [name, displayName, mod, act, desc] of qpPerms) {
+      try {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO permissions (name, display_name, module, action, description) VALUES (?, ?, ?, ?, ?)`,
+          { replacements: [name, displayName, mod, act, desc] }
+        );
+      } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  qp perm:', e.message); }
+    }
+
+    console.log('Assigning quotations/purchase_orders permissions...');
+    const [[accountsRoleQp]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts' AND tenant_id IS NULL LIMIT 1`);
+    if (accountsRoleQp?.id) {
+      const [accountsQpPerms] = await db.sequelize.query(
+        `SELECT id FROM permissions WHERE name IN ('quotations.read', 'purchase_orders.read')`
+      );
+      for (const p of accountsQpPerms) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+          { replacements: [accountsRoleQp.id, p.id] }
+        );
+      }
+      console.log('  accounts granted quotations.read + purchase_orders.read');
+    }
+    for (const roleName of ['sales', 'sales_manager', 'admin', 'tenant_admin']) {
+      const [[roleRow]] = await db.sequelize.query(
+        `SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`,
+        { replacements: [roleName] }
+      );
+      if (!roleRow?.id) continue;
+      const [allQpPerms] = await db.sequelize.query(
+        `SELECT id FROM permissions WHERE name LIKE 'quotations.%' OR name LIKE 'purchase_orders.%'`
+      );
+      for (const p of allQpPerms) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+          { replacements: [roleRow.id, p.id] }
+        );
+      }
+      console.log(`  ${roleName} granted quotations.* + purchase_orders.*`);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
