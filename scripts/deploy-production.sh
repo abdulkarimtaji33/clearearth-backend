@@ -48,6 +48,8 @@ fi
 
 echo "---- Frontend: ${FRONTEND_DIR} ----"
 cd "${FRONTEND_DIR}"
+git fetch origin
+git reset --hard "origin/${GIT_BRANCH}"
 if [[ -n "${MAPS_KEY:-}" ]]; then
   cat > .env.production <<EOF
 VITE_API_URL=/api/v1
@@ -57,8 +59,6 @@ EOF
 elif [[ ! -f .env.production ]]; then
   echo "VITE_API_URL=/api/v1" > .env.production
 fi
-git fetch origin
-git reset --hard "origin/${GIT_BRANCH}"
 npm ci
 npm run build
 
