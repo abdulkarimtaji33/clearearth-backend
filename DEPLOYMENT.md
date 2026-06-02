@@ -75,6 +75,16 @@ VITE_GOOGLE_MAPS_API_KEY='AIza...' bash /var/www/clearearth-backend/scripts/depl
 
 Set `SKIP_MIGRATE=1` only if you intentionally skip DB changes.
 
+### Reset business data (keep users, roles, permissions, lookups)
+
+Removes deals, contacts, companies, invoices, work orders, journals, etc. **Does not** remove users, roles, permissions, tenants, chart of accounts, or dropdown seed tables.
+
+```bash
+cd /var/www/clearearth-backend
+DRY_RUN=1 node scripts/clear-transactional-data.js    # preview
+CONFIRM_CLEAR=YES node scripts/clear-transactional-data.js
+```
+
 ---
 
 ## Quick verify
