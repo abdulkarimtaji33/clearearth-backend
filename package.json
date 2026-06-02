@@ -9,6 +9,7 @@
     "test": "jest --coverage",
     "migrate": "node src/database/migrate.js",
     "run-migration": "node run-migration.js",
+    "clear-data": "node scripts/clear-transactional-data.js",
     "deploy:vps": "bash scripts/deploy-production.sh",
     "deploy:vps:all": "bash scripts/deploy-all-production.sh",
     "seed": "node src/database/seed.js",
