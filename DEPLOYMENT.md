@@ -1,14 +1,20 @@
 # Clearearth production deploy
 
-## Server
+## Servers
+
+| Host | URL | SSH |
+|------|-----|-----|
+| **Primary** | http://72.60.223.25:3333/ | `ssh root@72.60.223.25` |
+| **Secondary** | http://72.60.222.81:3333/ | `ssh root@72.60.222.81` |
+
+Both use the same layout:
 
 | | |
 |---|---|
-| **SSH** | `ssh root@72.60.223.25` |
 | **Frontend path** | `/var/www/clearearth-frontend` |
 | **Backend path** | `/var/www/clearearth-backend` |
 | **API (Node)** | PM2 process `clearearth-api` → `src/server.js`, listens on port **3000** |
-| **Frontend URL** | `http://72.60.223.25:3333/` only (**not** `http://72.60.223.25/` bare port 80) |
+| **Frontend URL** | `:3333` only (**not** bare port 80 on the main IP) |
 | **Port 80** | Do **not** serve Clearearth on the main IP. Remove or rewrite any `:80` vhost that proxies or roots to this SPA. |
 | **Web** | Nginx **:3333**: static SPA from `/var/www/clearearth-frontend/dist`; `/api` and `/uploads` → `http://127.0.0.1:3000` |
 | **Nginx site** | `/etc/nginx/sites-available/clearearth` (symlink `sites-enabled/clearearth`) |
@@ -48,7 +54,26 @@ pm2 restart clearearth-api --update-env
 pm2 list   # confirm clearearth-api online
 ```
 
-**One-shot deploy from a dev machine** (Git Bash / WSL; requires SSH key to the server): from `clearearth-backend` run `npm run deploy:vps` — this pulls backend + frontend, runs `npm run run-migration`, restarts PM2, builds the SPA, and reloads nginx (see `scripts/deploy-production.sh`). Set `SKIP_MIGRATE=1` only if you intentionally skip DB changes.
+**One-shot deploy from a dev machine** (Git Bash / WSL; requires SSH key on each VPS):
+
+```bash
+cd clearearth-backend
+npm run deploy:vps              # primary only (72.60.223.25)
+npm run deploy:vps:all          # both servers
+DEPLOY_HOST=root@72.60.222.81 npm run deploy:vps   # secondary only
+```
+
+Maps key: set `VITE_GOOGLE_MAPS_API_KEY` in `clearearth-frontend/.env` before deploy, or export it — deploy scripts copy it into each server’s `.env.production` before `npm run build`.
+
+**If SSH is denied on a host** (e.g. `Permission denied (publickey)` on `72.60.222.81`): add your PC’s public key in the hosting panel (SSH keys), or open **Hostinger → VPS → Browser terminal** and run:
+
+```bash
+bash /var/www/clearearth-backend/scripts/deploy-on-server.sh
+# or with Maps key:
+VITE_GOOGLE_MAPS_API_KEY='AIza...' bash /var/www/clearearth-backend/scripts/deploy-on-server.sh
+```
+
+Set `SKIP_MIGRATE=1` only if you intentionally skip DB changes.
 
 ---
 

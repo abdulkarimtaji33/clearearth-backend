@@ -11,6 +11,7 @@
 #
 # Env overrides:
 #   DEPLOY_HOST=root@72.60.223.25  GIT_BRANCH=main  SKIP_MIGRATE=1  SKIP_NGINX_RELOAD=1
+#   VITE_GOOGLE_MAPS_API_KEY=AIza...  (optional — updates frontend .env.production before build)
 
 set -euo pipefail
 
@@ -19,11 +20,12 @@ GIT_BRANCH="${GIT_BRANCH:-main}"
 BACKEND_DIR="${BACKEND_DIR:-/var/www/clearearth-backend}"
 FRONTEND_DIR="${FRONTEND_DIR:-/var/www/clearearth-frontend}"
 PM2_NAME="${PM2_NAME:-clearearth-api}"
+MAPS_KEY="${VITE_GOOGLE_MAPS_API_KEY:-}"
 
 echo "==> Deploying to ${DEPLOY_HOST} (branch: ${GIT_BRANCH})"
 
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${DEPLOY_HOST}" \
-  "GIT_BRANCH='${GIT_BRANCH}' BACKEND_DIR='${BACKEND_DIR}' FRONTEND_DIR='${FRONTEND_DIR}' PM2_NAME='${PM2_NAME}' SKIP_MIGRATE='${SKIP_MIGRATE:-}' SKIP_NGINX_RELOAD='${SKIP_NGINX_RELOAD:-}' bash -s" <<'REMOTE'
+  "GIT_BRANCH='${GIT_BRANCH}' BACKEND_DIR='${BACKEND_DIR}' FRONTEND_DIR='${FRONTEND_DIR}' PM2_NAME='${PM2_NAME}' SKIP_MIGRATE='${SKIP_MIGRATE:-}' SKIP_NGINX_RELOAD='${SKIP_NGINX_RELOAD:-}' MAPS_KEY='${MAPS_KEY}' bash -s" <<'REMOTE'
 set -euo pipefail
 
 echo "---- Backend: ${BACKEND_DIR} ----"
@@ -46,6 +48,15 @@ fi
 
 echo "---- Frontend: ${FRONTEND_DIR} ----"
 cd "${FRONTEND_DIR}"
+if [[ -n "${MAPS_KEY:-}" ]]; then
+  cat > .env.production <<EOF
+VITE_API_URL=/api/v1
+VITE_GOOGLE_MAPS_API_KEY=${MAPS_KEY}
+EOF
+  echo "  Updated .env.production with Maps API key"
+elif [[ ! -f .env.production ]]; then
+  echo "VITE_API_URL=/api/v1" > .env.production
+fi
 git fetch origin
 git reset --hard "origin/${GIT_BRANCH}"
 npm ci

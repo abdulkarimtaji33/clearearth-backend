@@ -37,6 +37,8 @@ fi
 echo "==> [4/6] Frontend env + nginx..."
 cat > "${FRONTEND_DIR}/.env.production" <<'ENV'
 VITE_API_URL=/api/v1
+# Required for map search in collection details — get key from Google Cloud (Maps JS + Places + Geocoding)
+VITE_GOOGLE_MAPS_API_KEY=
 ENV
 
 cat > /etc/nginx/sites-available/clearearth <<'NGINX'
