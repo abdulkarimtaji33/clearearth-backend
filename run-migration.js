@@ -1496,6 +1496,28 @@ async function runMigration() {
       await db.sequelize.query(`ALTER TABLE deals ADD COLUMN pickup_contact_number VARCHAR(50) NULL`);
     } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_contact_number:', e.message); }
 
+    console.log('Ensuring deal_location_tokens table exists...');
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS deal_location_tokens (
+          id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          token VARCHAR(64) NOT NULL,
+          deal_id INT NOT NULL,
+          tenant_id INT NOT NULL,
+          expires_at DATETIME NOT NULL,
+          used_at DATETIME NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_deal_location_tokens_token (token),
+          INDEX idx_deal_location_tokens_deal (deal_id),
+          CONSTRAINT fk_deal_location_tokens_deal FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE
+        )
+      `);
+      console.log('  deal_location_tokens table ready');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  deal_location_tokens:', e.message);
+    }
+
     console.log('Seeding driver role...');
     await db.sequelize.query(`
       INSERT INTO roles (tenant_id, name, display_name, description, is_system_role, status, created_at, updated_at)

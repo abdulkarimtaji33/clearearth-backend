@@ -677,6 +677,22 @@ const updatePayment = async (tenantId, dealId, paidAmount, scope = {}) => {
   return await getById(tenantId, dealId);
 };
 
+/** Pickup/collection fields only — for operations staff without full deals.update */
+const updateCollectionDetails = async (tenantId, dealId, data, scope = {}) => {
+  const where = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({ where });
+  if (!deal) throw ApiError.notFound('Deal not found');
+
+  await deal.update({
+    pickup_location: data.pickupLocation !== undefined ? data.pickupLocation : deal.pickup_location,
+    pickup_contact_name: data.pickupContactName !== undefined ? data.pickupContactName : deal.pickup_contact_name,
+    pickup_contact_number: data.pickupContactNumber !== undefined ? data.pickupContactNumber : deal.pickup_contact_number,
+  });
+
+  return await getById(tenantId, dealId);
+};
+
 const remove = async (tenantId, dealId, scope = {}) => {
   const where = { id: dealId, tenant_id: tenantId };
   if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
@@ -730,6 +746,7 @@ module.exports = {
   create,
   update,
   updatePayment,
+  updateCollectionDetails,
   remove,
   saveInspectionReport,
 };

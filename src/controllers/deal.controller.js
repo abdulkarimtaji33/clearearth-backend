@@ -55,6 +55,12 @@ const updatePayment = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, deal, 'Payment updated successfully');
 });
 
+const updateCollectionDetails = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const deal = await dealService.updateCollectionDetails(req.tenant.id, req.params.id, req.body, scope);
+  return ApiResponse.success(res, deal, 'Collection details updated successfully');
+});
+
 const remove = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   await dealService.remove(req.tenant.id, req.params.id, scope);
@@ -67,4 +73,4 @@ const saveInspectionReport = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, deal, 'Inspection report saved');
 });
 
-module.exports = { getAll, getById, create, update, updatePayment, remove, saveInspectionReport };
+module.exports = { getAll, getById, create, update, updatePayment, updateCollectionDetails, remove, saveInspectionReport };

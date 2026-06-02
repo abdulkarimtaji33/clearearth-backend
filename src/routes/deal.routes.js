@@ -14,6 +14,7 @@ router.get('/', authorize('deals.read'), dealController.getAll);
 router.get('/:id', authorize('deals.read'), dealController.getById);
 router.post('/', authorize('deals.create'), dealController.create);
 router.put('/:id', authorize('deals.update'), dealController.update);
+router.patch('/:id/collection-details', authorize('deals.update', 'operations.update'), dealController.updateCollectionDetails);
 router.delete('/:id', authorize('deals.delete'), dealController.remove);
 
 // Payment tracking

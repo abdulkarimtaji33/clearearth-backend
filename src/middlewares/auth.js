@@ -70,9 +70,19 @@ const authorize = (...permissions) => {
 
     // Get user permissions
     const userPermissions = req.user.role.permissions.map(p => p.name);
+    const roleName = req.user.role.name;
 
-    // Check if user has required permission
-    const hasPermission = permissions.some(permission => userPermissions.includes(permission));
+    const userHas = (permission) => {
+      if (userPermissions.includes(permission)) return true;
+      // operations_manager: any operations.* satisfies operations.<action> checks
+      if (roleName === 'operations_manager' && permission.startsWith('operations.')) {
+        return userPermissions.some((p) => p.startsWith('operations.'));
+      }
+      return false;
+    };
+
+    // Check if user has required permission (any one of the listed permissions)
+    const hasPermission = permissions.some((permission) => userHas(permission));
 
     if (!hasPermission) {
       throw ApiError.forbidden('Insufficient permissions');
