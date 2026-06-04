@@ -1404,6 +1404,21 @@ async function runMigration() {
     }
     console.log('  Accounts role: deals view-only enforced');
 
+    console.log('Granting companies.read and suppliers.read to accounts (all role rows)...');
+    const [accountsRoleRows] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'accounts'`);
+    const [accountsMasterRead] = await db.sequelize.query(
+      `SELECT id FROM permissions WHERE name IN ('companies.read', 'suppliers.read')`
+    );
+    for (const roleRow of accountsRoleRows || []) {
+      for (const p of accountsMasterRead || []) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+          { replacements: [roleRow.id, p.id] }
+        );
+      }
+    }
+    console.log(`  accounts granted companies.read + suppliers.read on ${(accountsRoleRows || []).length} role row(s)`);
+
     await db.sequelize.query(`
       DELETE rp FROM role_permissions rp
       INNER JOIN permissions p ON p.id = rp.permission_id
