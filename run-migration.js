@@ -1425,8 +1425,32 @@ async function runMigration() {
           { replacements: [omRoleRow.id, dealsReadPerm.id] }
         );
       }
-      console.log('  Operations Manager role: operations.* + deals.read enforced');
+      const [omReadPerms] = await db.sequelize.query(
+        `SELECT id FROM permissions WHERE name IN ('quotations.read', 'purchase_orders.read', 'inspection_reports.read')`
+      );
+      for (const p of omReadPerms || []) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+          { replacements: [omRoleRow.id, p.id] }
+        );
+      }
+      console.log('  Operations Manager role: operations.* + deals.read + quotation/PO/inspection report read');
     }
+
+    console.log('Backfill operations_manager read permissions on all role rows...');
+    const [omRoleRowsAll] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager'`);
+    const [omExtraRead] = await db.sequelize.query(
+      `SELECT id FROM permissions WHERE name IN ('quotations.read', 'purchase_orders.read', 'inspection_reports.read', 'deals.read')`
+    );
+    for (const roleRow of omRoleRowsAll || []) {
+      for (const p of omExtraRead || []) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+          { replacements: [roleRow.id, p.id] }
+        );
+      }
+    }
+    console.log(`  operations_manager read perms synced on ${(omRoleRowsAll || []).length} role row(s)`);
 
     console.log('Backfill inspection request status where report exists...');
     const [backfillResult] = await db.sequelize.query(`

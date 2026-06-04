@@ -3,6 +3,9 @@ const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
+const { shouldHideDealFinancials, sanitizeDealPayload } = require('../utils/dealFinancials');
+
+const hideFinancialsForUser = (req) => shouldHideDealFinancials(req.user?.role?.name);
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, paymentStatus, companyId, supplierId, contactId, assignedTo, productServiceId, minAmount, maxAmount, dateFrom, dateTo } = req.query;
@@ -24,7 +27,11 @@ const getAll = asyncHandler(async (req, res) => {
     dateTo,
     ...scope,
   });
-  return ApiResponse.paginated(res, result.deals, { 
+  const hideFinancials = hideFinancialsForUser(req);
+  const deals = hideFinancials
+    ? result.deals.map((d) => sanitizeDealPayload(d, true))
+    : result.deals;
+  return ApiResponse.paginated(res, deals, { 
     page: pagination.page, 
     pageSize: pagination.pageSize, 
     totalItems: result.total 
@@ -34,7 +41,7 @@ const getAll = asyncHandler(async (req, res) => {
 const getById = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.getById(req.tenant.id, req.params.id, scope);
-  return ApiResponse.success(res, deal);
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)));
 });
 
 const create = asyncHandler(async (req, res) => {
@@ -46,19 +53,19 @@ const create = asyncHandler(async (req, res) => {
 const update = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.update(req.tenant.id, req.params.id, req.body, scope, req.user);
-  return ApiResponse.success(res, deal, 'Deal updated successfully');
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Deal updated successfully');
 });
 
 const updatePayment = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.updatePayment(req.tenant.id, req.params.id, req.body.paidAmount, scope);
-  return ApiResponse.success(res, deal, 'Payment updated successfully');
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Payment updated successfully');
 });
 
 const updateCollectionDetails = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.updateCollectionDetails(req.tenant.id, req.params.id, req.body, scope);
-  return ApiResponse.success(res, deal, 'Collection details updated successfully');
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Collection details updated successfully');
 });
 
 const remove = asyncHandler(async (req, res) => {
@@ -70,7 +77,7 @@ const remove = asyncHandler(async (req, res) => {
 const saveInspectionReport = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.saveInspectionReport(req.tenant.id, req.params.id, req.body, scope);
-  return ApiResponse.success(res, deal, 'Inspection report saved');
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Inspection report saved');
 });
 
 module.exports = { getAll, getById, create, update, updatePayment, updateCollectionDetails, remove, saveInspectionReport };

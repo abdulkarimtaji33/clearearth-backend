@@ -4,6 +4,7 @@ const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
+const { shouldHideDealFinancials, sanitizeQuotationListItem } = require('../utils/dealFinancials');
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, statusNot, dealId, dateFrom, dateTo } = req.query;
@@ -19,7 +20,11 @@ const getAll = asyncHandler(async (req, res) => {
     dateTo,
     ...scope,
   });
-  return ApiResponse.paginated(res, result.quotations, {
+  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const quotations = hideFinancials
+    ? result.quotations.map((q) => sanitizeQuotationListItem(q, true))
+    : result.quotations;
+  return ApiResponse.paginated(res, quotations, {
     page: pagination.page,
     pageSize: pagination.pageSize,
     totalItems: result.total,
@@ -29,7 +34,8 @@ const getAll = asyncHandler(async (req, res) => {
 const getById = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const quotation = await quotationService.getById(req.tenant.id, req.params.id, scope);
-  return ApiResponse.success(res, quotation);
+  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials));
 });
 
 const create = asyncHandler(async (req, res) => {

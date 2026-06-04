@@ -5,6 +5,14 @@ const workOrderService = require('../services/workOrder.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
+const { shouldHideDealFinancials, sanitizeDealPayload } = require('../utils/dealFinancials');
+
+const sanitizeWorkOrderDeal = (workOrder, hideFinancials) => {
+  if (!hideFinancials || !workOrder) return workOrder;
+  const plain = workOrder.get ? workOrder.get({ plain: true }) : { ...workOrder };
+  if (plain.deal) plain.deal = sanitizeDealPayload(plain.deal, true);
+  return plain;
+};
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, dealId, status } = req.query;
@@ -24,7 +32,8 @@ const getAll = asyncHandler(async (req, res) => {
 
 const getById = asyncHandler(async (req, res) => {
   const workOrder = await workOrderService.getById(req.tenant.id, req.params.id);
-  return ApiResponse.success(res, workOrder);
+  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  return ApiResponse.success(res, sanitizeWorkOrderDeal(workOrder, hideFinancials));
 });
 
 const create = asyncHandler(async (req, res) => {
