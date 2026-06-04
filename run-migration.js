@@ -447,8 +447,8 @@ async function runMigration() {
       for (const p of permRows || []) {
         try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [smRows[0].id, p.id] }); } catch (e) { /* ignore */ }
       }
-      // Sales Manager needs users.read and suppliers.read
-      const [extraPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name IN ('users.read', 'suppliers.read')`);
+      // Sales Manager needs users.read and supplier access (read + create/update vendors)
+      const [extraPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name IN ('users.read', 'suppliers.read', 'suppliers.create', 'suppliers.update')`);
       for (const p of extraPerms || []) {
         try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [smRows[0].id, p.id] }); } catch (e) { /* ignore */ }
       }
@@ -472,8 +472,8 @@ async function runMigration() {
       for (const p of permRows || []) {
         try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [sRows[0].id, p.id] }); } catch (e) { /* ignore */ }
       }
-      // Sales needs users.read for dropdowns and suppliers.read for supplier list
-      const [extraPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name IN ('users.read', 'suppliers.read')`);
+      // Sales needs users.read for dropdowns and supplier list + add/edit vendors on deals
+      const [extraPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name IN ('users.read', 'suppliers.read', 'suppliers.create', 'suppliers.update')`);
       for (const p of extraPerms || []) {
         try { await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [sRows[0].id, p.id] }); } catch (e) { /* ignore */ }
       }
@@ -1365,6 +1365,26 @@ async function runMigration() {
       }
       console.log('  Backfilled leads.approve to sales_manager');
     }
+
+    console.log('Granting suppliers.create/update to sales and sales_manager...');
+    const [supplierWritePerms] = await db.sequelize.query(
+      `SELECT id FROM permissions WHERE name IN ('suppliers.create', 'suppliers.update')`
+    );
+    for (const roleName of ['sales', 'sales_manager']) {
+      const [[roleRow]] = await db.sequelize.query(
+        `SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`,
+        { replacements: [roleName] }
+      );
+      if (roleRow?.id) {
+        for (const p of supplierWritePerms || []) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+            { replacements: [roleRow.id, p.id] }
+          );
+        }
+      }
+    }
+    console.log('  sales + sales_manager granted suppliers.create and suppliers.update');
 
     await db.sequelize.query(`
       DELETE rp FROM role_permissions rp
