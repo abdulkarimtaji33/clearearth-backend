@@ -13,6 +13,58 @@ const _validateDownstreamSupplier = async (tenantId, supplierId, downstreamPartn
   if (!ds) throw ApiError.badRequest('Downstream partner supplier not found');
 };
 
+const _hasWdsContent = (w) => {
+  if (!w) return false;
+  if ((w.attachments || []).length > 0) return true;
+  const fields = [
+    'refNo', 'companyName', 'licenseNo', 'wasteDescription', 'containerNo',
+    'sourceProcess', 'packageType', 'quantityPerPackage', 'totalWeight', 'purpose', 'blNo', 'borNo',
+  ];
+  return fields.some((f) => w[f]?.toString().trim());
+};
+
+const _mapWdsAttributes = (w) => ({
+  ref_no: w.refNo?.trim() || null,
+  date: w.date || null,
+  company_name: w.companyName?.trim() || null,
+  license_no: w.licenseNo?.trim() || null,
+  waste_description: w.wasteDescription?.trim() || null,
+  source_process: w.sourceProcess?.trim() || null,
+  package_type: w.packageType?.trim() || null,
+  quantity_per_package: w.quantityPerPackage?.trim() || null,
+  total_weight: w.totalWeight?.trim() || null,
+  container_no: w.containerNo?.trim() || null,
+  purpose: w.purpose?.trim() || null,
+  bl_no: w.blNo?.trim() || null,
+  bor_no: w.borNo?.trim() || null,
+});
+
+const _saveDealWds = async (dealId, wdsDetails, transaction) => {
+  if (!_hasWdsContent(wdsDetails)) return;
+  const attrs = _mapWdsAttributes(wdsDetails);
+  const existingWds = await db.DealWds.findOne({ where: { deal_id: dealId }, transaction });
+  let wdsId;
+  if (existingWds) {
+    await existingWds.update(attrs, { transaction });
+    wdsId = existingWds.id;
+    await db.DealWdsAttachment.destroy({ where: { deal_wds_id: wdsId }, transaction });
+  } else {
+    const wds = await db.DealWds.create({ deal_id: dealId, ...attrs }, { transaction });
+    wdsId = wds.id;
+  }
+  const attachments = wdsDetails.attachments || [];
+  if (attachments.length > 0) {
+    await db.DealWdsAttachment.bulkCreate(
+      attachments.map((a) => ({
+        deal_wds_id: wdsId,
+        file_path: a.path || a.file_path,
+        file_name: a.fileName || a.file_name || null,
+      })),
+      { transaction }
+    );
+  }
+};
+
 const calculateDealTotals = (items, vatPercentage = 5) => {
   const subtotal = items.reduce((sum, item) => {
     return sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice));
@@ -301,42 +353,9 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
       );
     }
 
-    // Create WDS details if provided
+    // WDS flag can be set without details; details are optional until filled in later
     if (data.wdsRequired && data.wdsDetails) {
-      const w = data.wdsDetails;
-      if (!w.refNo?.trim() || !w.date || !w.companyName?.trim() || !w.licenseNo?.trim() || !w.wasteDescription?.trim() || !w.containerNo?.trim()) {
-        throw ApiError.badRequest('WDS required fields missing: Ref No, Date, Company Name, License No, Waste Description, Container No');
-      }
-      const wds = await db.DealWds.create(
-        {
-          deal_id: deal.id,
-          ref_no: data.wdsDetails.refNo,
-          date: data.wdsDetails.date,
-          company_name: data.wdsDetails.companyName,
-          license_no: data.wdsDetails.licenseNo,
-          waste_description: data.wdsDetails.wasteDescription,
-          source_process: data.wdsDetails.sourceProcess || null,
-          package_type: data.wdsDetails.packageType || null,
-          quantity_per_package: data.wdsDetails.quantityPerPackage || null,
-          total_weight: data.wdsDetails.totalWeight || null,
-          container_no: data.wdsDetails.containerNo,
-          purpose: data.wdsDetails.purpose || null,
-          bl_no: data.wdsDetails.blNo || null,
-          bor_no: data.wdsDetails.borNo || null,
-        },
-        { transaction }
-      );
-      const attachments = data.wdsDetails.attachments || [];
-      if (attachments.length > 0) {
-        await db.DealWdsAttachment.bulkCreate(
-          attachments.map(a => ({
-            deal_wds_id: wds.id,
-            file_path: a.path || a.file_path,
-            file_name: a.fileName || a.file_name || null,
-          })),
-          { transaction }
-        );
-      }
+      await _saveDealWds(deal.id, data.wdsDetails, transaction);
     }
 
     // Create deal items
@@ -471,77 +490,9 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
       { transaction }
     );
 
-    // Handle WDS details
+    // Handle WDS details (optional when wds_required is true)
     if (data.wdsRequired && data.wdsDetails) {
-      const w = data.wdsDetails;
-      if (!w.refNo?.trim() || !w.date || !w.companyName?.trim() || !w.licenseNo?.trim() || !w.wasteDescription?.trim() || !w.containerNo?.trim()) {
-        throw ApiError.badRequest('WDS required fields missing: Ref No, Date, Company Name, License No, Waste Description, Container No');
-      }
-      const existingWds = await db.DealWds.findOne({ where: { deal_id: dealId }, transaction });
-
-      if (existingWds) {
-        await existingWds.update(
-          {
-            ref_no: data.wdsDetails.refNo,
-            date: data.wdsDetails.date,
-            company_name: data.wdsDetails.companyName,
-            license_no: data.wdsDetails.licenseNo,
-            waste_description: data.wdsDetails.wasteDescription,
-            source_process: data.wdsDetails.sourceProcess || null,
-            package_type: data.wdsDetails.packageType || null,
-            quantity_per_package: data.wdsDetails.quantityPerPackage || null,
-            total_weight: data.wdsDetails.totalWeight || null,
-            container_no: data.wdsDetails.containerNo,
-            purpose: data.wdsDetails.purpose || null,
-            bl_no: data.wdsDetails.blNo || null,
-            bor_no: data.wdsDetails.borNo || null,
-          },
-          { transaction }
-        );
-        await db.DealWdsAttachment.destroy({ where: { deal_wds_id: existingWds.id }, transaction });
-        const attachments = data.wdsDetails.attachments || [];
-        if (attachments.length > 0) {
-          await db.DealWdsAttachment.bulkCreate(
-            attachments.map(a => ({
-              deal_wds_id: existingWds.id,
-              file_path: a.path || a.file_path,
-              file_name: a.fileName || a.file_name || null,
-            })),
-            { transaction }
-          );
-        }
-      } else {
-        const wds = await db.DealWds.create(
-          {
-            deal_id: dealId,
-            ref_no: data.wdsDetails.refNo,
-            date: data.wdsDetails.date,
-            company_name: data.wdsDetails.companyName,
-            license_no: data.wdsDetails.licenseNo,
-            waste_description: data.wdsDetails.wasteDescription,
-            source_process: data.wdsDetails.sourceProcess || null,
-            package_type: data.wdsDetails.packageType || null,
-            quantity_per_package: data.wdsDetails.quantityPerPackage || null,
-            total_weight: data.wdsDetails.totalWeight || null,
-            container_no: data.wdsDetails.containerNo,
-            purpose: data.wdsDetails.purpose || null,
-            bl_no: data.wdsDetails.blNo || null,
-            bor_no: data.wdsDetails.borNo || null,
-          },
-          { transaction }
-        );
-        const attachments = data.wdsDetails.attachments || [];
-        if (attachments.length > 0) {
-          await db.DealWdsAttachment.bulkCreate(
-            attachments.map(a => ({
-              deal_wds_id: wds.id,
-              file_path: a.path || a.file_path,
-              file_name: a.fileName || a.file_name || null,
-            })),
-            { transaction }
-          );
-        }
-      }
+      await _saveDealWds(dealId, data.wdsDetails, transaction);
     } else if (data.wdsRequired === false) {
       const wdsRows = await db.DealWds.findAll({ where: { deal_id: dealId }, attributes: ['id'], transaction });
       for (const row of wdsRows) {

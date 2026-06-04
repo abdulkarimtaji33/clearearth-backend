@@ -17,23 +17,23 @@ module.exports = (sequelize, DataTypes) => {
       },
       ref_no: {
         type: DataTypes.STRING(100),
-        allowNull: false,
+        allowNull: true,
       },
       date: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
       },
       company_name: {
         type: DataTypes.STRING(255),
-        allowNull: false,
+        allowNull: true,
       },
       license_no: {
         type: DataTypes.STRING(100),
-        allowNull: false,
+        allowNull: true,
       },
       waste_description: {
         type: DataTypes.TEXT,
-        allowNull: false,
+        allowNull: true,
       },
       source_process: {
         type: DataTypes.TEXT,
@@ -53,7 +53,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       container_no: {
         type: DataTypes.STRING(100),
-        allowNull: false,
+        allowNull: true,
       },
       purpose: {
         type: DataTypes.TEXT,

@@ -1782,6 +1782,16 @@ async function runMigration() {
       console.log(`  ${roleName} granted quotations.* + purchase_orders.*`);
     }
 
+    console.log('Making deal_wds detail columns nullable (WDS can be filled later)...');
+    for (const col of ['ref_no', 'date', 'company_name', 'license_no', 'waste_description', 'container_no']) {
+      try {
+        await db.sequelize.query(`ALTER TABLE deal_wds MODIFY COLUMN \`${col}\` ${col === 'date' ? 'DATE' : col === 'waste_description' ? 'TEXT' : col === 'company_name' ? 'VARCHAR(255)' : 'VARCHAR(100)'} NULL`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) console.warn(`  deal_wds.${col}:`, e.message);
+      }
+    }
+    console.log('  deal_wds columns allow NULL');
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
