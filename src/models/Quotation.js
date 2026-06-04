@@ -33,6 +33,7 @@ module.exports = (sequelize, DataTypes) => {
     Quotation.belongsTo(models.Tenant, { foreignKey: 'tenant_id' });
     Quotation.belongsTo(models.Deal, { foreignKey: 'deal_id', as: 'deal' });
     Quotation.belongsTo(models.User, { foreignKey: 'prepared_by', as: 'preparedByUser' });
+    Quotation.hasOne(models.WorkOrder, { foreignKey: 'quotation_id', as: 'workOrder' });
   };
 
   return Quotation;

@@ -268,10 +268,34 @@ const getById = async (tenantId, workOrderId) => {
 };
 
 const create = async (tenantId, data, scope = {}) => {
-  const { dealId, title, notes, status, tasks } = data;
+  const { dealId, quotationId, title, notes, status, tasks } = data;
 
-  if (dealId) {
-    const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+  let resolvedDealId = dealId || null;
+  let resolvedQuotationId = quotationId != null && quotationId !== '' ? parseInt(quotationId, 10) : null;
+
+  if (resolvedQuotationId) {
+    if (!Number.isFinite(resolvedQuotationId)) {
+      throw ApiError.badRequest('Invalid quotation');
+    }
+    const quotation = await db.Quotation.findOne({
+      where: { id: resolvedQuotationId, tenant_id: tenantId },
+    });
+    if (!quotation) throw ApiError.badRequest('Quotation not found');
+    const existingWo = await db.WorkOrder.findOne({
+      where: { tenant_id: tenantId, quotation_id: resolvedQuotationId },
+      attributes: ['id'],
+    });
+    if (existingWo) {
+      throw ApiError.badRequest('A work order already exists for this quotation');
+    }
+    resolvedDealId = quotation.deal_id;
+    if (dealId && Number(dealId) !== Number(quotation.deal_id)) {
+      throw ApiError.badRequest('Deal does not match the quotation');
+    }
+  }
+
+  if (resolvedDealId) {
+    const deal = await db.Deal.findOne({ where: { id: resolvedDealId, tenant_id: tenantId } });
     if (!deal) throw ApiError.badRequest('Deal not found');
   }
 
@@ -279,7 +303,8 @@ const create = async (tenantId, data, scope = {}) => {
     const wo = await db.WorkOrder.create(
       {
         tenant_id: tenantId,
-        deal_id: dealId || null,
+        deal_id: resolvedDealId,
+        quotation_id: resolvedQuotationId,
         title: title || null,
         notes: notes || null,
         status: status || 'new',

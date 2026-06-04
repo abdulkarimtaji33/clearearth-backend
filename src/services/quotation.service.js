@@ -52,6 +52,7 @@ const getAll = async (tenantId, filters) => {
     include: [
       dealInclude,
       { model: db.User, as: 'preparedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+      { model: db.WorkOrder, as: 'workOrder', attributes: ['id', 'title', 'status'], required: false },
     ],
     offset,
     limit,
@@ -81,6 +82,7 @@ const getById = async (tenantId, quotationId, scope = {}) => {
         ],
       },
       { model: db.User, as: 'preparedByUser', attributes: ['id', 'first_name', 'last_name', 'email'] },
+      { model: db.WorkOrder, as: 'workOrder', attributes: ['id', 'title', 'status'], required: false },
     ],
   });
   if (!quotation) throw ApiError.notFound('Quotation not found');

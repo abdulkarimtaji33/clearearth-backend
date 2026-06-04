@@ -1782,6 +1782,31 @@ async function runMigration() {
       console.log(`  ${roleName} granted quotations.* + purchase_orders.*`);
     }
 
+    console.log('Adding work_orders.quotation_id (one work order per service quotation)...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE work_orders
+        ADD COLUMN quotation_id INT NULL COMMENT 'Service quotation this work order was created from'
+        AFTER deal_id
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  work_orders.quotation_id add:', e.message);
+    }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE work_orders
+        ADD CONSTRAINT fk_work_orders_quotation FOREIGN KEY (quotation_id) REFERENCES quotations(id)
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  fk_work_orders_quotation:', e.message);
+    }
+    try {
+      await db.sequelize.query(`CREATE UNIQUE INDEX uk_work_orders_quotation ON work_orders (quotation_id)`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  uk_work_orders_quotation:', e.message);
+    }
+    console.log('  work_orders.quotation_id ready');
+
     console.log('Making deal_wds detail columns nullable (WDS can be filled later)...');
     for (const col of ['ref_no', 'date', 'company_name', 'license_no', 'waste_description', 'container_no']) {
       try {
