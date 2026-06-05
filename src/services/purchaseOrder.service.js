@@ -79,7 +79,7 @@ const getAll = async (tenantId, filters) => {
           {
             model: db.PurchaseOrder,
             as: 'purchaseBills',
-            attributes: ['id', 'title', 'status', 'company_id', 'supplier_id', 'document_type'],
+            attributes: ['id', 'status', 'company_id', 'supplier_id', 'document_type', 'po_date'],
             required: false,
           },
         ],
@@ -118,7 +118,7 @@ const getById = async (tenantId, poId) => {
           {
             model: db.PurchaseOrder,
             as: 'purchaseBills',
-            attributes: ['id', 'title', 'status', 'company_id', 'supplier_id', 'document_type'],
+            attributes: ['id', 'status', 'company_id', 'supplier_id', 'document_type', 'po_date'],
             required: false,
           },
         ],
