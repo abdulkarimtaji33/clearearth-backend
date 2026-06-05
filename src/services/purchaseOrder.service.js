@@ -49,6 +49,7 @@ const getAll = async (tenantId, filters) => {
         required: false,
       },
       { model: db.TermsAndConditions, as: 'terms', through: { attributes: [] }, attributes: ['id', 'title'], required: false },
+      { model: db.WorkOrder, as: 'sourceWorkOrder', attributes: ['id', 'title', 'status'], required: false },
     ],
     offset,
     limit,
@@ -74,6 +75,7 @@ const getById = async (tenantId, poId) => {
         order: [['sort_order', 'ASC'], ['id', 'ASC']],
       },
       { model: db.TermsAndConditions, as: 'terms', through: { attributes: [] } },
+      { model: db.WorkOrder, as: 'sourceWorkOrder', attributes: ['id', 'title', 'status'], required: false },
     ],
   });
   if (!po) throw ApiError.notFound('Purchase order not found');

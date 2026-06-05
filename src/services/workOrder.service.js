@@ -221,6 +221,18 @@ const getAll = async (tenantId, filters = {}) => {
         attributes: ['id', 'deal_number', 'title', 'status'],
         required: false,
       },
+      {
+        model: db.Quotation,
+        as: 'quotation',
+        attributes: ['id', 'status'],
+        required: false,
+      },
+      {
+        model: db.PurchaseOrder,
+        as: 'sourcePurchaseOrder',
+        attributes: ['id', 'status', 'document_type', 'company_id', 'supplier_id'],
+        required: false,
+      },
       taskInclude,
       { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
     ],
@@ -255,6 +267,22 @@ const getById = async (tenantId, workOrderId) => {
         required: false,
       },
       {
+        model: db.Quotation,
+        as: 'quotation',
+        attributes: ['id', 'status', 'quotation_date'],
+        required: false,
+      },
+      {
+        model: db.PurchaseOrder,
+        as: 'sourcePurchaseOrder',
+        attributes: ['id', 'status', 'document_type', 'po_date', 'company_id', 'supplier_id'],
+        required: false,
+        include: [
+          { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+          { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+        ],
+      },
+      {
         model: db.PurchaseOrder,
         as: 'purchaseBill',
         required: false,
@@ -275,10 +303,18 @@ const getById = async (tenantId, workOrderId) => {
 };
 
 const create = async (tenantId, data, scope = {}) => {
-  const { dealId, quotationId, title, notes, status, tasks } = data;
+  const { dealId, quotationId, purchaseOrderId, title, notes, status, tasks } = data;
 
   let resolvedDealId = dealId || null;
   let resolvedQuotationId = quotationId != null && quotationId !== '' ? parseInt(quotationId, 10) : null;
+  let resolvedPurchaseOrderId = purchaseOrderId != null && purchaseOrderId !== '' ? parseInt(purchaseOrderId, 10) : null;
+
+  if (resolvedQuotationId && resolvedPurchaseOrderId) {
+    throw ApiError.badRequest('Specify only one of service quotation or purchase order');
+  }
+  if (!resolvedQuotationId && !resolvedPurchaseOrderId) {
+    throw ApiError.badRequest('Work orders must be created from a service order or purchase order');
+  }
 
   if (resolvedQuotationId) {
     if (!Number.isFinite(resolvedQuotationId)) {
@@ -288,6 +324,9 @@ const create = async (tenantId, data, scope = {}) => {
       where: { id: resolvedQuotationId, tenant_id: tenantId },
     });
     if (!quotation) throw ApiError.badRequest('Quotation not found');
+    if (String(quotation.status).toLowerCase() !== 'approved') {
+      throw ApiError.badRequest('Service order must be approved before creating a work order');
+    }
     const existingWo = await db.WorkOrder.findOne({
       where: { tenant_id: tenantId, quotation_id: resolvedQuotationId },
       attributes: ['id'],
@@ -301,10 +340,39 @@ const create = async (tenantId, data, scope = {}) => {
     }
   }
 
-  if (resolvedDealId) {
-    const deal = await db.Deal.findOne({ where: { id: resolvedDealId, tenant_id: tenantId } });
-    if (!deal) throw ApiError.badRequest('Deal not found');
+  if (resolvedPurchaseOrderId) {
+    if (!Number.isFinite(resolvedPurchaseOrderId)) {
+      throw ApiError.badRequest('Invalid purchase order');
+    }
+    const po = await db.PurchaseOrder.findOne({
+      where: { id: resolvedPurchaseOrderId, tenant_id: tenantId },
+    });
+    if (!po) throw ApiError.badRequest('Purchase order not found');
+    if (String(po.status).toLowerCase() !== 'approved') {
+      throw ApiError.badRequest('Purchase order must be approved before creating a work order');
+    }
+    if (String(po.document_type).toLowerCase() === 'bill') {
+      throw ApiError.badRequest('Work orders cannot be created from purchase bills');
+    }
+    const existingWo = await db.WorkOrder.findOne({
+      where: { tenant_id: tenantId, purchase_order_id: resolvedPurchaseOrderId },
+      attributes: ['id'],
+    });
+    if (existingWo) {
+      throw ApiError.badRequest('A work order already exists for this purchase order');
+    }
+    resolvedDealId = po.deal_id;
+    if (dealId && Number(dealId) !== Number(po.deal_id)) {
+      throw ApiError.badRequest('Deal does not match the purchase order');
+    }
   }
+
+  if (!resolvedDealId) {
+    throw ApiError.badRequest('Deal is required');
+  }
+
+  const deal = await db.Deal.findOne({ where: { id: resolvedDealId, tenant_id: tenantId } });
+  if (!deal) throw ApiError.badRequest('Deal not found');
 
   const workOrder = await db.sequelize.transaction(async (t) => {
     const wo = await db.WorkOrder.create(
@@ -312,6 +380,7 @@ const create = async (tenantId, data, scope = {}) => {
         tenant_id: tenantId,
         deal_id: resolvedDealId,
         quotation_id: resolvedQuotationId,
+        purchase_order_id: resolvedPurchaseOrderId,
         title: title || null,
         notes: notes || null,
         status: status || 'new',

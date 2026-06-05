@@ -66,6 +66,7 @@ module.exports = (sequelize, DataTypes) => {
     PurchaseOrder.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
     PurchaseOrder.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     PurchaseOrder.belongsTo(models.WorkOrder, { foreignKey: 'work_order_id', as: 'workOrder' });
+    PurchaseOrder.hasOne(models.WorkOrder, { foreignKey: 'purchase_order_id', as: 'sourceWorkOrder' });
     PurchaseOrder.hasMany(models.PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items' });
     PurchaseOrder.belongsToMany(models.TermsAndConditions, {
       through: models.PurchaseOrderTerm,

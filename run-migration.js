@@ -1848,6 +1848,31 @@ async function runMigration() {
     }
     console.log('  work_orders.quotation_id ready');
 
+    console.log('Adding work_orders.purchase_order_id (one work order per purchase order)...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE work_orders
+        ADD COLUMN purchase_order_id INT NULL COMMENT 'Purchase order this work order was created from'
+        AFTER quotation_id
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  work_orders.purchase_order_id add:', e.message);
+    }
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE work_orders
+        ADD CONSTRAINT fk_work_orders_purchase_order FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id)
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  fk_work_orders_purchase_order:', e.message);
+    }
+    try {
+      await db.sequelize.query(`CREATE UNIQUE INDEX uk_work_orders_purchase_order ON work_orders (purchase_order_id)`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  uk_work_orders_purchase_order:', e.message);
+    }
+    console.log('  work_orders.purchase_order_id ready');
+
     console.log('Making deal_wds detail columns nullable (WDS can be filled later)...');
     for (const col of ['ref_no', 'date', 'company_name', 'license_no', 'waste_description', 'container_no']) {
       try {

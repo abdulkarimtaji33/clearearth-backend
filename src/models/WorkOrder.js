@@ -26,6 +26,12 @@ module.exports = (sequelize, DataTypes) => {
         references: { model: 'quotations', key: 'id' },
         comment: 'Service quotation this work order was created from (at most one WO per quotation)',
       },
+      purchase_order_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'purchase_orders', key: 'id' },
+        comment: 'Purchase order this work order was created from (at most one WO per purchase order)',
+      },
       title: {
         type: DataTypes.STRING(255),
         allowNull: true,
@@ -53,6 +59,7 @@ module.exports = (sequelize, DataTypes) => {
         { fields: ['tenant_id'] },
         { fields: ['deal_id'] },
         { fields: ['quotation_id'], unique: true },
+        { fields: ['purchase_order_id'], unique: true },
         { fields: ['status'] },
       ],
     }
@@ -61,6 +68,7 @@ module.exports = (sequelize, DataTypes) => {
   WorkOrder.associate = models => {
     WorkOrder.belongsTo(models.Deal, { foreignKey: 'deal_id', as: 'deal' });
     WorkOrder.belongsTo(models.Quotation, { foreignKey: 'quotation_id', as: 'quotation' });
+    WorkOrder.belongsTo(models.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'sourcePurchaseOrder' });
     WorkOrder.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
     WorkOrder.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
     WorkOrder.hasMany(models.WorkOrderTask, { foreignKey: 'work_order_id', as: 'tasks' });
