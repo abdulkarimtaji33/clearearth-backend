@@ -284,9 +284,12 @@ const getById = async (tenantId, workOrderId) => {
       },
       {
         model: db.PurchaseOrder,
-        as: 'purchaseBill',
+        as: 'purchaseBills',
         required: false,
+        separate: true,
         include: [
+          { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+          { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
           {
             model: db.PurchaseOrderItem,
             as: 'items',

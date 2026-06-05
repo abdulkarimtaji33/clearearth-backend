@@ -70,7 +70,20 @@ const getAll = async (tenantId, filters) => {
         required: false,
       },
       { model: db.TermsAndConditions, as: 'terms', through: { attributes: [] }, attributes: ['id', 'title'], required: false },
-      { model: db.WorkOrder, as: 'sourceWorkOrder', attributes: ['id', 'title', 'status'], required: false },
+      {
+        model: db.WorkOrder,
+        as: 'sourceWorkOrder',
+        attributes: ['id', 'title', 'status'],
+        required: false,
+        include: [
+          {
+            model: db.PurchaseOrder,
+            as: 'purchaseBills',
+            attributes: ['id', 'title', 'status', 'company_id', 'supplier_id', 'document_type'],
+            required: false,
+          },
+        ],
+      },
     ],
     offset,
     limit,
@@ -96,7 +109,20 @@ const getById = async (tenantId, poId) => {
         order: [['sort_order', 'ASC'], ['id', 'ASC']],
       },
       { model: db.TermsAndConditions, as: 'terms', through: { attributes: [] } },
-      { model: db.WorkOrder, as: 'sourceWorkOrder', attributes: ['id', 'title', 'status'], required: false },
+      {
+        model: db.WorkOrder,
+        as: 'sourceWorkOrder',
+        attributes: ['id', 'title', 'status'],
+        required: false,
+        include: [
+          {
+            model: db.PurchaseOrder,
+            as: 'purchaseBills',
+            attributes: ['id', 'title', 'status', 'company_id', 'supplier_id', 'document_type'],
+            required: false,
+          },
+        ],
+      },
     ],
   });
   if (!po) throw ApiError.notFound('Purchase order not found');
@@ -141,6 +167,20 @@ const create = async (tenantId, data) => {
   const resolvedStatus = explicitStatus || defaultStatus;
   const isBill = documentType === 'bill';
   const normalizedItems = normalizePoItems(items, [], isBill);
+
+  if (isBill && workOrderId) {
+    const dupWhere = {
+      tenant_id: tenantId,
+      work_order_id: workOrderId,
+      document_type: 'bill',
+    };
+    if (hasC) dupWhere.company_id = companyId;
+    if (hasS) dupWhere.supplier_id = supplierId;
+    const existingBill = await db.PurchaseOrder.findOne({ where: dupWhere, attributes: ['id'] });
+    if (existingBill) {
+      throw ApiError.badRequest('A purchase bill already exists for this work order and party');
+    }
+  }
 
   const po = await db.sequelize.transaction(async (t) => {
     const newPo = await db.PurchaseOrder.create(
@@ -329,10 +369,27 @@ const remove = async (tenantId, poId) => {
   await po.destroy();
 };
 
-const ensurePurchaseBillForWorkOrder = async (tenantId, workOrderId) => {
-  const existing = await db.PurchaseOrder.findOne({
-    where: { tenant_id: tenantId, work_order_id: workOrderId, document_type: 'bill' },
-  });
+const _dealItemsToBillLines = (dealItems) => dealItems.map((it) => ({
+  productServiceId: it.product_service_id,
+  itemDescription: it.notes || null,
+  quantity: String(it.quantity ?? ''),
+  price: String(it.unit_price ?? ''),
+  total: String(it.line_total ?? ''),
+}));
+
+const _ensurePurchaseBillForWorkOrderParty = async (tenantId, workOrderId, party) => {
+  const isClient = party === 'client';
+  const existingWhere = {
+    tenant_id: tenantId,
+    work_order_id: workOrderId,
+    document_type: 'bill',
+  };
+  if (isClient) {
+    existingWhere.company_id = { [Op.ne]: null };
+  } else {
+    existingWhere.supplier_id = { [Op.ne]: null };
+  }
+  const existing = await db.PurchaseOrder.findOne({ where: existingWhere });
   if (existing) return existing;
 
   const wo = await db.WorkOrder.findOne({
@@ -345,29 +402,34 @@ const ensurePurchaseBillForWorkOrder = async (tenantId, workOrderId) => {
   });
   if (!wo?.deal || wo.deal.deal_type !== 'offer_to_purchase') return null;
 
-  const supplierId = wo.deal.downstream_partner_supplier_id || wo.deal.supplier_id;
-  if (!supplierId) return null;
-
   const dealItems = wo.deal.items || [];
   if (dealItems.length === 0) return null;
 
-  const items = dealItems.map((it) => ({
-    productServiceId: it.product_service_id,
-    itemDescription: it.notes || null,
-    quantity: String(it.quantity ?? ''),
-    price: String(it.unit_price ?? ''),
-    total: String(it.line_total ?? ''),
-  }));
-
-  return create(tenantId, {
+  const items = _dealItemsToBillLines(dealItems);
+  const base = {
     dealId: wo.deal_id,
-    supplierId,
     poDate: new Date().toISOString().slice(0, 10),
     items,
     status: 'approved',
     documentType: 'bill',
     workOrderId,
-  });
+  };
+
+  if (isClient) {
+    const companyId = wo.deal.company_id;
+    if (!companyId) return null;
+    return create(tenantId, { ...base, companyId, supplierId: null });
+  }
+
+  const supplierId = wo.deal.downstream_partner_supplier_id || wo.deal.supplier_id;
+  if (!supplierId) return null;
+  return create(tenantId, { ...base, supplierId, companyId: null });
+};
+
+const ensurePurchaseBillForWorkOrder = async (tenantId, workOrderId) => {
+  const clientBill = await _ensurePurchaseBillForWorkOrderParty(tenantId, workOrderId, 'client');
+  const vendorBill = await _ensurePurchaseBillForWorkOrderParty(tenantId, workOrderId, 'vendor');
+  return vendorBill || clientBill || null;
 };
 
 module.exports = { getAll, getById, create, update, remove, ensurePurchaseBillForWorkOrder };
