@@ -176,8 +176,6 @@ const create = async (tenantId, userId, body, scope = {}) => {
     proformaInvoiceId,
     invoiceDate,
     dueDate,
-    paymentStatus,
-    paidAmount,
     paymentMethod,
     referenceNo,
     attachmentPath,
@@ -193,11 +191,6 @@ const create = async (tenantId, userId, body, scope = {}) => {
     where: { proforma_invoice_id: proformaInvoiceId, tenant_id: tenantId },
   });
   if (dup) throw ApiError.conflict('A tax invoice already exists for this proforma invoice');
-
-  const ps = String(paymentStatus || 'unpaid').toLowerCase();
-  if (!PAYMENT_STATUSES.includes(ps)) {
-    throw ApiError.badRequest(`paymentStatus must be one of: ${PAYMENT_STATUSES.join(', ')}`);
-  }
 
   const t = await db.sequelize.transaction();
   let createdId;
@@ -216,8 +209,8 @@ const create = async (tenantId, userId, body, scope = {}) => {
         vat_percentage: parseFloat(plain.vat_percentage) || 0,
         vat_amount: parseFloat(plain.vat_amount) || 0,
         total: parseFloat(plain.total) || 0,
-        payment_status: ps,
-        paid_amount: paidAmount != null ? parseFloat(paidAmount) : null,
+        payment_status: 'unpaid',
+        paid_amount: null,
         payment_method: paymentMethod || null,
         reference_no: referenceNo || null,
         attachment_path: attachmentPath || null,
@@ -290,8 +283,6 @@ const update = async (tenantId, id, body, scope = {}) => {
   const {
     invoiceDate,
     dueDate,
-    paymentStatus,
-    paidAmount,
     paymentMethod,
     referenceNo,
     attachmentPath,
@@ -299,17 +290,8 @@ const update = async (tenantId, id, body, scope = {}) => {
     items,
   } = body;
 
-  if (paymentStatus !== undefined) {
-    const ps = String(paymentStatus).toLowerCase();
-    if (!PAYMENT_STATUSES.includes(ps)) {
-      throw ApiError.badRequest(`paymentStatus must be one of: ${PAYMENT_STATUSES.join(', ')}`);
-    }
-    row.payment_status = ps;
-  }
-
   if (invoiceDate !== undefined) row.invoice_date = invoiceDate;
   if (dueDate !== undefined) row.due_date = dueDate;
-  if (paidAmount !== undefined) row.paid_amount = paidAmount != null ? parseFloat(paidAmount) : null;
   if (paymentMethod !== undefined) row.payment_method = paymentMethod;
   if (referenceNo !== undefined) row.reference_no = referenceNo;
   if (attachmentPath !== undefined) row.attachment_path = attachmentPath;

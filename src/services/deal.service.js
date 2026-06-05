@@ -474,8 +474,8 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         is_rcm_applicable: data.isRcmApplicable !== undefined ? data.isRcmApplicable : deal.is_rcm_applicable,
         status: data.status !== undefined ? data.status : deal.status,
         loss_reason: data.lossReason !== undefined ? data.lossReason : deal.loss_reason,
-        payment_status: data.paymentStatus !== undefined ? data.paymentStatus : deal.payment_status,
-        paid_amount: data.paidAmount !== undefined ? data.paidAmount : deal.paid_amount,
+        payment_status: deal.payment_status,
+        paid_amount: deal.paid_amount,
         assigned_to: scope.scopeUserId ? scope.scopeUserId : (data.assignedTo !== undefined ? data.assignedTo : deal.assigned_to),
         terms_and_conditions_id: (() => {
           if (Array.isArray(data.termsAndConditionsIds)) return data.termsAndConditionsIds.length > 0 ? data.termsAndConditionsIds[0] : null;

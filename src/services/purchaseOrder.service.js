@@ -7,6 +7,27 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 
+const normalizePoItems = (items, existingItems = [], isBill = false) => {
+  return items.map((it, i) => {
+    const existing = existingItems[i];
+    const price = isBill && existing ? String(existing.price ?? '') : String(it.price ?? '');
+    const productServiceId = isBill && existing ? existing.product_service_id : it.productServiceId;
+    const itemDescription = isBill && existing
+      ? (existing.item_description || null)
+      : (it.itemDescription || null);
+    const qty = parseFloat(it.quantity) || 0;
+    const priceNum = parseFloat(price) || 0;
+    const total = (qty * priceNum).toFixed(2);
+    return {
+      productServiceId,
+      itemDescription,
+      quantity: String(it.quantity ?? ''),
+      price,
+      total,
+    };
+  });
+};
+
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
@@ -118,6 +139,8 @@ const create = async (tenantId, data) => {
   const explicitStatus = status && String(status).trim();
   const defaultStatus = hasS ? 'approved' : 'new';
   const resolvedStatus = explicitStatus || defaultStatus;
+  const isBill = documentType === 'bill';
+  const normalizedItems = normalizePoItems(items, [], isBill);
 
   const po = await db.sequelize.transaction(async (t) => {
     const newPo = await db.PurchaseOrder.create(
@@ -136,8 +159,8 @@ const create = async (tenantId, data) => {
       { transaction: t }
     );
 
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
+    for (let i = 0; i < normalizedItems.length; i++) {
+      const it = normalizedItems[i];
       await db.PurchaseOrderItem.create(
         {
           purchase_order_id: newPo.id,
@@ -232,9 +255,11 @@ const update = async (tenantId, poId, data) => {
     );
 
     if (items && Array.isArray(items)) {
+      const isBill = String(po.document_type).toLowerCase() === 'bill';
+      const normalizedItems = normalizePoItems(items, po.items || [], isBill);
       await db.PurchaseOrderItem.destroy({ where: { purchase_order_id: po.id }, transaction: t });
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i];
+      for (let i = 0; i < normalizedItems.length; i++) {
+        const it = normalizedItems[i];
         await db.PurchaseOrderItem.create(
           {
             purchase_order_id: po.id,

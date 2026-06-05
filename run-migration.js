@@ -1873,6 +1873,51 @@ async function runMigration() {
     }
     console.log('  work_orders.purchase_order_id ready');
 
+    console.log('Creating expense_categories table...');
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS expense_categories (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          tenant_id INT NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          value VARCHAR(100) NOT NULL COMMENT 'Slug stored on expenses.category',
+          display_order INT NOT NULL DEFAULT 0,
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY uk_expense_categories_tenant_value (tenant_id, value),
+          INDEX idx_expense_categories_tenant (tenant_id),
+          CONSTRAINT fk_expense_categories_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+        )
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  expense_categories table:', e.message);
+    }
+    try {
+      const [tenants] = await db.sequelize.query('SELECT id FROM tenants');
+      const defaults = [
+        ['Travel', 'travel', 1],
+        ['Utility', 'utility', 2],
+        ['Fuel', 'fuel', 3],
+        ['Materials', 'materials', 4],
+        ['Equipment', 'equipment', 5],
+        ['Professional services', 'professional', 6],
+        ['Other', 'other', 99],
+      ];
+      for (const tenant of tenants) {
+        for (const [name, value, displayOrder] of defaults) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO expense_categories (tenant_id, name, value, display_order, is_active, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 1, NOW(), NOW())`,
+            { replacements: [tenant.id, name, value, displayOrder] }
+          );
+        }
+      }
+      console.log('  expense_categories seeded for tenants');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  expense_categories seed:', e.message);
+    }
+
     console.log('Making deal_wds detail columns nullable (WDS can be filled later)...');
     for (const col of ['ref_no', 'date', 'company_name', 'license_no', 'waste_description', 'container_no']) {
       try {

@@ -9,6 +9,7 @@ const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
 const { EXPENSE_CATEGORY_TO_CODE } = require('./chartOfAccounts.service');
+const expenseCategoryService = require('./expenseCategory.service');
 
 const STATUSES = ['pending', 'approved', 'rejected'];
 
@@ -17,16 +18,6 @@ const WO_EXPENSE_CATEGORY = 'work_orders';
 const WO_EXPENSE_PAID_TO = 'Operations';
 const WO_EXPENSE_REFERENCE = 'work_order';
 const MANUAL_EXPENSE_REFERENCE = 'manual';
-
-const MANUAL_CATEGORIES = [
-  'travel',
-  'utility',
-  'fuel',
-  'materials',
-  'equipment',
-  'professional',
-  'other',
-];
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -156,15 +147,11 @@ const createManualExpense = async (tenantId, userId, body) => {
     notes,
     reference,
     referenceId,
-    paymentStatus,
     paidAmount,
     paidAt,
   } = body;
 
-  const cat = category != null ? String(category).trim().toLowerCase() : '';
-  if (!cat || !MANUAL_CATEGORIES.includes(cat)) {
-    throw ApiError.badRequest(`category must be one of: ${MANUAL_CATEGORIES.join(', ')}`);
-  }
+  const cat = await expenseCategoryService.resolveCategoryValue(tenantId, category);
   if (!expenseDate) throw ApiError.badRequest('expenseDate is required');
   const amt = parseFloat(amount);
   if (!Number.isFinite(amt) || amt <= 0) throw ApiError.badRequest('Amount must be greater than zero');
@@ -172,19 +159,12 @@ const createManualExpense = async (tenantId, userId, body) => {
   const ref = reference != null && String(reference).trim() !== '' ? String(reference).trim() : MANUAL_EXPENSE_REFERENCE;
   const refId = referenceId != null && String(referenceId).trim() !== '' ? String(referenceId).trim() : null;
 
-  let paid = paidAmount != null && paidAmount !== '' ? parseFloat(paidAmount) : null;
-  if (paid != null && (!Number.isFinite(paid) || paid < 0)) throw ApiError.badRequest('paidAmount must be a valid number');
-  if (paid != null && paid > amt) paid = amt;
+  let paid = paidAmount != null && paidAmount !== '' ? parseFloat(paidAmount) : 0;
+  if (!Number.isFinite(paid) || paid < 0) throw ApiError.badRequest('paidAmount must be a valid number');
+  if (paid > amt) paid = amt;
 
-  let ps = paymentStatus != null ? String(paymentStatus).toLowerCase().trim() : null;
-  if (ps && !PAYMENT_STATUSES.includes(ps)) {
-    throw ApiError.badRequest(`paymentStatus must be one of: ${PAYMENT_STATUSES.join(', ')}`);
-  }
-  if (!ps) ps = deriveExpensePaymentStatus(amt, paid);
-  if (ps === 'paid' && (paid == null || paid === 0)) paid = amt;
-  if (ps === 'partial' && (paid == null || paid <= 0)) {
-    throw ApiError.badRequest('paidAmount is required when paymentStatus is partial');
-  }
+  const ps = deriveExpensePaymentStatus(amt, paid);
+  const effectivePaid = ps === 'unpaid' ? null : (ps === 'paid' ? amt : paid);
 
   const t = await db.sequelize.transaction();
   let row;
@@ -203,8 +183,8 @@ const createManualExpense = async (tenantId, userId, body) => {
         reference_id: refId,
         created_by: userId,
         payment_status: ps,
-        paid_amount: paid,
-        paid_at: paidAt || (ps === 'paid' ? expenseDate : null),
+        paid_amount: effectivePaid,
+        paid_at: paidAt || (ps !== 'unpaid' ? expenseDate : null),
       },
       { transaction: t }
     );

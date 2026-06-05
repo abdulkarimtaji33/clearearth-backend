@@ -72,6 +72,7 @@ const WorkOrder = require('./WorkOrder')(sequelize, DataTypes);
 const WorkOrderTask = require('./WorkOrderTask')(sequelize, DataTypes);
 const WorkOrderTaskExpense = require('./WorkOrderTaskExpense')(sequelize, DataTypes);
 const Expense = require('./Expense')(sequelize, DataTypes);
+const ExpenseCategory = require('./ExpenseCategory')(sequelize, DataTypes);
 const WorkType = require('./WorkType')(sequelize, DataTypes);
 
 // Accounting / GL
@@ -141,6 +142,7 @@ const db = {
   WorkOrderTask,
   WorkOrderTaskExpense,
   Expense,
+  ExpenseCategory,
   WorkType,
   FiscalYear,
   AccountingPeriod,

@@ -233,11 +233,14 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
 
   const grandTotal = subtotal + totalVat;
   const approved = isApprovedStatus(po.status);
+  const isBill = String(po.document_type).toLowerCase() === 'bill';
   const y = new Date().getFullYear();
-  const poNumber = approved ? `PO/CE/${y}/${po.id}` : `PQT/CE/${y}/${po.id}`;
+  const poNumber = isBill
+    ? `PB/CE/${y}/${po.id}`
+    : (approved ? `PO/CE/${y}/${po.id}` : `PQT/CE/${y}/${po.id}`);
   const poDate = formatDate(po.po_date);
-  const documentTitle = approved ? 'Purchase Order' : 'Purchase Quotation';
-  const docRefLabel = approved ? 'PO' : 'Quotation';
+  const documentTitle = isBill ? 'Purchase Bill' : (approved ? 'Purchase Order' : 'Purchase Quotation');
+  const docRefLabel = isBill ? 'Bill' : (approved ? 'PO' : 'Quotation');
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = party ? [party.address, party.city].filter(Boolean).join(', ') || '-' : '-';
 
