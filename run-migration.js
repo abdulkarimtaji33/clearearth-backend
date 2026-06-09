@@ -1928,6 +1928,27 @@ async function runMigration() {
     }
     console.log('  deal_wds columns allow NULL');
 
+    console.log('Adding lead approval workflow columns and status...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE leads MODIFY COLUMN status ENUM('new','contacted','pending_approval','qualified','disqualified','converted') NOT NULL DEFAULT 'new'
+      `);
+      console.log('  leads.status enum includes pending_approval');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  leads.status enum:', e.message);
+    }
+    for (const [col, def] of [
+      ['approval_requested_at', 'DATETIME NULL'],
+      ['approved_by', 'INT NULL'],
+      ['approved_at', 'DATETIME NULL'],
+    ]) {
+      try {
+        await db.sequelize.query(`ALTER TABLE leads ADD COLUMN ${col} ${def}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) console.warn(`  leads.${col}:`, e.message);
+      }
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

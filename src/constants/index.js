@@ -24,10 +24,13 @@ const RECORD_STATUS = {
 const LEAD_STATUS = {
   NEW: 'new',
   CONTACTED: 'contacted',
+  PENDING_APPROVAL: 'pending_approval',
   QUALIFIED: 'qualified',
   DISQUALIFIED: 'disqualified',
   CONVERTED: 'converted',
 };
+
+const MANAGER_ROLES = ['sales_manager', 'admin', 'tenant_admin', 'super_admin'];
 
 // Permissions Modules
 const MODULES = {
@@ -57,6 +60,7 @@ module.exports = {
   USER_STATUS,
   RECORD_STATUS,
   LEAD_STATUS,
+  MANAGER_ROLES,
   MODULES,
   ACTIONS,
 };

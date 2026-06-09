@@ -32,8 +32,26 @@ const update = asyncHandler(async (req, res) => {
 
 const qualify = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
-  const lead = await leadService.qualify(req.tenant.id, req.params.id, req.body.notes, scope);
-  return ApiResponse.success(res, lead, 'Lead qualified');
+  const lead = await leadService.qualify(req.tenant.id, req.params.id, req.body.notes, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, lead, 'Lead approved');
+});
+
+const requestApproval = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const lead = await leadService.requestApproval(req.tenant.id, req.params.id, scope, req.user);
+  return ApiResponse.success(res, lead, 'Approval requested');
+});
+
+const approveWithPin = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const lead = await leadService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, lead, 'Lead approved');
 });
 
 const disqualify = asyncHandler(async (req, res) => {
@@ -54,4 +72,4 @@ const remove = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'Lead deleted');
 });
 
-module.exports = { getAll, getById, create, update, qualify, disqualify, convertToDeal, remove };
+module.exports = { getAll, getById, create, update, qualify, requestApproval, approveWithPin, disqualify, convertToDeal, remove };

@@ -23,4 +23,14 @@ const updateMyTenant = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, tenant, 'Company settings updated successfully');
 });
 
-module.exports = { getMyTenant, updateMyTenant, getPublicLogo };
+const updateLeadApprovalPin = asyncHandler(async (req, res) => {
+  const roleName = req.user?.role?.name;
+  if (!['admin', 'tenant_admin', 'super_admin'].includes(roleName)) {
+    const ApiError = require('../utils/apiError');
+    throw ApiError.forbidden('Only administrators can change the lead approval PIN');
+  }
+  const tenant = await tenantService.updateLeadApprovalPin(req.tenant.id, req.body.pin);
+  return ApiResponse.success(res, tenant, 'Lead approval PIN updated successfully');
+});
+
+module.exports = { getMyTenant, updateMyTenant, updateLeadApprovalPin, getPublicLogo };

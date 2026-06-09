@@ -57,6 +57,24 @@ const createForUsers = async (tenantId, userIds, payload) => {
   return db.Notification.bulkCreate(rows);
 };
 
+const getSalesManagerUserIds = async (tenantId) => {
+  const roles = await db.Role.findAll({
+    where: {
+      name: 'sales_manager',
+      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+    },
+    attributes: ['id'],
+  });
+  const roleIds = roles.map(r => r.id);
+  if (roleIds.length === 0) return [];
+
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
+    attributes: ['id'],
+  });
+  return users.map(u => u.id);
+};
+
 const getManagerAndAdminUserIds = async (tenantId) => {
   const roles = await db.Role.findAll({
     where: {
@@ -129,6 +147,28 @@ const notifyInspectionRejected = async (tenantId, request, reason, rejectedByUse
   });
 };
 
+const notifyLeadApprovalRequested = async (tenantId, lead, requestedByUser) => {
+  const recipientIds = await getSalesManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+
+  const companyName = lead.company?.company_name || 'Unknown company';
+  const contactName = lead.contact
+    ? [lead.contact.first_name, lead.contact.last_name].filter(Boolean).join(' ')
+    : '';
+  const userName = requestedByUser
+    ? [requestedByUser.first_name, requestedByUser.last_name].filter(Boolean).join(' ')
+    : 'A user';
+  const leadLabel = lead.lead_number ? `Lead ${lead.lead_number}` : `Lead #${lead.id}`;
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'lead_approval_requested',
+    title: 'Lead approval requested',
+    message: `${userName} requested approval for ${leadLabel} (${companyName}${contactName ? ` — ${contactName}` : ''}).`,
+    entityType: 'lead',
+    entityId: lead.id,
+  });
+};
+
 module.exports = {
   getForUser,
   markRead,
@@ -136,4 +176,5 @@ module.exports = {
   createForUsers,
   notifyDealStatusChange,
   notifyInspectionRejected,
+  notifyLeadApprovalRequested,
 };

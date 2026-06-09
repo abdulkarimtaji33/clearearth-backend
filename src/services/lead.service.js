@@ -3,6 +3,19 @@ const ApiError = require('../utils/apiError');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const { LEAD_STATUS } = require('../constants');
+const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
+const notificationService = require('./notification.service');
+
+const leadIncludes = [
+  { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+  { model: db.User, as: 'approvedByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+  { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
+  { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
+  { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category', 'price', 'unit_of_measure', 'currency'], required: false },
+];
+
+const APPROVABLE_STATUSES = [LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED, LEAD_STATUS.PENDING_APPROVAL];
+const EDITABLE_STATUSES = [LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED, LEAD_STATUS.PENDING_APPROVAL, LEAD_STATUS.DISQUALIFIED];
 
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId, scopeUserId, dateFrom, dateTo } = filters;
@@ -33,12 +46,7 @@ const getAll = async (tenantId, filters) => {
 
   const { count, rows } = await db.Lead.findAndCountAll({
     where,
-    include: [
-      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
-      { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
-      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
-      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category', 'price', 'unit_of_measure', 'currency'], required: false },
-    ],
+    include: leadIncludes,
     offset,
     limit,
     order: [['created_at', 'DESC']],
@@ -54,12 +62,7 @@ const getById = async (tenantId, leadId, scope = {}) => {
   }
   const lead = await db.Lead.findOne({
     where,
-    include: [
-      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
-      { model: db.Company, as: 'company', attributes: ['id', 'company_name', 'email', 'phone'], required: false },
-      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
-      { model: db.ProductService, as: 'productService', attributes: ['id', 'name', 'category', 'price', 'unit_of_measure', 'currency'], required: false },
-    ],
+    include: leadIncludes,
   });
   if (!lead) throw ApiError.notFound('Lead not found');
   return lead;
@@ -68,7 +71,6 @@ const getById = async (tenantId, leadId, scope = {}) => {
 const create = async (tenantId, data, scope = {}) => {
   const assignedTo = scope.scopeUserId || data.assignedTo;
 
-  // Validate company and contact if provided
   if (data.companyId) {
     const company = await db.Company.findOne({ where: { id: data.companyId, tenant_id: tenantId } });
     if (!company) throw ApiError.notFound('Company not found');
@@ -112,7 +114,6 @@ const update = async (tenantId, leadId, data, scope = {}) => {
     throw ApiError.badRequest('Cannot update converted lead');
   }
 
-  // Validate company and contact if provided
   if (data.companyId !== undefined && data.companyId !== null) {
     const company = await db.Company.findOne({ where: { id: data.companyId, tenant_id: tenantId } });
     if (!company) throw ApiError.notFound('Company not found');
@@ -123,14 +124,24 @@ const update = async (tenantId, leadId, data, scope = {}) => {
     if (!contact) throw ApiError.notFound('Contact not found');
   }
 
-  const VALID_STATUSES = [LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED, LEAD_STATUS.QUALIFIED, LEAD_STATUS.DISQUALIFIED];
+  let nextStatus = lead.status;
+  if (data.status !== undefined) {
+    if (!EDITABLE_STATUSES.includes(data.status)) {
+      throw ApiError.badRequest('Lead status cannot be set directly. Use the approval workflow.');
+    }
+    if (data.status === LEAD_STATUS.QUALIFIED || data.status === LEAD_STATUS.CONVERTED) {
+      throw ApiError.badRequest('Lead approval is required before marking as qualified');
+    }
+    nextStatus = data.status;
+  }
+
   await lead.update({
     company_id: data.companyId !== undefined ? data.companyId : lead.company_id,
     contact_id: data.contactId !== undefined ? data.contactId : lead.contact_id,
     email: data.email !== undefined ? data.email : lead.email,
     phone: data.phone !== undefined ? data.phone : lead.phone,
     source: data.source !== undefined ? data.source : lead.source,
-    status: (data.status !== undefined && VALID_STATUSES.includes(data.status)) ? data.status : lead.status,
+    status: nextStatus,
     service_interest: data.serviceInterest !== undefined ? data.serviceInterest : lead.service_interest,
     product_service_id: data.productServiceId !== undefined ? data.productServiceId : lead.product_service_id,
     estimated_value: data.estimatedValue !== undefined ? data.estimatedValue : lead.estimated_value,
@@ -141,7 +152,74 @@ const update = async (tenantId, leadId, data, scope = {}) => {
   return await getById(tenantId, leadId);
 };
 
-const qualify = async (tenantId, leadId, notes, scope = {}) => {
+const _approveLead = async (lead, { notes, approvedByUserId }) => {
+  if (lead.status === LEAD_STATUS.CONVERTED) {
+    throw ApiError.badRequest('Lead already converted');
+  }
+  if (lead.status === LEAD_STATUS.QUALIFIED) {
+    throw ApiError.badRequest('Lead is already approved');
+  }
+  if (!APPROVABLE_STATUSES.includes(lead.status)) {
+    throw ApiError.badRequest('Lead cannot be approved in its current status');
+  }
+
+  await lead.update({
+    status: LEAD_STATUS.QUALIFIED,
+    qualification_notes: notes || lead.qualification_notes,
+    approved_by: approvedByUserId || null,
+    approved_at: new Date(),
+    approval_requested_at: null,
+  });
+};
+
+const qualify = async (tenantId, leadId, notes, scope = {}, actor = {}) => {
+  if (!isManagerRole(actor.roleName)) {
+    throw ApiError.forbidden('Only a manager can approve leads. Use the approval PIN or request manager approval.');
+  }
+
+  const lead = await db.Lead.findOne({ where: { id: leadId, tenant_id: tenantId } });
+  if (!lead) throw ApiError.notFound('Lead not found');
+
+  await _approveLead(lead, { notes, approvedByUserId: actor.userId });
+
+  return await getById(tenantId, leadId);
+};
+
+const requestApproval = async (tenantId, leadId, scope = {}, requestedByUser = null) => {
+  const where = { id: leadId, tenant_id: tenantId };
+  if (scope.scopeUserId) {
+    where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
+  }
+  const lead = await db.Lead.findOne({
+    where,
+    include: [
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+      { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
+    ],
+  });
+  if (!lead) throw ApiError.notFound('Lead not found');
+
+  if (lead.status === LEAD_STATUS.QUALIFIED || lead.status === LEAD_STATUS.CONVERTED) {
+    throw ApiError.badRequest('Lead is already approved');
+  }
+  if (lead.status === LEAD_STATUS.PENDING_APPROVAL) {
+    throw ApiError.badRequest('Approval has already been requested');
+  }
+  if (![LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED].includes(lead.status)) {
+    throw ApiError.badRequest('Lead cannot be submitted for approval in its current status');
+  }
+
+  await lead.update({
+    status: LEAD_STATUS.PENDING_APPROVAL,
+    approval_requested_at: new Date(),
+  });
+
+  await notificationService.notifyLeadApprovalRequested(tenantId, lead, requestedByUser);
+
+  return await getById(tenantId, leadId);
+};
+
+const approveWithPin = async (tenantId, leadId, pin, scope = {}, actor = {}) => {
   const where = { id: leadId, tenant_id: tenantId };
   if (scope.scopeUserId) {
     where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
@@ -149,14 +227,12 @@ const qualify = async (tenantId, leadId, notes, scope = {}) => {
   const lead = await db.Lead.findOne({ where });
   if (!lead) throw ApiError.notFound('Lead not found');
 
-  if (lead.status === LEAD_STATUS.CONVERTED) {
-    throw ApiError.badRequest('Lead already converted');
+  const pinValid = await verifyLeadApprovalPin(tenantId, pin);
+  if (!pinValid) {
+    throw ApiError.forbidden('Invalid approval PIN');
   }
 
-  await lead.update({
-    status: LEAD_STATUS.QUALIFIED,
-    qualification_notes: notes,
-  });
+  await _approveLead(lead, { approvedByUserId: actor.userId });
 
   return await getById(tenantId, leadId);
 };
@@ -176,6 +252,7 @@ const disqualify = async (tenantId, leadId, reason, scope = {}) => {
   await lead.update({
     status: LEAD_STATUS.DISQUALIFIED,
     disqualification_reason: reason,
+    approval_requested_at: null,
   });
 
   return await getById(tenantId, leadId);
@@ -222,6 +299,8 @@ module.exports = {
   create,
   update,
   qualify,
+  requestApproval,
+  approveWithPin,
   disqualify,
   convertToDeal,
   remove,

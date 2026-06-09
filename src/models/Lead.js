@@ -83,6 +83,19 @@ module.exports = (sequelize, DataTypes) => {
       converted_at: {
         type: DataTypes.DATE,
       },
+      approval_requested_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      approved_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' },
+      },
+      approved_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: 'leads',
@@ -98,6 +111,7 @@ module.exports = (sequelize, DataTypes) => {
   Lead.associate = models => {
     Lead.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
     Lead.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
+    Lead.belongsTo(models.User, { foreignKey: 'approved_by', as: 'approvedByUser' });
     Lead.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
     Lead.belongsTo(models.Contact, { foreignKey: 'contact_id', as: 'contact' });
     Lead.belongsTo(models.ProductService, { foreignKey: 'product_service_id', as: 'productService' });

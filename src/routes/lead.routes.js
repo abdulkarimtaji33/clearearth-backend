@@ -30,7 +30,13 @@ router.get('/', authorize('leads.read'), leadController.getAll);
 router.get('/:id', authorize('leads.read'), leadController.getById);
 router.post('/', authorize('leads.create'), createValidation, leadController.create);
 router.put('/:id', authorize('leads.update'), updateValidation, leadController.update);
-router.post('/:id/qualify', authorize('leads.approve', 'leads.update'), leadController.qualify);
+router.post('/:id/qualify', authorize('leads.approve'), leadController.qualify);
+router.post('/:id/request-approval', authorize('leads.update'), leadController.requestApproval);
+router.post('/:id/approve-with-pin', authorize('leads.update'), [
+  param('id').isInt().withMessage('Valid lead ID is required'),
+  body('pin').notEmpty().withMessage('Approval PIN is required'),
+  validate,
+], leadController.approveWithPin);
 router.post('/:id/disqualify', authorize('leads.update'), leadController.disqualify);
 router.post('/:id/convert', authorize('leads.update'), leadController.convertToDeal);
 router.delete('/:id', authorize('leads.delete'), leadController.remove);
