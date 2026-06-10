@@ -5,6 +5,7 @@ const db = require('../models');
 const { Op } = db.Sequelize;
 const { MANAGER_ROLES } = require('../constants');
 const { hashPassword, comparePassword } = require('./helpers');
+const { parseTenantSettings, cleanTenantSettings } = require('./tenantSettings');
 
 const PIN_SETTINGS_KEY = 'leadApprovalPinHash';
 
@@ -30,7 +31,7 @@ const getSalesManagerUserIds = async (tenantId) => {
 
 const getLeadApprovalPinHash = async (tenantId) => {
   const tenant = await db.Tenant.findByPk(tenantId, { attributes: ['settings'] });
-  const settings = tenant?.settings || {};
+  const settings = parseTenantSettings(tenant?.settings);
   return settings[PIN_SETTINGS_KEY] || null;
 };
 
@@ -49,7 +50,7 @@ const setLeadApprovalPin = async (tenantId, pin) => {
     const ApiError = require('./apiError');
     throw ApiError.notFound('Tenant not found');
   }
-  const settings = { ...(tenant.settings || {}) };
+  const settings = cleanTenantSettings(tenant.settings);
   settings[PIN_SETTINGS_KEY] = await hashPassword(String(pin).trim());
   await tenant.update({ settings });
   return true;

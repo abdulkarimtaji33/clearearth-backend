@@ -4,10 +4,11 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { isLeadApprovalPinConfigured } = require('../utils/leadApproval');
+const { parseTenantSettings } = require('../utils/tenantSettings');
 
 const sanitizeTenant = (tenant) => {
   const json = tenant.toJSON ? tenant.toJSON() : { ...tenant };
-  const settings = { ...(json.settings || {}) };
+  const settings = { ...parseTenantSettings(json.settings) };
   delete settings.leadApprovalPinHash;
   json.settings = settings;
   return json;

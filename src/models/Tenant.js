@@ -72,6 +72,38 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.JSON,
         defaultValue: {},
         comment: 'Tenant-specific settings and configurations',
+        get() {
+          const rawValue = this.getDataValue('settings');
+          if (rawValue == null || rawValue === '') return {};
+          if (typeof rawValue === 'object' && !Array.isArray(rawValue)) return rawValue;
+          if (typeof rawValue === 'string') {
+            try {
+              const parsed = JSON.parse(rawValue);
+              if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                return parsed;
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          return {};
+        },
+        set(value) {
+          let normalized = value;
+          if (value == null || value === '') {
+            normalized = {};
+          } else if (typeof value === 'string') {
+            try {
+              normalized = JSON.parse(value);
+            } catch {
+              normalized = {};
+            }
+          }
+          if (typeof normalized !== 'object' || normalized === null || Array.isArray(normalized)) {
+            normalized = {};
+          }
+          this.setDataValue('settings', normalized);
+        },
       },
     },
     {
