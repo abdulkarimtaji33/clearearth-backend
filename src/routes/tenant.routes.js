@@ -12,7 +12,7 @@ router.get('/logo', tenantController.getPublicLogo);
 router.use(authenticate);
 
 router.get('/me', tenantController.getMyTenant);
-router.put('/me', authorize('users.read', 'users.update'), tenantController.updateMyTenant);
+router.put('/me', authorize('users.update'), tenantController.updateMyTenant);
 router.put('/me/lead-approval-pin', authorize('users.update'), tenantController.updateLeadApprovalPin);
 
 module.exports = router;

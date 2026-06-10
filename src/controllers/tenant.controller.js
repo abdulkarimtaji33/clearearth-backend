@@ -19,6 +19,11 @@ const getPublicLogo = asyncHandler(async (req, res) => {
 });
 
 const updateMyTenant = asyncHandler(async (req, res) => {
+  const roleName = req.user?.role?.name;
+  if (!['admin', 'tenant_admin', 'super_admin'].includes(roleName)) {
+    const ApiError = require('../utils/apiError');
+    throw ApiError.forbidden('Only administrators can update company settings');
+  }
   const tenant = await tenantService.update(req.tenant.id, req.body);
   return ApiResponse.success(res, tenant, 'Company settings updated successfully');
 });
