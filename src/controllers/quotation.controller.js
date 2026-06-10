@@ -46,7 +46,10 @@ const create = asyncHandler(async (req, res) => {
 
 const update = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
-  const quotation = await quotationService.update(req.tenant.id, req.params.id, req.body, scope);
+  const quotation = await quotationService.update(req.tenant.id, req.params.id, req.body, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
   return ApiResponse.success(res, quotation, 'Quotation updated successfully');
 });
 

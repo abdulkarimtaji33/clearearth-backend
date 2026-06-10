@@ -37,8 +37,32 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const update = asyncHandler(async (req, res) => {
-  const po = await purchaseOrderService.update(req.tenant.id, req.params.id, req.body);
+  const po = await purchaseOrderService.update(req.tenant.id, req.params.id, req.body, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
   return ApiResponse.success(res, po, 'Purchase order updated successfully');
+});
+
+const approve = asyncHandler(async (req, res) => {
+  const po = await purchaseOrderService.approve(req.tenant.id, req.params.id, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, po, 'Purchase quotation approved');
+});
+
+const requestApproval = asyncHandler(async (req, res) => {
+  const po = await purchaseOrderService.requestApproval(req.tenant.id, req.params.id, req.user);
+  return ApiResponse.success(res, po, 'Approval requested');
+});
+
+const approveWithPin = asyncHandler(async (req, res) => {
+  const po = await purchaseOrderService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, po, 'Purchase quotation approved');
 });
 
 const remove = asyncHandler(async (req, res) => {
@@ -64,4 +88,14 @@ const getPdf = asyncHandler(async (req, res) => {
   res.end(pdfBuffer, 'binary');
 });
 
-module.exports = { getAll, getById, create, update, remove, getPdf };
+module.exports = {
+  getAll,
+  getById,
+  create,
+  update,
+  remove,
+  getPdf,
+  approve,
+  requestApproval,
+  approveWithPin,
+};

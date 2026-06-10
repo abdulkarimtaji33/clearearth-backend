@@ -3,9 +3,40 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const notificationService = require('./notification.service');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
+const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
+const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+
+const PO_STATUS = {
+  NEW: 'new',
+  SENT: 'sent',
+  UNDER_REVIEW: 'under_review',
+  REVISED: 'revised',
+  PENDING_APPROVAL: 'pending_approval',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+};
+
+const CLIENT_APPROVABLE_STATUSES = [
+  PO_STATUS.NEW,
+  PO_STATUS.SENT,
+  PO_STATUS.UNDER_REVIEW,
+  PO_STATUS.REVISED,
+  PO_STATUS.PENDING_APPROVAL,
+];
+const CLIENT_EDITABLE_STATUSES = [
+  PO_STATUS.NEW,
+  PO_STATUS.SENT,
+  PO_STATUS.UNDER_REVIEW,
+  PO_STATUS.REVISED,
+  PO_STATUS.REJECTED,
+];
+
+const _isClientQuotation = (po) => Boolean(po.company_id) && String(po.document_type).toLowerCase() === 'quotation';
+const _isVendorQuotation = (po) => Boolean(po.supplier_id) && String(po.document_type).toLowerCase() === 'quotation';
 
 const normalizePoItems = (items, existingItems = [], isBill = false) => {
   return items.map((it, i) => {
@@ -162,10 +193,13 @@ const create = async (tenantId, data) => {
     throw ApiError.badRequest('At least one item is required');
   }
 
-  const explicitStatus = status && String(status).trim();
-  const defaultStatus = hasS ? 'approved' : 'new';
-  const resolvedStatus = explicitStatus || defaultStatus;
   const isBill = documentType === 'bill';
+  let resolvedStatus;
+  if (isBill || hasS) {
+    resolvedStatus = PO_STATUS.APPROVED;
+  } else {
+    resolvedStatus = PO_STATUS.NEW;
+  }
   const normalizedItems = normalizePoItems(items, [], isBill);
 
   if (isBill && workOrderId) {
@@ -257,7 +291,7 @@ const create = async (tenantId, data) => {
   return getById(tenantId, po.id);
 };
 
-const update = async (tenantId, poId, data) => {
+const update = async (tenantId, poId, data, actor = null) => {
   const po = await getById(tenantId, poId);
   const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate } = data;
 
@@ -279,6 +313,34 @@ const update = async (tenantId, poId, data) => {
   }
 
   const prevStatus = po.status;
+  let nextStatus = po.status;
+
+  if (_isVendorQuotation(po)) {
+    if (status !== undefined && status !== PO_STATUS.APPROVED) {
+      throw ApiError.badRequest('Vendor purchase quotations are auto-approved and cannot change status');
+    }
+    nextStatus = PO_STATUS.APPROVED;
+  } else if (_isClientQuotation(po)) {
+    if (po.status === PO_STATUS.APPROVED) {
+      throw ApiError.badRequest('Approved purchase quotations cannot be edited');
+    }
+    if (status !== undefined) {
+      assertManagerCanChangeStatus(actor, po.status, status);
+      if (po.status === PO_STATUS.PENDING_APPROVAL && status !== PO_STATUS.REJECTED) {
+        throw ApiError.badRequest('Purchase quotation is awaiting approval');
+      }
+      if (status === PO_STATUS.APPROVED || status === PO_STATUS.PENDING_APPROVAL) {
+        throw ApiError.badRequest('Purchase quotation approval is required. Use the approval workflow.');
+      }
+      if (!CLIENT_EDITABLE_STATUSES.includes(status)) {
+        throw ApiError.badRequest('Purchase quotation status cannot be set directly. Use the approval workflow.');
+      }
+      nextStatus = status;
+    }
+  } else if (status !== undefined) {
+    assertManagerCanChangeStatus(actor, po.status, status);
+    nextStatus = status;
+  }
 
   await db.sequelize.transaction(async (t) => {
     await po.update(
@@ -288,7 +350,7 @@ const update = async (tenantId, poId, data) => {
         supplier_id: nextSupplierId,
         po_date: poDate ?? po.po_date,
         expected_delivery: expectedDelivery !== undefined ? expectedDelivery : po.expected_delivery,
-        status: status !== undefined ? status : po.status,
+        status: nextStatus,
         due_date: dueDate !== undefined ? (dueDate || null) : po.due_date,
       },
       { transaction: t }
@@ -332,8 +394,7 @@ const update = async (tenantId, poId, data) => {
     }
 
     // GL: Dr Cost of Services (5000) / Cr Accounts Payable (2000) — only when status transitions to 'approved'
-    const nextStatus = status !== undefined ? status : po.status;
-    const becomingApproved = prevStatus !== 'approved' && nextStatus === 'approved';
+    const becomingApproved = prevStatus !== PO_STATUS.APPROVED && nextStatus === PO_STATUS.APPROVED;
 
     if (becomingApproved) {
       try {
@@ -432,4 +493,146 @@ const ensurePurchaseBillForWorkOrder = async (tenantId, workOrderId) => {
   return vendorBill || clientBill || null;
 };
 
-module.exports = { getAll, getById, create, update, remove, ensurePurchaseBillForWorkOrder };
+const _approveClientQuotation = async (po, { approvedByUserId }) => {
+  if (!_isClientQuotation(po)) {
+    throw ApiError.badRequest('Only client purchase quotations use the approval workflow');
+  }
+  if (po.status === PO_STATUS.APPROVED) {
+    throw ApiError.badRequest('Purchase quotation is already approved');
+  }
+  if (po.status === PO_STATUS.REJECTED) {
+    throw ApiError.badRequest('Rejected purchase quotations cannot be approved');
+  }
+  if (!CLIENT_APPROVABLE_STATUSES.includes(po.status)) {
+    throw ApiError.badRequest('Purchase quotation cannot be approved in its current status');
+  }
+
+  await po.update({
+    status: PO_STATUS.APPROVED,
+    approved_by: approvedByUserId || null,
+    approved_at: new Date(),
+    approval_requested_at: null,
+  });
+};
+
+const approve = async (tenantId, poId, actor = {}) => {
+  if (!isManagerRole(actor.roleName)) {
+    throw ApiError.forbidden('Only a manager can approve purchase quotations. Use the approval PIN or request manager approval.');
+  }
+
+  const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
+  if (!po) throw ApiError.notFound('Purchase order not found');
+
+  const prevStatus = po.status;
+  await _approveClientQuotation(po, { approvedByUserId: actor.userId });
+
+  if (prevStatus !== PO_STATUS.APPROVED) {
+    try {
+      const fullPo = await getById(tenantId, poId);
+      const poTotal = (fullPo.items || []).reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
+      if (poTotal > 0.005) {
+        const cosId = await jeService.getSystemAccountId(tenantId, '5000');
+        const apId = await jeService.getSystemAccountId(tenantId, '2000');
+        await jeService.createJournalEntry(tenantId, 1, {
+          entryDate: fullPo.po_date || new Date().toISOString().slice(0, 10),
+          description: `PO Approved — PO #${poId}`,
+          sourceType: 'purchase_order_approved',
+          sourceId: poId,
+          lines: [
+            { accountId: cosId, debit: poTotal, credit: 0 },
+            { accountId: apId, debit: 0, credit: poTotal },
+          ],
+        });
+      }
+    } catch (jeErr) {
+      console.warn('[GL] purchase_order_approved (approve) journal entry skipped:', jeErr.message);
+    }
+  }
+
+  return getById(tenantId, poId);
+};
+
+const requestApproval = async (tenantId, poId, requestedByUser = null) => {
+  const po = await db.PurchaseOrder.findOne({
+    where: { id: poId, tenant_id: tenantId },
+    include: [
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+    ],
+  });
+  if (!po) throw ApiError.notFound('Purchase order not found');
+  if (!_isClientQuotation(po)) {
+    throw ApiError.badRequest('Only client purchase quotations can be submitted for approval');
+  }
+  if (po.status === PO_STATUS.APPROVED) {
+    throw ApiError.badRequest('Purchase quotation is already approved');
+  }
+  if (po.status === PO_STATUS.REJECTED) {
+    throw ApiError.badRequest('Rejected purchase quotations cannot be submitted for approval');
+  }
+  if (po.status === PO_STATUS.PENDING_APPROVAL) {
+    throw ApiError.badRequest('Approval has already been requested');
+  }
+  if (![PO_STATUS.NEW, PO_STATUS.SENT, PO_STATUS.UNDER_REVIEW, PO_STATUS.REVISED].includes(po.status)) {
+    throw ApiError.badRequest('Purchase quotation cannot be submitted for approval in its current status');
+  }
+
+  await po.update({
+    status: PO_STATUS.PENDING_APPROVAL,
+    approval_requested_at: new Date(),
+  });
+
+  await notificationService.notifyPurchaseOrderApprovalRequested(tenantId, po, requestedByUser);
+
+  return getById(tenantId, poId);
+};
+
+const approveWithPin = async (tenantId, poId, pin, actor = {}) => {
+  const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
+  if (!po) throw ApiError.notFound('Purchase order not found');
+
+  const pinValid = await verifyLeadApprovalPin(tenantId, pin);
+  if (!pinValid) {
+    throw ApiError.forbidden('Invalid approval PIN');
+  }
+
+  const prevStatus = po.status;
+  await _approveClientQuotation(po, { approvedByUserId: actor.userId });
+
+  if (prevStatus !== PO_STATUS.APPROVED) {
+    try {
+      const fullPo = await getById(tenantId, poId);
+      const poTotal = (fullPo.items || []).reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
+      if (poTotal > 0.005) {
+        const cosId = await jeService.getSystemAccountId(tenantId, '5000');
+        const apId = await jeService.getSystemAccountId(tenantId, '2000');
+        await jeService.createJournalEntry(tenantId, 1, {
+          entryDate: fullPo.po_date || new Date().toISOString().slice(0, 10),
+          description: `PO Approved — PO #${poId}`,
+          sourceType: 'purchase_order_approved',
+          sourceId: poId,
+          lines: [
+            { accountId: cosId, debit: poTotal, credit: 0 },
+            { accountId: apId, debit: 0, credit: poTotal },
+          ],
+        });
+      }
+    } catch (jeErr) {
+      console.warn('[GL] purchase_order_approved (approveWithPin) journal entry skipped:', jeErr.message);
+    }
+  }
+
+  return getById(tenantId, poId);
+};
+
+module.exports = {
+  getAll,
+  getById,
+  create,
+  update,
+  remove,
+  ensurePurchaseBillForWorkOrder,
+  approve,
+  requestApproval,
+  approveWithPin,
+};

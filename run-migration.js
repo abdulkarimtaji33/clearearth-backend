@@ -2033,6 +2033,52 @@ async function runMigration() {
       console.log('  Backfilled quotations.approve to sales_manager');
     }
 
+    console.log('Adding client purchase quotation approval workflow...');
+    for (const [col, def] of [
+      ['approval_requested_at', 'DATETIME NULL'],
+      ['approved_by', 'INT NULL'],
+      ['approved_at', 'DATETIME NULL'],
+    ]) {
+      try {
+        await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN ${col} ${def}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) console.warn(`  purchase_orders.${col}:`, e.message);
+      }
+    }
+    try {
+      await db.sequelize.query(`
+        INSERT IGNORE INTO purchase_order_statuses (value, display_name, display_order, is_active, created_at, updated_at)
+        VALUES ('pending_approval', 'Pending Approval', 7, 1, NOW(), NOW())
+      `);
+      console.log('  purchase_order_statuses includes pending_approval');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  purchase_order_statuses pending_approval:', e.message);
+    }
+
+    try {
+      await db.sequelize.query(`
+        INSERT INTO permissions (name, display_name, module, action, description)
+        VALUES ('purchase_orders.approve', 'Approve Purchase Orders', 'purchase_orders', 'approve', 'Permission to approve client purchase quotations')
+      `);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  purchase_orders.approve:', e.message); }
+
+    const [[poApprovePerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'purchase_orders.approve' LIMIT 1`);
+    if (poApprovePerm?.id) {
+      for (const roleName of ['sales_manager', 'admin', 'tenant_admin']) {
+        const [[roleRow]] = await db.sequelize.query(
+          `SELECT id FROM roles WHERE name = ? AND (tenant_id IS NULL) LIMIT 1`,
+          { replacements: [roleName] }
+        );
+        if (roleRow?.id) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
+            { replacements: [roleRow.id, poApprovePerm.id] }
+          );
+        }
+      }
+      console.log('  Backfilled purchase_orders.approve to sales_manager');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

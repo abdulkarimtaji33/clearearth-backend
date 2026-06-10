@@ -3,6 +3,7 @@ const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
+const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 
 const DEAL_STATUS = {
@@ -454,6 +455,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
 
     let nextStatus = deal.status;
     if (data.status !== undefined) {
+      assertManagerCanChangeStatus(actor, deal.status, data.status);
       if (deal.status === DEAL_STATUS.PENDING_APPROVAL && data.status !== DEAL_STATUS.LOST) {
         throw ApiError.badRequest('Deal is awaiting approval');
       }

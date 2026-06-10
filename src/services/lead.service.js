@@ -4,6 +4,7 @@ const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const { LEAD_STATUS } = require('../constants');
 const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
+const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const notificationService = require('./notification.service');
 
 const leadIncludes = [
@@ -102,7 +103,7 @@ const create = async (tenantId, data, scope = {}) => {
   return await getById(tenantId, lead.id);
 };
 
-const update = async (tenantId, leadId, data, scope = {}) => {
+const update = async (tenantId, leadId, data, scope = {}, actor = null) => {
   const where = { id: leadId, tenant_id: tenantId };
   if (scope.scopeUserId) {
     where[Op.or] = [{ assigned_to: scope.scopeUserId }, { created_by: scope.scopeUserId }];
@@ -126,6 +127,7 @@ const update = async (tenantId, leadId, data, scope = {}) => {
 
   let nextStatus = lead.status;
   if (data.status !== undefined) {
+    assertManagerCanChangeStatus(actor, lead.status, data.status);
     if (!EDITABLE_STATUSES.includes(data.status)) {
       throw ApiError.badRequest('Lead status cannot be set directly. Use the approval workflow.');
     }

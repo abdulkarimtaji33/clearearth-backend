@@ -166,6 +166,25 @@ const notifyDealApprovalRequested = async (tenantId, deal, requestedByUser) => {
   });
 };
 
+const notifyPurchaseOrderApprovalRequested = async (tenantId, po, requestedByUser) => {
+  const recipientIds = await getSalesManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+
+  const companyName = po.company?.company_name || 'Unknown client';
+  const dealTitle = po.deal?.title || po.deal?.deal_number || (po.deal_id ? `Deal #${po.deal_id}` : '');
+  const userName = requestedByUser
+    ? [requestedByUser.first_name, requestedByUser.last_name].filter(Boolean).join(' ')
+    : 'A user';
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'purchase_order_approval_requested',
+    title: 'Client purchase quotation approval requested',
+    message: `${userName} requested approval for client purchase quotation #${po.id} (${companyName}${dealTitle ? ` — ${dealTitle}` : ''}).`,
+    entityType: 'purchase_order',
+    entityId: po.id,
+  });
+};
+
 const notifyQuotationApprovalRequested = async (tenantId, quotation, requestedByUser) => {
   const recipientIds = await getSalesManagerUserIds(tenantId);
   if (recipientIds.length === 0) return;
@@ -216,4 +235,5 @@ module.exports = {
   notifyLeadApprovalRequested,
   notifyDealApprovalRequested,
   notifyQuotationApprovalRequested,
+  notifyPurchaseOrderApprovalRequested,
 };
