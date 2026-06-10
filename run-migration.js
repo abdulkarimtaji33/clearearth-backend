@@ -1979,7 +1979,7 @@ async function runMigration() {
         );
         if (roleRow?.id) {
           await db.sequelize.query(
-            `INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW())`,
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
             { replacements: [roleRow.id, dealsApprovePerm.id] }
           );
         }
@@ -2025,7 +2025,7 @@ async function runMigration() {
         );
         if (roleRow?.id) {
           await db.sequelize.query(
-            `INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW())`,
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`,
             { replacements: [roleRow.id, quotationsApprovePerm.id] }
           );
         }
