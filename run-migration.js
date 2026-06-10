@@ -1949,6 +1949,90 @@ async function runMigration() {
       }
     }
 
+    console.log('Adding deal approval workflow columns and status...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE deals MODIFY COLUMN status ENUM('new','pending_approval','approved','quotation_sent','negotiation','won','lost') NOT NULL DEFAULT 'new'
+      `);
+      console.log('  deals.status enum includes pending_approval');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  deals.status enum:', e.message);
+    }
+    for (const [col, def] of [
+      ['approval_requested_at', 'DATETIME NULL'],
+      ['approved_by', 'INT NULL'],
+      ['approved_at', 'DATETIME NULL'],
+    ]) {
+      try {
+        await db.sequelize.query(`ALTER TABLE deals ADD COLUMN ${col} ${def}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) console.warn(`  deals.${col}:`, e.message);
+      }
+    }
+
+    const [[dealsApprovePerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'deals.approve' LIMIT 1`);
+    if (dealsApprovePerm?.id) {
+      for (const roleName of ['sales_manager', 'admin', 'tenant_admin']) {
+        const [[roleRow]] = await db.sequelize.query(
+          `SELECT id FROM roles WHERE name = ? AND (tenant_id IS NULL) LIMIT 1`,
+          { replacements: [roleName] }
+        );
+        if (roleRow?.id) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW())`,
+            { replacements: [roleRow.id, dealsApprovePerm.id] }
+          );
+        }
+      }
+      console.log('  Backfilled deals.approve to sales_manager');
+    }
+
+    console.log('Adding quotation approval workflow columns and status...');
+    for (const [col, def] of [
+      ['approval_requested_at', 'DATETIME NULL'],
+      ['approved_by', 'INT NULL'],
+      ['approved_at', 'DATETIME NULL'],
+    ]) {
+      try {
+        await db.sequelize.query(`ALTER TABLE quotations ADD COLUMN ${col} ${def}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) console.warn(`  quotations.${col}:`, e.message);
+      }
+    }
+    try {
+      await db.sequelize.query(`
+        INSERT IGNORE INTO quotation_statuses (value, display_name, display_order, is_active, created_at, updated_at)
+        VALUES ('pending_approval', 'Pending Approval', 7, 1, NOW(), NOW())
+      `);
+      console.log('  quotation_statuses includes pending_approval');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  quotation_statuses pending_approval:', e.message);
+    }
+
+    try {
+      await db.sequelize.query(`
+        INSERT INTO permissions (name, display_name, module, action, description)
+        VALUES ('quotations.approve', 'Approve Quotations', 'quotations', 'approve', 'Permission to approve service quotations')
+      `);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  quotations.approve:', e.message); }
+
+    const [[quotationsApprovePerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'quotations.approve' LIMIT 1`);
+    if (quotationsApprovePerm?.id) {
+      for (const roleName of ['sales_manager', 'admin', 'tenant_admin']) {
+        const [[roleRow]] = await db.sequelize.query(
+          `SELECT id FROM roles WHERE name = ? AND (tenant_id IS NULL) LIMIT 1`,
+          { replacements: [roleName] }
+        );
+        if (roleRow?.id) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW())`,
+            { replacements: [roleRow.id, quotationsApprovePerm.id] }
+          );
+        }
+      }
+      console.log('  Backfilled quotations.approve to sales_manager');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

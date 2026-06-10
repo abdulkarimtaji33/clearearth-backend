@@ -78,8 +78,21 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'AED',
       },
       status: {
-        type: DataTypes.ENUM('new', 'approved', 'quotation_sent', 'negotiation', 'won', 'lost'),
+        type: DataTypes.ENUM('new', 'pending_approval', 'approved', 'quotation_sent', 'negotiation', 'won', 'lost'),
         defaultValue: 'new',
+      },
+      approval_requested_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      approved_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' },
+      },
+      approved_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
       },
       loss_reason: {
         type: DataTypes.TEXT,
@@ -183,6 +196,7 @@ module.exports = (sequelize, DataTypes) => {
     Deal.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     Deal.belongsTo(models.Supplier, { foreignKey: 'downstream_partner_supplier_id', as: 'downstreamPartner' });
     Deal.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
+    Deal.belongsTo(models.User, { foreignKey: 'approved_by', as: 'approvedByUser' });
     Deal.belongsTo(models.TermsAndConditions, { foreignKey: 'terms_and_conditions_id', as: 'termsAndConditions' });
     Deal.belongsToMany(models.TermsAndConditions, {
       through: models.DealTerm,

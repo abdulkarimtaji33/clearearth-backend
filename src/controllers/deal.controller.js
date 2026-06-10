@@ -80,4 +80,40 @@ const saveInspectionReport = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Inspection report saved');
 });
 
-module.exports = { getAll, getById, create, update, updatePayment, updateCollectionDetails, remove, saveInspectionReport };
+const approve = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const deal = await dealService.approve(req.tenant.id, req.params.id, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Deal approved');
+});
+
+const requestApproval = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const deal = await dealService.requestApproval(req.tenant.id, req.params.id, scope, req.user);
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Approval requested');
+});
+
+const approveWithPin = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const deal = await dealService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Deal approved');
+});
+
+module.exports = {
+  getAll,
+  getById,
+  create,
+  update,
+  updatePayment,
+  updateCollectionDetails,
+  remove,
+  saveInspectionReport,
+  approve,
+  requestApproval,
+  approveWithPin,
+};

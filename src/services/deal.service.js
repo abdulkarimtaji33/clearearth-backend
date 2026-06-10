@@ -2,7 +2,22 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
+const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
 const { Op } = db.Sequelize;
+
+const DEAL_STATUS = {
+  NEW: 'new',
+  PENDING_APPROVAL: 'pending_approval',
+  APPROVED: 'approved',
+  QUOTATION_SENT: 'quotation_sent',
+  NEGOTIATION: 'negotiation',
+  WON: 'won',
+  LOST: 'lost',
+};
+
+const APPROVABLE_STATUSES = [DEAL_STATUS.NEW, DEAL_STATUS.PENDING_APPROVAL];
+const PIPELINE_STATUSES = [DEAL_STATUS.APPROVED, DEAL_STATUS.QUOTATION_SENT, DEAL_STATUS.NEGOTIATION, DEAL_STATUS.WON];
+const EDITABLE_STATUSES = [DEAL_STATUS.NEW, DEAL_STATUS.QUOTATION_SENT, DEAL_STATUS.NEGOTIATION, DEAL_STATUS.WON, DEAL_STATUS.LOST];
 
 const _validateDownstreamSupplier = async (tenantId, supplierId, downstreamPartnerSupplierId) => {
   if (!downstreamPartnerSupplierId) return;
@@ -317,7 +332,7 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
         trakhees_inspection: data.trakheesInspection || false,
         dubai_municipality_inspection: data.dubaiMunicipalityInspection || false,
         is_rcm_applicable: data.isRcmApplicable || false,
-        status: data.status || 'new',
+        status: DEAL_STATUS.NEW,
         loss_reason: data.lossReason || null,
         payment_status: 'unpaid',
         paid_amount: 0,
@@ -437,6 +452,24 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
 
     const previousStatus = deal.status;
 
+    let nextStatus = deal.status;
+    if (data.status !== undefined) {
+      if (deal.status === DEAL_STATUS.PENDING_APPROVAL && data.status !== DEAL_STATUS.LOST) {
+        throw ApiError.badRequest('Deal is awaiting approval');
+      }
+      if (data.status === DEAL_STATUS.APPROVED || data.status === DEAL_STATUS.PENDING_APPROVAL) {
+        throw ApiError.badRequest('Deal approval is required. Use the approval workflow.');
+      }
+      if (!EDITABLE_STATUSES.includes(data.status)) {
+        throw ApiError.badRequest('Deal status cannot be set directly. Use the approval workflow.');
+      }
+      if ([DEAL_STATUS.QUOTATION_SENT, DEAL_STATUS.NEGOTIATION, DEAL_STATUS.WON].includes(data.status)
+        && !PIPELINE_STATUSES.includes(deal.status)) {
+        throw ApiError.badRequest('Deal must be approved before changing to this status');
+      }
+      nextStatus = data.status;
+    }
+
     const nextSupplierId = data.supplierId !== undefined ? data.supplierId : deal.supplier_id;
     const nextDownstreamId = data.downstreamPartnerSupplierId !== undefined ? data.downstreamPartnerSupplierId : deal.downstream_partner_supplier_id;
     await _validateDownstreamSupplier(tenantId, nextSupplierId, nextDownstreamId);
@@ -472,7 +505,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         trakhees_inspection: data.trakheesInspection !== undefined ? data.trakheesInspection : deal.trakhees_inspection,
         dubai_municipality_inspection: data.dubaiMunicipalityInspection !== undefined ? data.dubaiMunicipalityInspection : deal.dubai_municipality_inspection,
         is_rcm_applicable: data.isRcmApplicable !== undefined ? data.isRcmApplicable : deal.is_rcm_applicable,
-        status: data.status !== undefined ? data.status : deal.status,
+        status: nextStatus,
         loss_reason: data.lossReason !== undefined ? data.lossReason : deal.loss_reason,
         payment_status: deal.payment_status,
         paid_amount: deal.paid_amount,
@@ -586,7 +619,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
 
     await transaction.commit();
 
-    const newStatus = data.status !== undefined ? data.status : previousStatus;
+    const newStatus = nextStatus;
     if (['won', 'lost'].includes(newStatus) && previousStatus !== newStatus) {
       try {
         await notificationService.notifyDealStatusChange(tenantId, deal, previousStatus, newStatus, actor);
@@ -691,6 +724,87 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}) => {
   return await getById(tenantId, dealId);
 };
 
+const _approveDeal = async (deal, { approvedByUserId }) => {
+  if (deal.status === DEAL_STATUS.WON || deal.status === DEAL_STATUS.LOST) {
+    throw ApiError.badRequest('Deal is already closed');
+  }
+  if (deal.status === DEAL_STATUS.APPROVED) {
+    throw ApiError.badRequest('Deal is already approved');
+  }
+  if (!APPROVABLE_STATUSES.includes(deal.status)) {
+    throw ApiError.badRequest('Deal cannot be approved in its current status');
+  }
+
+  await deal.update({
+    status: DEAL_STATUS.APPROVED,
+    approved_by: approvedByUserId || null,
+    approved_at: new Date(),
+    approval_requested_at: null,
+  });
+};
+
+const approve = async (tenantId, dealId, scope = {}, actor = {}) => {
+  if (!isManagerRole(actor.roleName)) {
+    throw ApiError.forbidden('Only a manager can approve deals. Use the approval PIN or request manager approval.');
+  }
+
+  const dealWhere = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({ where: dealWhere });
+  if (!deal) throw ApiError.notFound('Deal not found');
+
+  await _approveDeal(deal, { approvedByUserId: actor.userId });
+
+  return await getById(tenantId, dealId);
+};
+
+const requestApproval = async (tenantId, dealId, scope = {}, requestedByUser = null) => {
+  const dealWhere = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({
+    where: dealWhere,
+    include: [
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+    ],
+  });
+  if (!deal) throw ApiError.notFound('Deal not found');
+
+  if (deal.status === DEAL_STATUS.APPROVED || PIPELINE_STATUSES.includes(deal.status)) {
+    throw ApiError.badRequest('Deal is already approved');
+  }
+  if (deal.status === DEAL_STATUS.PENDING_APPROVAL) {
+    throw ApiError.badRequest('Approval has already been requested');
+  }
+  if (deal.status !== DEAL_STATUS.NEW) {
+    throw ApiError.badRequest('Deal cannot be submitted for approval in its current status');
+  }
+
+  await deal.update({
+    status: DEAL_STATUS.PENDING_APPROVAL,
+    approval_requested_at: new Date(),
+  });
+
+  await notificationService.notifyDealApprovalRequested(tenantId, deal, requestedByUser);
+
+  return await getById(tenantId, dealId);
+};
+
+const approveWithPin = async (tenantId, dealId, pin, scope = {}, actor = {}) => {
+  const dealWhere = { id: dealId, tenant_id: tenantId };
+  if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
+  const deal = await db.Deal.findOne({ where: dealWhere });
+  if (!deal) throw ApiError.notFound('Deal not found');
+
+  const pinValid = await verifyLeadApprovalPin(tenantId, pin);
+  if (!pinValid) {
+    throw ApiError.forbidden('Invalid approval PIN');
+  }
+
+  await _approveDeal(deal, { approvedByUserId: actor.userId });
+
+  return await getById(tenantId, dealId);
+};
+
 module.exports = {
   getAll,
   getById,
@@ -700,4 +814,7 @@ module.exports = {
   updateCollectionDetails,
   remove,
   saveInspectionReport,
+  approve,
+  requestApproval,
+  approveWithPin,
 };

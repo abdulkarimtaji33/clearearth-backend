@@ -13,6 +13,9 @@ module.exports = (sequelize, DataTypes) => {
       quotation_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       currency: { type: DataTypes.STRING(10), defaultValue: 'AED' },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
+      approval_requested_at: { type: DataTypes.DATE, allowNull: true },
+      approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
+      approved_at: { type: DataTypes.DATE, allowNull: true },
       remarks: { type: DataTypes.TEXT },
     },
     {
@@ -33,6 +36,7 @@ module.exports = (sequelize, DataTypes) => {
     Quotation.belongsTo(models.Tenant, { foreignKey: 'tenant_id' });
     Quotation.belongsTo(models.Deal, { foreignKey: 'deal_id', as: 'deal' });
     Quotation.belongsTo(models.User, { foreignKey: 'prepared_by', as: 'preparedByUser' });
+    Quotation.belongsTo(models.User, { foreignKey: 'approved_by', as: 'approvedByUser' });
     Quotation.hasOne(models.WorkOrder, { foreignKey: 'quotation_id', as: 'workOrder' });
   };
 

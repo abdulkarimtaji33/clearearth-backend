@@ -147,6 +147,43 @@ const notifyInspectionRejected = async (tenantId, request, reason, rejectedByUse
   });
 };
 
+const notifyDealApprovalRequested = async (tenantId, deal, requestedByUser) => {
+  const recipientIds = await getSalesManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+
+  const companyName = deal.company?.company_name || 'Unknown company';
+  const userName = requestedByUser
+    ? [requestedByUser.first_name, requestedByUser.last_name].filter(Boolean).join(' ')
+    : 'A user';
+  const dealLabel = deal.deal_number ? `Deal ${deal.deal_number}` : `Deal #${deal.id}`;
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'deal_approval_requested',
+    title: 'Deal approval requested',
+    message: `${userName} requested approval for ${dealLabel} (${companyName} — ${deal.title || ''}).`,
+    entityType: 'deal',
+    entityId: deal.id,
+  });
+};
+
+const notifyQuotationApprovalRequested = async (tenantId, quotation, requestedByUser) => {
+  const recipientIds = await getSalesManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+
+  const dealTitle = quotation.deal?.title || quotation.deal?.deal_number || `Deal #${quotation.deal_id}`;
+  const userName = requestedByUser
+    ? [requestedByUser.first_name, requestedByUser.last_name].filter(Boolean).join(' ')
+    : 'A user';
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'quotation_approval_requested',
+    title: 'Quotation approval requested',
+    message: `${userName} requested approval for service quotation #${quotation.id} (${dealTitle}).`,
+    entityType: 'quotation',
+    entityId: quotation.id,
+  });
+};
+
 const notifyLeadApprovalRequested = async (tenantId, lead, requestedByUser) => {
   const recipientIds = await getSalesManagerUserIds(tenantId);
   if (recipientIds.length === 0) return;
@@ -177,4 +214,6 @@ module.exports = {
   notifyDealStatusChange,
   notifyInspectionRejected,
   notifyLeadApprovalRequested,
+  notifyDealApprovalRequested,
+  notifyQuotationApprovalRequested,
 };
