@@ -76,7 +76,10 @@ const remove = asyncHandler(async (req, res) => {
 
 const saveInspectionReport = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
-  const deal = await dealService.saveInspectionReport(req.tenant.id, req.params.id, req.body, scope);
+  const deal = await dealService.saveInspectionReport(req.tenant.id, req.params.id, req.body, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
   return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Inspection report saved');
 });
 

@@ -688,7 +688,10 @@ const remove = async (tenantId, dealId, scope = {}) => {
   await deal.destroy();
 };
 
-const saveInspectionReport = async (tenantId, dealId, data, scope = {}) => {
+const INSPECTION_ROLES = ['inspection_team', 'inspection'];
+const INSPECTION_REPORT_APPROVER_ROLES = ['operations_manager', 'admin', 'tenant_admin', 'super_admin'];
+
+const saveInspectionReport = async (tenantId, dealId, data, scope = {}, actor = {}) => {
   const where = { id: dealId, tenant_id: tenantId };
   if (scope.scopeUserId) where.assigned_to = scope.scopeUserId;
   const deal = await db.Deal.findOne({ where });
@@ -697,6 +700,24 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}) => {
   const existing = await db.DealInspectionReport.findOne({
     where: { deal_id: dealId },
   });
+
+  const roleName = actor.roleName;
+  const isInspectorRole = INSPECTION_ROLES.includes(roleName);
+  const canApproveReport = INSPECTION_REPORT_APPROVER_ROLES.includes(roleName);
+
+  let inspectorId = data.inspectorId || null;
+  if (isInspectorRole) {
+    inspectorId = actor.userId || inspectorId;
+  } else if (!inspectorId) {
+    throw ApiError.badRequest('Inspector is required');
+  }
+
+  let approvedById = existing?.approved_by_id || null;
+  if (canApproveReport && data.approvedById != null) {
+    approvedById = data.approvedById;
+  } else if (!canApproveReport && data.approvedById != null && data.approvedById !== existing?.approved_by_id) {
+    throw ApiError.forbidden('Only operations manager or admin can approve inspection reports');
+  }
 
   const payload = {
     deal_id: dealId,
@@ -707,8 +728,8 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}) => {
     transportation_arrangement: data.transportationArrangement || null,
     approximate_value: data.approximateValue != null ? data.approximateValue : null,
     images: data.images && data.images.length > 0 ? data.images : null,
-    inspector_id: data.inspectorId || null,
-    approved_by_id: data.approvedById || null,
+    inspector_id: inspectorId,
+    approved_by_id: approvedById,
     notes: data.notes || null,
   };
 

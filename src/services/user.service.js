@@ -36,13 +36,17 @@ const getAll = async (tenantId, filters) => {
 };
 
 const getInspectors = async (tenantId) => {
-  const inspectorRole = await db.Role.findOne({
-    where: { [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }], name: 'inspection_team' },
+  const inspectorRoles = await db.Role.findAll({
+    where: {
+      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+      name: { [Op.in]: ['inspection_team', 'inspection'] },
+    },
     attributes: ['id'],
   });
-  if (!inspectorRole) return [];
+  const roleIds = inspectorRoles.map((r) => r.id);
+  if (roleIds.length === 0) return [];
   const users = await db.User.findAll({
-    where: { tenant_id: tenantId, role_id: inspectorRole.id, status: 'active' },
+    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
     attributes: ['id', 'first_name', 'last_name', 'email'],
     include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
     order: [['first_name', 'ASC']],
