@@ -2079,6 +2079,31 @@ async function runMigration() {
       console.log('  Backfilled purchase_orders.approve to sales_manager');
     }
 
+    console.log('Ensuring work order task pickup fields and task files table...');
+    try {
+      await db.sequelize.query(`ALTER TABLE work_order_tasks ADD COLUMN pickup_quantity VARCHAR(100) NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_quantity:', e.message); }
+    try {
+      await db.sequelize.query(`ALTER TABLE work_order_tasks ADD COLUMN pickup_condition VARCHAR(100) NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_condition:', e.message); }
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS work_order_task_files (
+          id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          task_id INT NOT NULL,
+          image_url VARCHAR(500) NOT NULL,
+          original_name VARCHAR(255) NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_wot_files_task (task_id),
+          CONSTRAINT fk_wot_files_task FOREIGN KEY (task_id) REFERENCES work_order_tasks(id) ON DELETE CASCADE
+        )
+      `);
+      console.log('  work_order_task_files table ready');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  work_order_task_files:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

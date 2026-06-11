@@ -7,14 +7,27 @@ const listPickups = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, rows);
 });
 
+const getPickup = asyncHandler(async (req, res) => {
+  const row = await driverService.getPickup(req.tenant.id, req.user.id, req.params.taskId);
+  return ApiResponse.success(res, row);
+});
+
 const startPickup = asyncHandler(async (req, res) => {
   const row = await driverService.startPickup(req.tenant.id, req.user.id, req.params.taskId);
   return ApiResponse.success(res, row, 'Pickup started');
 });
 
 const markPickedUp = asyncHandler(async (req, res) => {
-  const row = await driverService.markPickedUp(req.tenant.id, req.user.id, req.params.taskId);
+  const { quantity, condition, remarks } = req.body;
+  const files = req.files || [];
+  const row = await driverService.markPickedUp(
+    req.tenant.id,
+    req.user.id,
+    req.params.taskId,
+    { quantity, condition, remarks },
+    files
+  );
   return ApiResponse.success(res, row, 'Marked as picked up');
 });
 
-module.exports = { listPickups, startPickup, markPickedUp };
+module.exports = { listPickups, getPickup, startPickup, markPickedUp };

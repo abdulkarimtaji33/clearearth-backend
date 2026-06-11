@@ -56,6 +56,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      pickup_quantity: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+      pickup_condition: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
       sort_order: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -80,6 +88,7 @@ module.exports = (sequelize, DataTypes) => {
     WorkOrderTask.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
     WorkOrderTask.belongsTo(models.WorkType, { foreignKey: 'work_type_id', as: 'workType' });
     WorkOrderTask.hasMany(models.WorkOrderTaskExpense, { foreignKey: 'work_order_task_id', as: 'expenses' });
+    WorkOrderTask.hasMany(models.WorkOrderTaskFile, { foreignKey: 'task_id', as: 'files' });
   };
 
   return WorkOrderTask;
