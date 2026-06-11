@@ -18,13 +18,13 @@ const startPickup = asyncHandler(async (req, res) => {
 });
 
 const markPickedUp = asyncHandler(async (req, res) => {
-  const { quantity, condition, remarks } = req.body;
+  const { quantity, uom, condition, remarks } = req.body;
   const files = req.files || [];
   const row = await driverService.markPickedUp(
     req.tenant.id,
     req.user.id,
     req.params.taskId,
-    { quantity, condition, remarks },
+    { quantity, uom, condition, remarks },
     files
   );
   return ApiResponse.success(res, row, 'Marked as picked up');

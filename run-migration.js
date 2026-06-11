@@ -2091,6 +2091,9 @@ async function runMigration() {
       await db.sequelize.query(`ALTER TABLE work_order_tasks ADD COLUMN pickup_condition VARCHAR(100) NULL`);
     } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_condition:', e.message); }
     try {
+      await db.sequelize.query(`ALTER TABLE work_order_tasks ADD COLUMN pickup_uom VARCHAR(50) NULL`);
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_uom:', e.message); }
+    try {
       await db.sequelize.query(`
         CREATE TABLE IF NOT EXISTS work_order_task_files (
           id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

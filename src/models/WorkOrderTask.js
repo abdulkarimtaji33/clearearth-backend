@@ -64,6 +64,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      pickup_uom: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
       sort_order: {
         type: DataTypes.INTEGER,
         allowNull: false,

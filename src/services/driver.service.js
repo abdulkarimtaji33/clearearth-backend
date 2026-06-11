@@ -63,6 +63,19 @@ const PICKUP_DETAIL_INCLUDES = (tenantId) => [
             attributes: ['id', 'company_name', 'address', 'city', 'country'],
           },
           {
+            model: db.DealItem,
+            as: 'items',
+            required: false,
+            include: [
+              {
+                model: db.ProductService,
+                as: 'productService',
+                required: false,
+                attributes: ['id', 'name', 'unit_of_measure'],
+              },
+            ],
+          },
+          {
             model: db.DealInspectionRequest,
             as: 'inspectionRequest',
             required: false,
@@ -111,16 +124,28 @@ function shapeTask(plain) {
   };
 }
 
+const resolvePickupUom = (plain, deal, ir) => {
+  if (plain.pickup_uom) return plain.pickup_uom;
+  if (ir?.quantity_uom) return ir.quantity_uom;
+  const items = deal?.items || [];
+  for (const item of items) {
+    const u = item.unit_of_measure || item.productService?.unit_of_measure;
+    if (u) return u;
+  }
+  return null;
+};
+
 function shapeTaskDetail(plain) {
   const base = shapeTask(plain);
   const deal = plain.workOrder?.deal || null;
   const ir = deal?.inspectionRequest || null;
 
-  const uom = ir?.quantity_uom || null;
+  const uom = resolvePickupUom(plain, deal, ir);
 
   return {
     ...base,
     uom,
+    pickupUom: plain.pickup_uom || null,
     pickupQuantity: plain.pickup_quantity,
     pickupCondition: plain.pickup_condition,
     assignedUser: plain.assignedUser
@@ -199,7 +224,7 @@ const startPickup = async (tenantId, userId, taskId) => {
   return { taskId: task.id, status: 'in_progress' };
 };
 
-const markPickedUp = async (tenantId, userId, taskId, { quantity, condition, remarks } = {}, files = []) => {
+const markPickedUp = async (tenantId, userId, taskId, { quantity, uom, condition, remarks } = {}, files = []) => {
   const task = await db.WorkOrderTask.findOne({
     where: { id: taskId, assigned_to: userId },
     include: [
@@ -214,6 +239,7 @@ const markPickedUp = async (tenantId, userId, taskId, { quantity, condition, rem
 
   const updates = { status: 'completed', end_date: todayStr() };
   if (quantity !== undefined && quantity !== '') updates.pickup_quantity = quantity;
+  if (uom !== undefined && uom !== '') updates.pickup_uom = uom;
   if (condition !== undefined && condition !== '') updates.pickup_condition = condition;
   if (remarks !== undefined && remarks !== '') updates.notes = remarks;
 
