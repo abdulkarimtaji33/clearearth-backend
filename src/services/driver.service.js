@@ -60,7 +60,7 @@ const PICKUP_DETAIL_INCLUDES = (tenantId) => [
             model: db.Company,
             as: 'company',
             required: false,
-            attributes: ['id', 'name', 'address', 'city', 'country'],
+            attributes: ['id', 'company_name', 'address', 'city', 'country'],
           },
           {
             model: db.DealInspectionRequest,
@@ -116,8 +116,11 @@ function shapeTaskDetail(plain) {
   const deal = plain.workOrder?.deal || null;
   const ir = deal?.inspectionRequest || null;
 
+  const uom = ir?.quantity_uom || null;
+
   return {
     ...base,
+    uom,
     pickupQuantity: plain.pickup_quantity,
     pickupCondition: plain.pickup_condition,
     assignedUser: plain.assignedUser
@@ -132,7 +135,15 @@ function shapeTaskDetail(plain) {
           pickup_location: deal.pickup_location,
           pickup_contact_name: deal.pickup_contact_name,
           pickup_contact_number: deal.pickup_contact_number,
-          company: deal.company || null,
+          company: deal.company
+            ? {
+                id: deal.company.id,
+                name: deal.company.company_name,
+                address: deal.company.address,
+                city: deal.company.city,
+                country: deal.company.country,
+              }
+            : null,
         }
       : null,
     material: ir
@@ -140,7 +151,7 @@ function shapeTaskDetail(plain) {
           materialType: ir.materialType?.display_name || null,
           materialTypeId: ir.material_type_id,
           quantity: ir.quantity,
-          unit: ir.quantity_uom,
+          unit: uom,
           specification: ir.notes || null,
         }
       : null,

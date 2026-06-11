@@ -1423,7 +1423,11 @@ async function runMigration() {
       DELETE rp FROM role_permissions rp
       INNER JOIN permissions p ON p.id = rp.permission_id
       INNER JOIN roles r ON r.id = rp.role_id
-      WHERE r.name = 'operations_manager' AND p.name IN ('deals.create', 'deals.update', 'deals.delete', 'deals.approve')
+      WHERE r.name = 'operations_manager' AND p.name IN (
+        'deals.create', 'deals.update', 'deals.delete', 'deals.approve',
+        'quotations.create', 'quotations.update', 'quotations.delete', 'quotations.approve',
+        'purchase_orders.create', 'purchase_orders.update', 'purchase_orders.delete', 'purchase_orders.approve'
+      )
     `);
     const [[omRoleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
     if (omRoleRow?.id) {
@@ -1449,7 +1453,7 @@ async function runMigration() {
           { replacements: [omRoleRow.id, p.id] }
         );
       }
-      console.log('  Operations Manager role: operations.* + deals.read + quotation/PO/inspection report read');
+      console.log('  Operations Manager role: operations.* + deals.read + quotation/PO read (no write)');
     }
 
     console.log('Backfill operations_manager read permissions on all role rows...');
