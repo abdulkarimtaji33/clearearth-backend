@@ -1591,7 +1591,7 @@ async function runMigration() {
     `);
     const [[driverRole]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'driver' AND tenant_id IS NULL LIMIT 1`);
     if (driverRole?.id) {
-      for (const permName of ['deals.read', 'operations.read']) {
+      for (const permName of ['operations.read']) {
         const [[perm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = ? LIMIT 1`, { replacements: [permName] });
         if (perm?.id) {
           await db.sequelize.query(
@@ -1600,8 +1600,17 @@ async function runMigration() {
           );
         }
       }
-      console.log('  Driver role seeded with deals.read + operations.read');
+      console.log('  Driver role seeded with operations.read (no deals access)');
     }
+
+    console.log('Strip deals.read from driver role (pickup-only access)...');
+    await db.sequelize.query(`
+      DELETE rp FROM role_permissions rp
+      INNER JOIN permissions p ON p.id = rp.permission_id
+      INNER JOIN roles r ON r.id = rp.role_id
+      WHERE r.name = 'driver' AND p.name = 'deals.read'
+    `);
+    console.log('  driver role: deals.read removed');
 
     console.log('Backfill operations_manager users.read for task assignment...');
     const [[omRoleForUsers]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
