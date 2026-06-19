@@ -186,7 +186,21 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
     include: [
       { model: db.Company, as: 'company', required: false },
       { model: db.Supplier, as: 'supplier', required: false },
-      { model: db.Deal, as: 'deal', attributes: ['id', 'is_rcm_applicable', 'vat_percentage'], required: false },
+      {
+        model: db.Deal,
+        as: 'deal',
+        attributes: ['id', 'is_rcm_applicable', 'vat_percentage'],
+        required: false,
+        include: [
+          {
+            model: db.TermsAndConditions,
+            as: 'termsList',
+            through: { attributes: ['sort_order'] },
+            attributes: ['id', 'title', 'content'],
+            required: false,
+          },
+        ],
+      },
       {
         model: db.PurchaseOrderItem,
         as: 'items',
@@ -232,6 +246,15 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
   }
 
   const grandTotal = subtotal + totalVat;
+
+  const termsList = po.deal?.termsList || [];
+  const termsHtml = termsList.length > 0
+    ? termsList
+        .sort((a, b) => (a.DealTerm?.sort_order ?? 0) - (b.DealTerm?.sort_order ?? 0))
+        .map(t => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong><br>${(t.content || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`)
+        .join('')
+    : '<p>Payment terms: Immediate</p>';
+
   const approved = isApprovedStatus(po.status);
   const isBill = String(po.document_type).toLowerCase() === 'bill';
   const y = new Date().getFullYear();
@@ -265,6 +288,7 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
     totalVat: isRcm ? 'RCM (Reverse Charge — paid to Govt.)' : formatNum(totalVat),
     grandTotal: formatNum(grandTotal),
     rcmNote: isRcm ? 'Note: VAT is applicable under Reverse Charge Mechanism. The recipient is liable to pay VAT directly to the government.' : '',
+    termsHtml,
   });
 
   return htmlToPdf(html);
