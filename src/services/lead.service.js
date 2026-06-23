@@ -16,7 +16,7 @@ const leadIncludes = [
 ];
 
 const APPROVABLE_STATUSES = [LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED, LEAD_STATUS.PENDING_APPROVAL];
-const EDITABLE_STATUSES = [LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED, LEAD_STATUS.PENDING_APPROVAL, LEAD_STATUS.DISQUALIFIED];
+const EDITABLE_STATUSES = [LEAD_STATUS.NEW, LEAD_STATUS.CONTACTED, LEAD_STATUS.DISQUALIFIED];
 
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, status, assignedTo, source, companyId, contactId, productServiceId, scopeUserId, dateFrom, dateTo } = filters;
@@ -132,12 +132,8 @@ const update = async (tenantId, leadId, data, scope = {}, actor = null) => {
 
   let nextStatus = lead.status;
   if (data.status !== undefined) {
-    assertManagerCanChangeStatus(actor, lead.status, data.status);
     if (!EDITABLE_STATUSES.includes(data.status)) {
-      throw ApiError.badRequest('Lead status cannot be set directly. Use the approval workflow.');
-    }
-    if (data.status === LEAD_STATUS.QUALIFIED || data.status === LEAD_STATUS.CONVERTED) {
-      throw ApiError.badRequest('Lead approval is required before marking as qualified');
+      throw ApiError.badRequest('Invalid status. Allowed: new, contacted, disqualified.');
     }
     nextStatus = data.status;
   }
@@ -275,6 +271,9 @@ const convertToDeal = async (tenantId, leadId, dealData, scope = {}) => {
   if (!lead) throw ApiError.notFound('Lead not found');
   if (lead.status === LEAD_STATUS.CONVERTED) {
     throw ApiError.badRequest('Lead already converted');
+  }
+  if (lead.status === LEAD_STATUS.DISQUALIFIED) {
+    throw ApiError.badRequest('Cannot convert a disqualified lead');
   }
 
   await lead.update({
