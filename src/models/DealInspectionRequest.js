@@ -43,6 +43,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(50),
         allowNull: true,
       },
+      lumpsum_price: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
       safety_tools_required: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,

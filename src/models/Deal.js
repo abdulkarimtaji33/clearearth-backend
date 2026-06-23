@@ -103,6 +103,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('unpaid', 'partial', 'paid'),
         defaultValue: 'unpaid',
       },
+      service_payment_status: {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        comment: 'advance_received | partial_advance | fully_received',
+      },
       paid_amount: {
         type: DataTypes.DECIMAL(15, 2),
         defaultValue: 0.00,

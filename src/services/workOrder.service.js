@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const purchaseOrderService = require('./purchaseOrder.service');
 const grnService = require('./grn.service');
+const notificationService = require('./notification.service');
 
 const taskInclude = {
   model: db.WorkOrderTask,
@@ -263,6 +264,7 @@ const getById = async (tenantId, workOrderId) => {
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+          { model: db.DealInspectionReport, as: 'inspectionReport', required: false },
         ],
         required: false,
       },
@@ -457,6 +459,13 @@ const update = async (tenantId, workOrderId, data) => {
       }
     }
   });
+
+  // Notify accounts team if any tasks have new expense lines
+  if (Array.isArray(data.tasks) && data.tasks.some(t => buildExpenseLines(t).expenseLines.length > 0)) {
+    const actorUser = data._actorUser || null;
+    const firstExpenseTask = data.tasks.find(t => buildExpenseLines(t).expenseLines.length > 0);
+    notificationService.notifyExpenseSubmitted(tenantId, workOrderId, firstExpenseTask?.title || '', actorUser).catch(() => {});
+  }
 
   if (prevStatus !== 'completed' && nextStatus === 'completed') {
     try {

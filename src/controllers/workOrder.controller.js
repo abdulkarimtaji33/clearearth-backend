@@ -43,7 +43,7 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const update = asyncHandler(async (req, res) => {
-  const workOrder = await workOrderService.update(req.tenant.id, req.params.id, req.body);
+  const workOrder = await workOrderService.update(req.tenant.id, req.params.id, { ...req.body, _actorUser: req.user });
   return ApiResponse.success(res, workOrder, 'Work order updated successfully');
 });
 

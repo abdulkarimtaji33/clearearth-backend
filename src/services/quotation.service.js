@@ -133,6 +133,8 @@ const create = async (tenantId, data, scope = {}) => {
   const user = await db.User.findOne({ where: { id: effectivePreparedBy, tenant_id: tenantId } });
   if (!user) throw ApiError.badRequest('User not found');
 
+  const existingCount = await db.Quotation.count({ where: { tenant_id: tenantId, deal_id: dealId } });
+
   const quotation = await db.Quotation.create({
     tenant_id: tenantId,
     deal_id: dealId,
@@ -141,6 +143,7 @@ const create = async (tenantId, data, scope = {}) => {
     quotation_amount: parseFloat(quotationAmount) || 0,
     currency: 'AED',
     status: QUOTATION_STATUS.NEW,
+    version: existingCount + 1,
     remarks: remarks || null,
   });
 

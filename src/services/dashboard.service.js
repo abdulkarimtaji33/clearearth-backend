@@ -144,11 +144,18 @@ async function getSalesOverview(tenantId, userId) {
 }
 
 async function getSalesManagerOverview(tenantId) {
-  const deals = await db.Deal.findAll({
-    where: { tenant_id: tenantId, status: { [Op.notIn]: [CLOSED_LOST] } },
-    attributes: ['id', 'status', 'total', 'updated_at', 'assigned_to'],
-    include: [{ model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false }],
-  });
+  const [deals, pendingLeads, pendingDeals, pendingQuotations] = await Promise.all([
+    db.Deal.findAll({
+      where: { tenant_id: tenantId, status: { [Op.notIn]: [CLOSED_LOST] } },
+      attributes: ['id', 'status', 'total', 'updated_at', 'assigned_to'],
+      include: [{ model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false }],
+    }),
+    db.Lead.count({ where: { tenant_id: tenantId, status: 'pending_approval' } }).catch(() => 0),
+    db.Deal.count({ where: { tenant_id: tenantId, status: 'pending_approval' } }).catch(() => 0),
+    db.Quotation.count({ where: { tenant_id: tenantId, status: 'pending_approval' } }).catch(() => 0),
+  ]);
+
+  const pendingApprovalsTotal = pendingLeads + pendingDeals + pendingQuotations;
 
   const pipelineValue = deals.reduce((s, d) => s + parseFloat(d.total || 0), 0);
   const won = deals.filter((d) => d.status === CLOSED_WON);
@@ -170,6 +177,12 @@ async function getSalesManagerOverview(tenantId) {
       { label: 'Stale deals (10d+)', value: stale.length, format: 'number' },
       { label: 'Active deals', value: deals.filter((d) => OPEN_DEAL_STATUSES.includes(d.status)).length, format: 'number' },
     ],
+    pendingApprovals: {
+      total: pendingApprovalsTotal,
+      leads: pendingLeads,
+      deals: pendingDeals,
+      quotations: pendingQuotations,
+    },
     actionables: stale.slice(0, 8).map((d) => ({ id: `stale-${d.id}`, label: `Deal #${d.id} stale`, href: `/erp/deals/view/${d.id}` })),
     leaderboard: Object.values(byRep).sort((a, b) => b.total - a.total).slice(0, 8),
     pipeline: OPEN_DEAL_STATUSES.map((st) => ({
@@ -226,9 +239,11 @@ async function getInspectionOverview(tenantId, userId) {
     ],
     actionables: openRequests.slice(0, 15).map((r) => ({
       id: `insp-${r.id}`,
+      requestId: r.id,
       label: `${r.deal?.deal_number || 'Deal'} — ${r.deal?.title || ''} (${(r.status || '').replace(/_/g, ' ')})`,
       href: `/erp/inspection-requests/${r.id}`,
       priority: r.priority,
+      responseStatus: r.response_status || null,
     })),
   };
 }

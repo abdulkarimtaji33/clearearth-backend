@@ -3,6 +3,7 @@
  */
 const db = require('../models');
 const { Op } = db.Sequelize;
+const { emitToUsers, emitToTenant } = require('../socket');
 
 const MANAGER_ADMIN_ROLES = ['sales_manager', 'admin', 'tenant_admin', 'super_admin'];
 
@@ -54,7 +55,10 @@ const createForUsers = async (tenantId, userIds, payload) => {
     is_read: false,
   }));
 
-  return db.Notification.bulkCreate(rows);
+  const created = await db.Notification.bulkCreate(rows);
+  // Push real-time event to connected users
+  try { emitToUsers(uniqueIds, 'notification', { type: payload.type, title: payload.title, message: payload.message }); } catch {}
+  return created;
 };
 
 const getSalesManagerUserIds = async (tenantId) => {
@@ -203,6 +207,25 @@ const notifyQuotationApprovalRequested = async (tenantId, quotation, requestedBy
   });
 };
 
+const notifyLeadCreated = async (tenantId, lead, createdByUser) => {
+  const recipientIds = await getSalesManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+
+  const companyName = lead.company?.company_name || '';
+  const userName = createdByUser
+    ? [createdByUser.first_name, createdByUser.last_name].filter(Boolean).join(' ')
+    : 'A user';
+  const leadLabel = lead.lead_number ? `Lead ${lead.lead_number}` : `Lead #${lead.id}`;
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'lead_created',
+    title: 'New lead created',
+    message: `${userName} created ${leadLabel}${companyName ? ` for ${companyName}` : ''}.`,
+    entityType: 'lead',
+    entityId: lead.id,
+  });
+};
+
 const notifyLeadApprovalRequested = async (tenantId, lead, requestedByUser) => {
   const recipientIds = await getSalesManagerUserIds(tenantId);
   if (recipientIds.length === 0) return;
@@ -225,6 +248,35 @@ const notifyLeadApprovalRequested = async (tenantId, lead, requestedByUser) => {
   });
 };
 
+const getAccountsUserIds = async (tenantId) => {
+  const roles = await db.Role.findAll({
+    where: { name: 'accounts', [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
+    attributes: ['id'],
+  });
+  const roleIds = roles.map(r => r.id);
+  if (roleIds.length === 0) return [];
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
+    attributes: ['id'],
+  });
+  return users.map(u => u.id);
+};
+
+const notifyExpenseSubmitted = async (tenantId, workOrderId, taskName, submittedByUser) => {
+  const recipientIds = await getAccountsUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+  const userName = submittedByUser
+    ? [submittedByUser.first_name, submittedByUser.last_name].filter(Boolean).join(' ')
+    : 'Operations team';
+  await createForUsers(tenantId, recipientIds, {
+    type: 'expense_submitted',
+    title: 'Expense submitted for approval',
+    message: `${userName} submitted expenses for Work Order #${workOrderId}${taskName ? ` — ${taskName}` : ''}.`,
+    entityType: 'work_order',
+    entityId: workOrderId,
+  });
+};
+
 module.exports = {
   getForUser,
   markRead,
@@ -232,8 +284,10 @@ module.exports = {
   createForUsers,
   notifyDealStatusChange,
   notifyInspectionRejected,
+  notifyLeadCreated,
   notifyLeadApprovalRequested,
   notifyDealApprovalRequested,
   notifyQuotationApprovalRequested,
   notifyPurchaseOrderApprovalRequested,
+  notifyExpenseSubmitted,
 };

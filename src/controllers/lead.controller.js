@@ -20,6 +20,7 @@ const getById = asyncHandler(async (req, res) => {
 
 const create = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
+  scope._actorUser = req.user;
   const lead = await leadService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, lead, 'Lead created successfully');
 });

@@ -1,10 +1,12 @@
 /**
  * Server Entry Point
  */
+const http = require('http');
 const app = require('./app');
 const config = require('./config');
 const logger = require('./utils/logger');
 const { testConnection, syncDatabase } = require('./database');
+const { initSocket } = require('./socket');
 
 const PORT = config.app.port;
 
@@ -24,8 +26,12 @@ const startServer = async () => {
     //   await syncDatabase({ alter: true });
     // }
 
+    // Create HTTP server and attach Socket.IO
+    const server = http.createServer(app);
+    initSocket(server);
+
     // Start listening
-    const server = app.listen(PORT, () => {
+    server.listen(PORT, () => {
       logger.info(`🚀 Server started successfully`);
       logger.info(`📍 Environment: ${config.app.env}`);
       logger.info(`🌐 Server running on port ${PORT}`);

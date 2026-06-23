@@ -100,7 +100,12 @@ const create = async (tenantId, data, scope = {}) => {
 
   await lead.update({ lead_number: String(lead.id) });
 
-  return await getById(tenantId, lead.id);
+  const createdLead = await getById(tenantId, lead.id);
+
+  // Notify sales managers in real-time
+  notificationService.notifyLeadCreated(tenantId, createdLead, scope._actorUser || null).catch(() => {});
+
+  return createdLead;
 };
 
 const update = async (tenantId, leadId, data, scope = {}, actor = null) => {

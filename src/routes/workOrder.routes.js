@@ -7,7 +7,7 @@ router.use(authenticate);
 
 router.get('/', authorize('operations.read', 'deals.read'), workOrderController.getAll);
 router.get('/:id', authorize('operations.read', 'deals.read'), workOrderController.getById);
-router.post('/', authorize('operations.create', 'deals.create'), workOrderController.create);
+router.post('/', authorize('operations.create'), workOrderController.create);
 router.put('/:id', authorize('operations.update', 'deals.update'), workOrderController.update);
 router.patch('/:id/tasks/:taskId/status', authorize('operations.update', 'deals.update'), workOrderController.updateTaskStatus);
 router.patch('/:id/tasks/:taskId/notes', authorize('operations.update', 'deals.update'), workOrderController.updateTaskNotes);

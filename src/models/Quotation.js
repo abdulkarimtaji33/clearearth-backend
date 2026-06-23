@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
       quotation_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       currency: { type: DataTypes.STRING(10), defaultValue: 'AED' },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
+      version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },
       approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       approved_at: { type: DataTypes.DATE, allowNull: true },
