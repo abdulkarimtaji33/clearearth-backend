@@ -144,18 +144,48 @@ async function getSalesOverview(tenantId, userId) {
 }
 
 async function getSalesManagerOverview(tenantId) {
-  const [deals, pendingLeads, pendingDeals, pendingQuotations] = await Promise.all([
+  const [deals, pendingDealRows, pendingQuotationRows, recentLeads] = await Promise.all([
     db.Deal.findAll({
       where: { tenant_id: tenantId, status: { [Op.notIn]: [CLOSED_LOST] } },
-      attributes: ['id', 'status', 'total', 'updated_at', 'assigned_to'],
+      attributes: ['id', 'deal_number', 'title', 'status', 'total', 'updated_at', 'assigned_to', 'created_at'],
       include: [{ model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false }],
+      order: [['created_at', 'DESC']],
     }),
-    db.Lead.count({ where: { tenant_id: tenantId, status: 'pending_approval' } }).catch(() => 0),
-    db.Deal.count({ where: { tenant_id: tenantId, status: 'pending_approval' } }).catch(() => 0),
-    db.Quotation.count({ where: { tenant_id: tenantId, status: 'pending_approval' } }).catch(() => 0),
+    db.Deal.findAll({
+      where: { tenant_id: tenantId, status: 'pending_approval' },
+      attributes: ['id', 'deal_number', 'title', 'total', 'created_at', 'assigned_to'],
+      include: [
+        { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+        { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name'], required: false },
+      ],
+      order: [['created_at', 'ASC']],
+      limit: 20,
+    }),
+    db.Quotation.findAll({
+      where: { tenant_id: tenantId, status: 'pending_approval' },
+      attributes: ['id', 'quotation_number', 'total', 'created_at'],
+      include: [
+        { model: db.Deal, as: 'deal', attributes: ['id', 'deal_number', 'title'], required: false },
+      ],
+      order: [['created_at', 'ASC']],
+      limit: 20,
+    }),
+    db.Lead.findAll({
+      where: { tenant_id: tenantId },
+      attributes: ['id', 'lead_number', 'source', 'status', 'created_at', 'assigned_to'],
+      include: [
+        { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+        { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+        { model: db.ProductService, as: 'productService', attributes: ['id', 'name'], required: false },
+      ],
+      order: [['created_at', 'DESC']],
+      limit: 10,
+    }),
   ]);
 
-  const pendingApprovalsTotal = pendingLeads + pendingDeals + pendingQuotations;
+  const pendingDeals = pendingDealRows.length;
+  const pendingQuotations = pendingQuotationRows.length;
+  const pendingApprovalsTotal = pendingDeals + pendingQuotations;
 
   const pipelineValue = deals.reduce((s, d) => s + parseFloat(d.total || 0), 0);
   const won = deals.filter((d) => d.status === CLOSED_WON);
@@ -169,26 +199,32 @@ async function getSalesManagerOverview(tenantId) {
     byRep[key].count += 1;
   });
 
+  const activeDealRows = deals.filter((d) => OPEN_DEAL_STATUSES.includes(d.status));
+
   return {
     role: 'sales_manager',
     kpis: [
       { label: 'Pipeline value', value: pipelineValue, format: 'currency' },
       { label: 'Won deals', value: won.length, format: 'number' },
       { label: 'Stale deals (10d+)', value: stale.length, format: 'number' },
-      { label: 'Active deals', value: deals.filter((d) => OPEN_DEAL_STATUSES.includes(d.status)).length, format: 'number' },
+      { label: 'Active deals', value: activeDealRows.length, format: 'number' },
     ],
     pendingApprovals: {
       total: pendingApprovalsTotal,
-      leads: pendingLeads,
       deals: pendingDeals,
       quotations: pendingQuotations,
+      dealRows: pendingDealRows.map((d) => d.get({ plain: true })),
+      quotationRows: pendingQuotationRows.map((q) => q.get({ plain: true })),
     },
-    actionables: stale.slice(0, 8).map((d) => ({ id: `stale-${d.id}`, label: `Deal #${d.id} stale`, href: `/erp/deals/view/${d.id}` })),
+    actionables: stale.slice(0, 8).map((d) => ({ id: `stale-${d.id}`, label: `Deal #${d.id} — ${d.title || ''}`.trim(), href: `/erp/deals/view/${d.id}`, dealNumber: d.deal_number })),
     leaderboard: Object.values(byRep).sort((a, b) => b.total - a.total).slice(0, 8),
     pipeline: OPEN_DEAL_STATUSES.map((st) => ({
       status: st,
       count: deals.filter((d) => d.status === st).length,
+      value: deals.filter((d) => d.status === st).reduce((s, d) => s + parseFloat(d.total || 0), 0),
     })),
+    recentDeals: activeDealRows.slice(0, 10).map((d) => d.get({ plain: true })),
+    recentLeads: recentLeads.map((l) => l.get({ plain: true })),
   };
 }
 
