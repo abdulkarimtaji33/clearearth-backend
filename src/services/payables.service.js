@@ -156,6 +156,7 @@ const recordPayment = async (tenantId, poId, body, userId = null) => {
         amount: delta,
         paymentMethod: body.paymentMethod,
         paymentAccountId: payAcct.accountId,
+        referenceNo: body.referenceNo,
         paidTo,
         paidAt: payDate,
       }, t);
@@ -253,10 +254,112 @@ const listPayments = async (tenantId, poId) => {
   return paymentTxService.listPaymentTransactions(tenantId, 'payable', poId);
 };
 
+const listPaymentReceipts = async (tenantId, filters = {}) => {
+  const { offset, limit, search, dateFrom, dateTo } = filters;
+  const where = { tenant_id: tenantId, source_type: 'payable' };
+  applyDateOnlyColumnFilter(where, 'paid_at', dateFrom, dateTo);
+
+  if (search) {
+    const s = `%${String(search).trim()}%`;
+    where[Op.or] = [
+      { paid_to: { [Op.like]: s } },
+      { reference_no: { [Op.like]: s } },
+      db.sequelize.where(db.sequelize.cast(db.sequelize.col('source_id'), 'CHAR'), { [Op.like]: s }),
+    ];
+  }
+
+  const { count, rows } = await db.PaymentTransaction.findAndCountAll({
+    where,
+    include: [
+      { model: db.ChartOfAccounts, as: 'paymentAccount', attributes: ['id', 'code', 'name'], required: false },
+      { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+    ],
+    offset,
+    limit,
+    order: [['paid_at', 'DESC'], ['id', 'DESC']],
+  });
+
+  const poIds = [...new Set(rows.map((r) => r.source_id).filter(Boolean))];
+  const pos = poIds.length
+    ? await db.PurchaseOrder.findAll({
+      where: { id: { [Op.in]: poIds }, tenant_id: tenantId },
+      include: [
+        { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+        { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+        { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+      ],
+    })
+    : [];
+  const poMap = Object.fromEntries(pos.map((p) => [p.id, p.get({ plain: true })]));
+
+  const receipts = rows.map((r) => {
+    const tx = r.get({ plain: true });
+    const po = poMap[tx.source_id] || null;
+    return {
+      ...tx,
+      receipt_number: `PPR-${tx.id}`,
+      purchase_order: po,
+      po_id: tx.source_id,
+      party_name: po?.supplier?.company_name || po?.company?.company_name || tx.paid_to || '—',
+      party_label: po?.supplier_id ? 'Vendor' : po?.company_id ? 'Client' : '—',
+    };
+  });
+
+  return { receipts, total: count };
+};
+
+const getPaymentReceipt = async (tenantId, paymentId) => {
+  const tx = await db.PaymentTransaction.findOne({
+    where: { id: paymentId, tenant_id: tenantId, source_type: 'payable' },
+    include: [
+      { model: db.ChartOfAccounts, as: 'paymentAccount', attributes: ['id', 'code', 'name'], required: false },
+      { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+    ],
+  });
+  if (!tx) throw ApiError.notFound('Payment receipt not found');
+
+  const plain = tx.get({ plain: true });
+  const po = await db.PurchaseOrder.findOne({
+    where: { id: plain.source_id, tenant_id: tenantId },
+    include: [
+      { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+      {
+        model: db.PurchaseOrderItem,
+        as: 'items',
+        include: [{ model: db.ProductService, as: 'productService', attributes: ['id', 'name'], required: false }],
+        required: false,
+      },
+    ],
+  });
+  if (!po) throw ApiError.notFound('Linked purchase order not found');
+
+  const poPlain = po.get({ plain: true });
+  poPlain.po_total = poTotal(poPlain);
+  poPlain.balance_due = balanceDue(poPlain);
+
+  const tenant = await db.Tenant.findByPk(tenantId, {
+    attributes: ['id', 'name', 'company_name', 'email', 'phone', 'address', 'city', 'country', 'trn_number', 'vat_registration_number'],
+  });
+
+  return {
+    ...plain,
+    receipt_number: `PPR-${plain.id}`,
+    purchase_order: poPlain,
+    po_id: plain.source_id,
+    party_name: poPlain.supplier?.company_name || poPlain.company?.company_name || plain.paid_to || '—',
+    party_label: poPlain.supplier_id ? 'Vendor' : poPlain.company_id ? 'Client' : '—',
+    tenant: tenant ? tenant.get({ plain: true }) : null,
+  };
+};
+
 module.exports = {
   listPayables,
   recordPayment,
   listPayments,
+  listPaymentReceipts,
+  getPaymentReceipt,
   getAgingSummary,
   poTotal,
   balanceDue,

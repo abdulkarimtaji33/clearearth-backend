@@ -455,7 +455,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
     const previousStatus = deal.status;
 
     let nextStatus = deal.status;
-    if (data.status !== undefined) {
+    if (data.status !== undefined && data.status !== deal.status) {
       assertManagerCanChangeStatus(actor, deal.status, data.status);
       if (deal.status === DEAL_STATUS.PENDING_APPROVAL && data.status !== DEAL_STATUS.LOST) {
         throw ApiError.badRequest('Deal is awaiting approval');

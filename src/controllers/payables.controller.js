@@ -32,9 +32,30 @@ const listPayments = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, rows);
 });
 
+const listPaymentReceipts = asyncHandler(async (req, res) => {
+  const { page, pageSize, search, dateFrom, dateTo } = req.query;
+  const pagination = getPaginationParams(page, pageSize);
+  const result = await payablesService.listPaymentReceipts(req.tenant.id, {
+    ...pagination,
+    search,
+    dateFrom,
+    dateTo,
+  });
+  return ApiResponse.paginated(res, result.receipts, {
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalItems: result.total,
+  });
+});
+
+const getPaymentReceipt = asyncHandler(async (req, res) => {
+  const row = await payablesService.getPaymentReceipt(req.tenant.id, req.params.paymentId);
+  return ApiResponse.success(res, row);
+});
+
 const agingSummary = asyncHandler(async (req, res) => {
   const data = await payablesService.getAgingSummary(req.tenant.id, req.query);
   return ApiResponse.success(res, data);
 });
 
-module.exports = { list, recordPayment, listPayments, agingSummary };
+module.exports = { list, recordPayment, listPayments, listPaymentReceipts, getPaymentReceipt, agingSummary };
