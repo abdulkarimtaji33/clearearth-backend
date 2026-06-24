@@ -2005,12 +2005,26 @@ async function runMigration() {
       ['approval_requested_at', 'DATETIME NULL'],
       ['approved_by', 'INT NULL'],
       ['approved_at', 'DATETIME NULL'],
+      ['version', 'INT NOT NULL DEFAULT 1'],
     ]) {
       try {
         await db.sequelize.query(`ALTER TABLE quotations ADD COLUMN ${col} ${def}`);
       } catch (e) {
         if (!isDuplicateSchemaError(e)) console.warn(`  quotations.${col}:`, e.message);
       }
+    }
+    try {
+      await db.sequelize.query(`
+        UPDATE quotations q
+        INNER JOIN (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY tenant_id, deal_id ORDER BY id ASC) AS v
+          FROM quotations
+        ) ranked ON q.id = ranked.id
+        SET q.version = ranked.v
+      `);
+      console.log('  Backfilled quotation version numbers per deal');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  quotations version backfill:', e.message);
     }
     try {
       await db.sequelize.query(`
