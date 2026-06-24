@@ -692,7 +692,7 @@ const remove = async (tenantId, dealId, scope = {}) => {
 };
 
 const INSPECTION_ROLES = ['inspection_team', 'inspection'];
-const INSPECTION_REPORT_APPROVER_ROLES = ['operations_manager', 'admin', 'tenant_admin', 'super_admin'];
+const INSPECTION_REPORT_APPROVER_ROLES = ['sales', 'sales_manager', 'operations_manager', 'admin', 'tenant_admin', 'super_admin'];
 
 const saveInspectionReport = async (tenantId, dealId, data, scope = {}, actor = {}) => {
   const where = { id: dealId, tenant_id: tenantId };
@@ -719,7 +719,7 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}, actor = 
   if (canApproveReport && data.approvedById != null) {
     approvedById = data.approvedById;
   } else if (!canApproveReport && data.approvedById != null && data.approvedById !== existing?.approved_by_id) {
-    throw ApiError.forbidden('Only operations manager or admin can approve inspection reports');
+    throw ApiError.forbidden('Only sales, sales manager, operations manager, or admin can approve inspection reports');
   }
 
   const payload = {
