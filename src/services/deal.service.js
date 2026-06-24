@@ -728,7 +728,6 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}, actor = 
     approximate_weight: data.approximateWeight != null ? data.approximateWeight : null,
     weight_uom: data.weightUom || null,
     cargo_type: data.cargoType || null,
-    cargo_packing_type: data.cargoPackingType || null,
     transportation_arrangement: data.transportationArrangement || null,
     approximate_value: data.approximateValue != null ? data.approximateValue : null,
     images: data.images && data.images.length > 0 ? data.images : null,
