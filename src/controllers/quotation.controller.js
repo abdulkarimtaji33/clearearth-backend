@@ -103,7 +103,11 @@ const getPdf = asyncHandler(async (req, res) => {
   }
   const scope = getSalesScope(req);
   const quotation = await quotationService.getById(req.tenant.id, req.params.id, scope);
-  const raw = await pdfService.generateQuotationPdf(req.params.id, req.tenant.id);
+  const variant = String(req.query.documentType || req.query.variant || '').toLowerCase();
+  const pdfOptions = {};
+  if (variant === 'quotation' || variant === 'quote') pdfOptions.documentType = 'quotation';
+  else if (variant === 'order') pdfOptions.documentType = 'order';
+  const raw = await pdfService.generateQuotationPdf(req.params.id, req.tenant.id, pdfOptions);
   if (!raw || (!Buffer.isBuffer(raw) && !(raw instanceof Uint8Array))) {
     return ApiResponse.error(res, 'Quotation not found or PDF generation failed', 404);
   }
@@ -111,7 +115,8 @@ const getPdf = asyncHandler(async (req, res) => {
   if (pdfBuffer.length < 100 || !pdfBuffer.toString('ascii', 0, 5).startsWith('%PDF')) {
     return ApiResponse.error(res, 'PDF generation produced invalid output', 500);
   }
-  const isOrder = String(quotation?.status || '').toLowerCase() === 'approved';
+  const isOrder = pdfOptions.documentType === 'order'
+    || (pdfOptions.documentType !== 'quotation' && String(quotation?.status || '').toLowerCase() === 'approved');
   const fname = isOrder ? `service-order-${req.params.id}.pdf` : `service-quotation-${req.params.id}.pdf`;
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `attachment; filename="${fname}"`);

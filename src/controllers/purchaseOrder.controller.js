@@ -92,7 +92,11 @@ const getPdf = asyncHandler(async (req, res) => {
     throw ApiError.forbidden('Operations managers cannot download quotation or order PDFs with pricing.');
   }
   const po = await purchaseOrderService.getById(req.tenant.id, req.params.id);
-  const raw = await pdfService.generatePurchaseOrderPdf(req.params.id, req.tenant.id);
+  const variant = String(req.query.documentType || req.query.variant || '').toLowerCase();
+  const pdfOptions = {};
+  if (variant === 'quotation' || variant === 'quote') pdfOptions.documentType = 'quotation';
+  else if (variant === 'order') pdfOptions.documentType = 'order';
+  const raw = await pdfService.generatePurchaseOrderPdf(req.params.id, req.tenant.id, pdfOptions);
   if (!raw || (!Buffer.isBuffer(raw) && !(raw instanceof Uint8Array))) {
     return ApiResponse.error(res, 'Purchase order not found or PDF generation failed', 404);
   }
@@ -100,8 +104,13 @@ const getPdf = asyncHandler(async (req, res) => {
   if (pdfBuffer.length < 100 || !pdfBuffer.toString('ascii', 0, 5).startsWith('%PDF')) {
     return ApiResponse.error(res, 'PDF generation produced invalid output', 500);
   }
-  const isOrder = String(po?.status || '').toLowerCase() === 'approved';
-  const fname = isOrder ? `purchase-order-${req.params.id}.pdf` : `purchase-quotation-${req.params.id}.pdf`;
+  const isBill = String(po?.document_type || '').toLowerCase() === 'bill';
+  const isOrder = isBill
+    || pdfOptions.documentType === 'order'
+    || (pdfOptions.documentType !== 'quotation' && String(po?.status || '').toLowerCase() === 'approved');
+  const fname = isBill
+    ? `purchase-bill-${req.params.id}.pdf`
+    : (isOrder ? `purchase-order-${req.params.id}.pdf` : `purchase-quotation-${req.params.id}.pdf`);
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', `attachment; filename="${fname}"`);
   res.set('Content-Length', pdfBuffer.length);

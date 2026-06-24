@@ -28,6 +28,14 @@ function isApprovedStatus(s) {
   return String(s || '').toLowerCase() === 'approved';
 }
 
+function resolvePdfAsApproved(recordApproved, options = {}, { allowOverride = true } = {}) {
+  if (!allowOverride) return recordApproved;
+  const variant = String(options.documentType || '').toLowerCase();
+  if (variant === 'quotation' || variant === 'quote') return false;
+  if (variant === 'order') return true;
+  return recordApproved;
+}
+
 function getVat(tenant) {
   return tenant?.trn_number || tenant?.vat_registration_number || '-';
 }
@@ -61,7 +69,7 @@ async function htmlToPdf(html) {
   }
 }
 
-async function generateQuotationPdf(quotationId, tenantId) {
+async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const quotation = await db.Quotation.findOne({
     where: { id: quotationId, tenant_id: tenantId },
     include: [
@@ -138,7 +146,7 @@ async function generateQuotationPdf(quotationId, tenantId) {
   }
 
   const totalAmount = formatNum(subtotal + totalVat);
-  const approved = isApprovedStatus(quotation.status);
+  const approved = resolvePdfAsApproved(isApprovedStatus(quotation.status), options);
   const quoteNumber = approved ? `SO/SERV/${quotation.id}/1` : `QT/SERV/${quotation.id}/1`;
   const quoteDate = formatDate(quotation.quotation_date);
   const documentTitle = approved ? 'Service Order' : 'Service Quotation';
@@ -180,7 +188,7 @@ async function generateQuotationPdf(quotationId, tenantId) {
   return htmlToPdf(html);
 }
 
-async function generatePurchaseOrderPdf(poId, tenantId) {
+async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId },
     include: [
@@ -255,8 +263,8 @@ async function generatePurchaseOrderPdf(poId, tenantId) {
         .join('')
     : '<p>Payment terms: Immediate</p>';
 
-  const approved = isApprovedStatus(po.status);
   const isBill = String(po.document_type).toLowerCase() === 'bill';
+  const approved = resolvePdfAsApproved(isApprovedStatus(po.status), options, { allowOverride: !isBill });
   const y = new Date().getFullYear();
   const poNumber = isBill
     ? `PB/CE/${y}/${po.id}`
