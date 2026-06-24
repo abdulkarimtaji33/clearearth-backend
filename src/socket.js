@@ -11,6 +11,10 @@ let io = null;
 // userId -> Set<socketId>
 const userSockets = {};
 
+function normalizeUserId(userId) {
+  return userId != null ? String(userId) : null;
+}
+
 function initSocket(httpServer) {
   io = new Server(httpServer, {
     cors: {
@@ -24,8 +28,8 @@ function initSocket(httpServer) {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) return next(new Error('Authentication required'));
     try {
-      const payload = jwt.verify(token, config.jwt.accessSecret);
-      socket.userId = payload.userId || payload.id;
+      const payload = jwt.verify(token, config.jwt.secret);
+      socket.userId = normalizeUserId(payload.userId || payload.id);
       socket.tenantId = payload.tenantId;
       next();
     } catch {
@@ -34,8 +38,10 @@ function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    const { userId, tenantId } = socket;
+    const userId = normalizeUserId(socket.userId);
+    const { tenantId } = socket;
     if (userId) {
+      socket.userId = userId;
       if (!userSockets[userId]) userSockets[userId] = new Set();
       userSockets[userId].add(socket.id);
       socket.join(`tenant:${tenantId}`);
@@ -54,7 +60,7 @@ function initSocket(httpServer) {
 
 function emitToUser(userId, event, data) {
   if (!io) return;
-  const sids = userSockets[userId];
+  const sids = userSockets[normalizeUserId(userId)];
   if (!sids) return;
   sids.forEach((sid) => io.to(sid).emit(event, data));
 }

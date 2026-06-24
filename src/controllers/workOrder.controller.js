@@ -37,6 +37,11 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
+  const roleName = req.user?.role?.name || req.user?.Role?.name;
+  if (['sales', 'sales_manager'].includes(roleName)) {
+    const ApiError = require('../utils/apiError');
+    throw ApiError.forbidden('Sales users cannot create work orders');
+  }
   const scope = { userId: req.user?.id };
   const workOrder = await workOrderService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, workOrder, 'Work order created successfully');

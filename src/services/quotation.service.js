@@ -6,7 +6,6 @@ const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
-const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 
 const QUOTATION_STATUS = {
@@ -26,14 +25,6 @@ const APPROVABLE_STATUSES = [
   QUOTATION_STATUS.REVISED,
   QUOTATION_STATUS.PENDING_APPROVAL,
 ];
-const EDITABLE_STATUSES = [
-  QUOTATION_STATUS.NEW,
-  QUOTATION_STATUS.SENT,
-  QUOTATION_STATUS.UNDER_REVIEW,
-  QUOTATION_STATUS.REVISED,
-  QUOTATION_STATUS.REJECTED,
-];
-
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, status, statusNot, dealId, scopeUserId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
@@ -151,50 +142,7 @@ const create = async (tenantId, data, scope = {}) => {
 };
 
 const update = async (tenantId, quotationId, data, scope = {}, actor = null) => {
-  const quotation = await getById(tenantId, quotationId, scope);
-  const { dealId, preparedBy, quotationDate, quotationAmount, status, remarks } = data;
-
-  if (quotation.status === QUOTATION_STATUS.APPROVED) {
-    throw ApiError.badRequest('Approved quotations cannot be edited');
-  }
-
-  if (dealId) {
-    const dealWhere = { id: dealId, tenant_id: tenantId };
-    if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
-    const deal = await db.Deal.findOne({ where: dealWhere });
-    if (!deal) throw ApiError.badRequest('Deal not found');
-  }
-  const effectivePreparedBy = scope.scopeUserId || preparedBy;
-  if (effectivePreparedBy) {
-    const user = await db.User.findOne({ where: { id: effectivePreparedBy, tenant_id: tenantId } });
-    if (!user) throw ApiError.badRequest('User not found');
-  }
-
-  let nextStatus = quotation.status;
-  if (status !== undefined) {
-    assertManagerCanChangeStatus(actor, quotation.status, status);
-    if (quotation.status === QUOTATION_STATUS.PENDING_APPROVAL && status !== QUOTATION_STATUS.REJECTED) {
-      throw ApiError.badRequest('Quotation is awaiting approval');
-    }
-    if (status === QUOTATION_STATUS.APPROVED || status === QUOTATION_STATUS.PENDING_APPROVAL) {
-      throw ApiError.badRequest('Quotation approval is required. Use the approval workflow.');
-    }
-    if (!EDITABLE_STATUSES.includes(status)) {
-      throw ApiError.badRequest('Quotation status cannot be set directly. Use the approval workflow.');
-    }
-    nextStatus = status;
-  }
-
-  await quotation.update({
-    deal_id: dealId ?? quotation.deal_id,
-    prepared_by: effectivePreparedBy ?? quotation.prepared_by,
-    quotation_date: quotationDate ?? quotation.quotation_date,
-    quotation_amount: quotationAmount !== undefined ? parseFloat(quotationAmount) : quotation.quotation_amount,
-    status: nextStatus,
-    remarks: remarks !== undefined ? remarks : quotation.remarks,
-  });
-
-  return getById(tenantId, quotation.id);
+  throw ApiError.badRequest('Quotations cannot be edited after creation');
 };
 
 const _approveQuotation = async (quotation, { approvedByUserId }) => {

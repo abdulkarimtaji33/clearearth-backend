@@ -57,7 +57,15 @@ const createForUsers = async (tenantId, userIds, payload) => {
 
   const created = await db.Notification.bulkCreate(rows);
   // Push real-time event to connected users
-  try { emitToUsers(uniqueIds, 'notification', { type: payload.type, title: payload.title, message: payload.message }); } catch {}
+  try {
+    emitToUsers(uniqueIds, 'notification', {
+      type: payload.type,
+      title: payload.title,
+      message: payload.message,
+      entityType: payload.entityType || null,
+      entityId: payload.entityId || null,
+    });
+  } catch { /* socket optional */ }
   return created;
 };
 

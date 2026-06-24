@@ -163,7 +163,7 @@ async function getSalesManagerOverview(tenantId) {
     }),
     db.Quotation.findAll({
       where: { tenant_id: tenantId, status: 'pending_approval' },
-      attributes: ['id', 'quotation_number', 'total', 'created_at'],
+      attributes: ['id', 'quotation_amount', 'created_at'],
       include: [
         { model: db.Deal, as: 'deal', attributes: ['id', 'deal_number', 'title'], required: false },
       ],
@@ -214,7 +214,10 @@ async function getSalesManagerOverview(tenantId) {
       deals: pendingDeals,
       quotations: pendingQuotations,
       dealRows: pendingDealRows.map((d) => d.get({ plain: true })),
-      quotationRows: pendingQuotationRows.map((q) => q.get({ plain: true })),
+      quotationRows: pendingQuotationRows.map((q) => {
+        const plain = q.get({ plain: true });
+        return { ...plain, total: plain.quotation_amount };
+      }),
     },
     actionables: stale.slice(0, 8).map((d) => ({ id: `stale-${d.id}`, label: `Deal #${d.id} — ${d.title || ''}`.trim(), href: `/erp/deals/view/${d.id}`, dealNumber: d.deal_number })),
     leaderboard: Object.values(byRep).sort((a, b) => b.total - a.total).slice(0, 8),

@@ -3,6 +3,7 @@ const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
+const { assertCanGenerateInvoice } = require('../utils/roleAccess');
 
 const previewFromQuotation = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
@@ -35,6 +36,7 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
+  assertCanGenerateInvoice(req);
   const scope = getSalesScope(req);
   const row = await proformaInvoiceService.create(req.tenant.id, req.user.id, req.body, scope);
   return ApiResponse.created(res, row, 'Proforma invoice created');
