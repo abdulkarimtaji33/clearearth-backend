@@ -2134,6 +2134,27 @@ async function runMigration() {
       if (!isDuplicateSchemaError(e)) console.warn('  work_order_task_files:', e.message);
     }
 
+    console.log('Adding purchase_order_items.unit_of_measure...');
+    try {
+      await db.sequelize.query('ALTER TABLE purchase_order_items ADD COLUMN unit_of_measure VARCHAR(100) NULL');
+      console.log('  unit_of_measure column added');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  unit_of_measure:', e.message);
+      else console.log('  unit_of_measure column already present');
+    }
+    try {
+      await db.sequelize.query(`
+        UPDATE purchase_order_items poi
+        INNER JOIN products_services ps ON ps.id = poi.product_service_id
+        SET poi.unit_of_measure = ps.unit_of_measure
+        WHERE (poi.unit_of_measure IS NULL OR poi.unit_of_measure = '')
+          AND ps.unit_of_measure IS NOT NULL AND TRIM(ps.unit_of_measure) != ''
+      `);
+      console.log('  Backfilled PO item UOM from products');
+    } catch (e) {
+      console.warn('  Backfill PO item UOM:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

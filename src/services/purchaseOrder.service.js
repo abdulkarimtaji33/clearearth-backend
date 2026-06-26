@@ -49,12 +49,18 @@ const normalizePoItems = (items, existingItems = [], isBill = false) => {
     const qty = parseFloat(it.quantity) || 0;
     const priceNum = parseFloat(price) || 0;
     const total = (qty * priceNum).toFixed(2);
+    const unitOfMeasure = isBill && existing
+      ? (existing.unit_of_measure || null)
+      : (it.unitOfMeasure != null && String(it.unitOfMeasure).trim() !== ''
+        ? String(it.unitOfMeasure).trim()
+        : null);
     return {
       productServiceId,
       itemDescription,
       quantity: String(it.quantity ?? ''),
       price,
       total,
+      unitOfMeasure,
     };
   });
 };
@@ -243,6 +249,7 @@ const create = async (tenantId, data) => {
           quantity: String(it.quantity ?? ''),
           price: String(it.price ?? ''),
           total: String(it.total ?? ''),
+          unit_of_measure: it.unitOfMeasure || null,
           sort_order: i,
         },
         { transaction: t }
@@ -370,6 +377,7 @@ const update = async (tenantId, poId, data, actor = null) => {
             quantity: String(it.quantity ?? ''),
             price: String(it.price ?? ''),
             total: String(it.total ?? ''),
+            unit_of_measure: it.unitOfMeasure || null,
             sort_order: i,
           },
           { transaction: t }

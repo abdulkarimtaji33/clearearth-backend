@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
       quantity: { type: DataTypes.STRING(100), allowNull: false },
       price: { type: DataTypes.STRING(100), allowNull: false },
       total: { type: DataTypes.STRING(100), allowNull: false },
+      unit_of_measure: { type: DataTypes.STRING(100), allowNull: true },
       sort_order: { type: DataTypes.INTEGER, defaultValue: 0 },
     },
     {
