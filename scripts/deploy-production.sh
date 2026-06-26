@@ -32,6 +32,9 @@ echo "---- Backend: ${BACKEND_DIR} ----"
 cd "${BACKEND_DIR}"
 git fetch origin
 git reset --hard "origin/${GIT_BRANCH}"
+if [[ -f scripts/install-puppeteer-deps.sh ]]; then
+  bash scripts/install-puppeteer-deps.sh
+fi
 npm ci --omit=dev
 if [[ -z "${SKIP_MIGRATE:-}" ]]; then
   npm run run-migration
