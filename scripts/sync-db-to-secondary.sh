@@ -10,7 +10,7 @@ DUMP="/tmp/clearearth_erp_sync.sql.gz"
 cd "$BACKEND_DIR"
 set -a
 # shellcheck disable=SC1091
-source .env
+source <(sed 's/\r$//' .env)
 set +a
 
 echo "==> Dumping ${DB_NAME} from primary..."
@@ -22,7 +22,7 @@ scp -o StrictHostKeyChecking=accept-new "$DUMP" "${SECONDARY_HOST}:/tmp/clearear
 ssh -o StrictHostKeyChecking=accept-new "$SECONDARY_HOST" bash -s <<REMOTE
 set -euo pipefail
 set -a
-source ${BACKEND_DIR}/.env
+source <(sed 's/\r$//' ${BACKEND_DIR}/.env)
 set +a
 gunzip -c /tmp/clearearth_erp_sync.sql.gz | mysql -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" "\$DB_NAME"
 rm -f /tmp/clearearth_erp_sync.sql.gz
