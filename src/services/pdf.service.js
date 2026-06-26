@@ -40,6 +40,16 @@ function getVat(tenant) {
   return tenant?.trn_number || tenant?.vat_registration_number || '-';
 }
 
+function formatDealType(dealType) {
+  if (!dealType) return '-';
+  const labels = {
+    offer_to_charge: 'Offer to Charge',
+    offer_to_purchase: 'Offer to Purchase',
+    free_of_charge: 'Free of Charge',
+  };
+  return labels[dealType] || String(dealType).replace(/_/g, ' ');
+}
+
 function renderTemplate(templatePath, data) {
   let html = fs.readFileSync(templatePath, 'utf8');
   const keys = Object.keys(data).sort((a, b) => b.length - a.length);
@@ -102,8 +112,10 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
 
   const company = quotation.deal?.company;
   const items = quotation.deal?.items || [];
-  const vatPct = (parseFloat(quotation.deal?.vat_percentage) || 5) / 100;
+  const isFoc = quotation.deal?.deal_type === 'free_of_charge';
+  const vatPct = isFoc ? 0 : (parseFloat(quotation.deal?.vat_percentage) || 5) / 100;
   const currency = quotation.currency || 'AED';
+  const dealType = formatDealType(quotation.deal?.deal_type);
 
   let itemsHtml = '';
   let subtotal = 0;
@@ -112,7 +124,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   if (items.length > 0) {
     items.forEach((item, i) => {
       const qty = parseFloat(item.quantity) || 0;
-      const unitPrice = parseFloat(item.unit_price) || 0;
+      const unitPrice = isFoc ? 0 : (parseFloat(item.unit_price) || 0);
       const amount = qty * unitPrice;
       const tax = amount * vatPct;
       const total = amount + tax;
@@ -129,8 +141,8 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       </tr>`;
     });
   } else {
-    const amount = parseFloat(quotation.quotation_amount) || 0;
-    const tax = amount * 0.05;
+    const amount = isFoc ? 0 : (parseFloat(quotation.quotation_amount) || 0);
+    const tax = amount * vatPct;
     const total = amount + tax;
     subtotal = amount;
     totalVat = tax;
@@ -140,7 +152,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       <td class="text-right">${formatNum(amount)}</td>
       <td class="text-right">1</td>
       <td class="text-right">${formatNum(amount)}</td>
-      <td class="text-right">${formatNum(tax)} @5.0%</td>
+      <td class="text-right">${formatNum(tax)} @${(vatPct * 100).toFixed(1)}%</td>
       <td class="text-right">${formatNum(total)}</td>
     </tr>`;
   }
@@ -151,8 +163,8 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const quoteDate = formatDate(quotation.quotation_date);
   const documentTitle = approved ? 'Service Order' : 'Service Quotation';
   const docMetaLine = approved
-    ? `Order Number : ${quoteNumber} , Order Date : ${quoteDate}`
-    : `Quote Number : ${quoteNumber} , Quote Date : ${quoteDate}`;
+    ? `Order Number : ${quoteNumber} , Order Date : ${quoteDate} , Deal Type : ${dealType}`
+    : `Quote Number : ${quoteNumber} , Quote Date : ${quoteDate} , Deal Type : ${dealType}`;
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
 
@@ -182,6 +194,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
     itemsHtml,
     currency,
     totalAmount,
+    dealType,
     termsHtml,
   });
 
@@ -197,7 +210,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
       {
         model: db.Deal,
         as: 'deal',
-        attributes: ['id', 'is_rcm_applicable', 'vat_percentage'],
+        attributes: ['id', 'is_rcm_applicable', 'vat_percentage', 'deal_type'],
         required: false,
         include: [
           {
@@ -223,9 +236,11 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   if (!tenant) return null;
 
   const party = po.company || po.supplier;
-  const isRcm = po.deal?.is_rcm_applicable || false;
-  const vatPct = isRcm ? 0 : (parseFloat(po.deal?.vat_percentage) || 5) / 100;
+  const isFoc = po.deal?.deal_type === 'free_of_charge';
+  const isRcm = !isFoc && (po.deal?.is_rcm_applicable || false);
+  const vatPct = isFoc ? 0 : (isRcm ? 0 : (parseFloat(po.deal?.vat_percentage) || 5) / 100);
   const currency = 'AED';
+  const dealType = formatDealType(po.deal?.deal_type);
 
   let itemsHtml = '';
   let subtotal = 0;
@@ -233,7 +248,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
 
   for (const [i, item] of (po.items || []).entries()) {
     const qty = parseFloat(item.quantity) || 0;
-    const price = parseFloat(item.price) || 0;
+    const price = isFoc ? 0 : (parseFloat(item.price) || 0);
     const amount = qty * price;
     const vat = isRcm ? 0 : amount * vatPct;
     const total = amount + vat;
@@ -280,6 +295,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     docRefLabel,
     poNumber,
     poDate,
+    dealType,
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
     fromEmail: tenant.email || '-',
     fromPhone: tenant.phone || '-',

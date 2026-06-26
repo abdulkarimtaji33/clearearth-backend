@@ -1,6 +1,6 @@
 const ApiError = require('./apiError');
 
-const INVOICE_GENERATION_BLOCKED_ROLES = new Set(['sales', 'sales_executive', 'sales_manager']);
+const INVOICE_GENERATION_BLOCKED_ROLES = new Set(['sales', 'sales_executive', 'sales_manager', 'operations_manager', 'operations']);
 const OPERATIONS_ROLES = new Set(['operations_manager', 'operations']);
 
 function roleNameFromRequest(req) {
@@ -10,7 +10,7 @@ function roleNameFromRequest(req) {
 function assertCanGenerateInvoice(req) {
   const role = roleNameFromRequest(req);
   if (INVOICE_GENERATION_BLOCKED_ROLES.has(role)) {
-    throw ApiError.forbidden('Sales users cannot create proforma or tax invoices');
+    throw ApiError.forbidden('Your role cannot create proforma or tax invoices');
   }
 }
 
