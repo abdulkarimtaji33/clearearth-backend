@@ -39,6 +39,12 @@ const forgotPasswordValidation = [
   validate,
 ];
 
+const changePasswordValidation = [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  validate,
+];
+
 const resetPasswordValidation = [
   body('token').notEmpty().withMessage('Token is required'),
   body('password')
@@ -55,6 +61,6 @@ router.post('/logout', authenticate, authController.logout);
 router.post('/forgot-password', forgotPasswordValidation, authController.forgotPassword);
 router.post('/reset-password', resetPasswordValidation, authController.resetPassword);
 router.get('/me', authenticate, authController.getCurrentUser);
-router.put('/change-password', authenticate, authController.changePassword);
+router.put('/change-password', authenticate, changePasswordValidation, authController.changePassword);
 
 module.exports = router;
