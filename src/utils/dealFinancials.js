@@ -1,17 +1,27 @@
 /**
- * Hide deal financial fields for roles that need operational detail without pricing.
+ * Hide deal financial fields for roles that lack the deals.view_price permission.
  */
 const ApiError = require('./apiError');
-
-const ROLES_HIDE_DEAL_FINANCIALS = new Set(['operations_manager']);
 
 const DEAL_AMOUNT_FIELDS = ['subtotal', 'vat_percentage', 'vat_amount', 'total', 'paid_amount'];
 const LINE_ITEM_AMOUNT_FIELDS = ['unit_price', 'line_total'];
 const INVOICE_AMOUNT_FIELDS = ['subtotal', 'vat_percentage', 'vat_amount', 'total', 'paid_amount'];
 
-const shouldHideDealFinancials = (roleName) => (
-  roleName != null && ROLES_HIDE_DEAL_FINANCIALS.has(roleName)
-);
+/**
+ * Accepts either a full user object (with `.hasPermission`, from req.user) or,
+ * for legacy callers, a plain role-name string — in which case only super_admin
+ * is treated as always-visible and everyone else is assumed hidden (fail-closed).
+ */
+const shouldHideDealFinancials = (userOrRoleName) => {
+  if (userOrRoleName && typeof userOrRoleName === 'object') {
+    if (userOrRoleName.role?.name === 'super_admin') return false;
+    if (typeof userOrRoleName.hasPermission === 'function') {
+      return !userOrRoleName.hasPermission('deals.view_price');
+    }
+    return true;
+  }
+  return userOrRoleName !== 'super_admin';
+};
 
 const redactFields = (obj, fields) => {
   if (!obj || typeof obj !== 'object') return;
@@ -67,10 +77,13 @@ const sanitizePurchaseOrderPayload = (po, hideFinancials) => {
   return p;
 };
 
-/** Operations managers may view quotations/orders but cannot create, edit, approve, or delete them. */
-const assertCanModifyQuotationsAndOrders = (roleName) => {
-  if (shouldHideDealFinancials(roleName)) {
-    throw ApiError.forbidden('Operations managers can view quotations and orders but cannot modify them.');
+/**
+ * Roles without deals.view_price may view quotations/orders but cannot
+ * create, edit, approve, or delete them (mirrors the pricing-hidden restriction).
+ */
+const assertCanModifyQuotationsAndOrders = (userOrRoleName) => {
+  if (shouldHideDealFinancials(userOrRoleName)) {
+    throw ApiError.forbidden('Your role can view quotations and orders but cannot modify them.');
   }
 };
 

@@ -2,6 +2,7 @@ const roleService = require('../services/role.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
+const { MODULES, ACTIONS, SCOPES } = require('../constants');
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, dateFrom, dateTo } = req.query;
@@ -40,4 +41,17 @@ const assignPermissions = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, role, 'Permissions assigned successfully');
 });
 
-module.exports = { getAll, getById, create, update, remove, getAllPermissions, assignPermissions };
+const createPermission = asyncHandler(async (req, res) => {
+  const permission = await roleService.createPermission(req.body);
+  return ApiResponse.created(res, permission, 'Permission created successfully');
+});
+
+const getModuleRegistry = asyncHandler(async (req, res) => {
+  return ApiResponse.success(res, {
+    modules: Object.values(MODULES),
+    actions: Object.values(ACTIONS),
+    scopes: Object.values(SCOPES),
+  });
+});
+
+module.exports = { getAll, getById, create, update, remove, getAllPermissions, assignPermissions, createPermission, getModuleRegistry };

@@ -3,20 +3,35 @@
  */
 const db = require('../models');
 const { Op } = db.Sequelize;
-const { MANAGER_ROLES } = require('../constants');
 const { hashPassword, comparePassword } = require('./helpers');
 const { parseTenantSettings, cleanTenantSettings } = require('./tenantSettings');
 
 const PIN_SETTINGS_KEY = 'leadApprovalPinHash';
 
-const isManagerRole = (roleName) => MANAGER_ROLES.includes(roleName);
+/**
+ * Approval authority is driven by holding `${module}.approve` (defaults to
+ * 'leads' for backward-compat callers). Accepts an actor object carrying
+ * either `hasPermission` (preferred, from req.user) or a legacy `roleName`.
+ */
+const isManagerRole = (actor, module = 'leads') => {
+  if (!actor) return false;
+  if (typeof actor === 'string') return false; // legacy bare role-name string: fail closed, permission-based only now
+  if (actor.roleName === 'super_admin') return true;
+  if (typeof actor.hasPermission === 'function') {
+    return actor.hasPermission(`${module}.approve`);
+  }
+  return false;
+};
 
-const getSalesManagerUserIds = async (tenantId) => {
+/**
+ * Users whose role holds `${module}.approve` — the approval-PIN authority.
+ */
+const getSalesManagerUserIds = async (tenantId, module = 'leads') => {
   const roles = await db.Role.findAll({
     where: {
-      name: 'sales_manager',
       [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
     },
+    include: [{ model: db.Permission, as: 'permissions', where: { name: `${module}.approve` }, required: true }],
     attributes: ['id'],
   });
   const roleIds = roles.map((r) => r.id);

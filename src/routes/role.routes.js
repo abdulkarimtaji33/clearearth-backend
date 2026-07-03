@@ -7,6 +7,8 @@ router.use(authenticate);
 
 router.get('/', authorize('roles.read', 'users.read', 'users.create'), roleController.getAll);
 router.get('/permissions/all', authorize('roles.read'), roleController.getAllPermissions);
+router.get('/permissions/modules', authorize('roles.read'), roleController.getModuleRegistry);
+router.post('/permissions', authorize('roles.create'), roleController.createPermission);
 router.get('/:id', authorize('roles.read'), roleController.getById);
 router.post('/', authorize('roles.create'), roleController.create);
 router.put('/:id', authorize('roles.update'), roleController.update);

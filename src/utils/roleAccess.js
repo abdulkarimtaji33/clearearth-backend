@@ -1,26 +1,32 @@
 const ApiError = require('./apiError');
-
-const INVOICE_GENERATION_BLOCKED_ROLES = new Set(['sales', 'sales_executive', 'sales_manager', 'operations_manager', 'operations']);
-const OPERATIONS_ROLES = new Set(['operations_manager', 'operations']);
+const { shouldHideDealFinancials } = require('./dealFinancials');
 
 function roleNameFromRequest(req) {
   return req.user?.role?.name || req.user?.Role?.name || null;
 }
 
-function assertCanGenerateInvoice(req) {
-  const role = roleNameFromRequest(req);
-  if (INVOICE_GENERATION_BLOCKED_ROLES.has(role)) {
+/**
+ * Invoice generation requires holding proforma_invoices.create / tax_invoices.create.
+ * Determined by whichever invoice route is calling — controllers pass the module.
+ */
+function assertCanGenerateInvoice(req, module = 'proforma_invoices') {
+  if (req.user?.role?.name === 'super_admin') return;
+  const hasPermission = req.user?.hasPermission || (() => false);
+  if (!hasPermission(`${module}.create`)) {
     throw ApiError.forbidden('Your role cannot create proforma or tax invoices');
   }
 }
 
-function isOperationsRole(role) {
-  return OPERATIONS_ROLES.has(role);
+/**
+ * "Operations" roles today are simply roles that can see deals/quotations but not
+ * pricing — same signal as shouldHideDealFinancials, kept as a distinct name for
+ * readability at call sites that gate on visibility rather than editability.
+ */
+function isOperationsRole(userOrRoleName) {
+  return shouldHideDealFinancials(userOrRoleName);
 }
 
 module.exports = {
-  INVOICE_GENERATION_BLOCKED_ROLES,
-  OPERATIONS_ROLES,
   roleNameFromRequest,
   assertCanGenerateInvoice,
   isOperationsRole,

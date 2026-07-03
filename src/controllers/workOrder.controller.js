@@ -32,7 +32,7 @@ const getAll = asyncHandler(async (req, res) => {
 
 const getById = asyncHandler(async (req, res) => {
   const workOrder = await workOrderService.getById(req.tenant.id, req.params.id);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   return ApiResponse.success(res, sanitizeWorkOrderDeal(workOrder, hideFinancials));
 });
 

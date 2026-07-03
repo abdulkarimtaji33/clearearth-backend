@@ -6,7 +6,7 @@ const { getSalesScope } = require('../utils/scopeHelper');
 const { assertCanGenerateInvoice } = require('../utils/roleAccess');
 
 const previewFromQuotation = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'proforma_invoices');
   const data = await proformaInvoiceService.getPreviewFromQuotation(req.tenant.id, req.params.quotationId, scope);
   return ApiResponse.success(res, data);
 });
@@ -14,7 +14,7 @@ const previewFromQuotation = asyncHandler(async (req, res) => {
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'proforma_invoices');
   const result = await proformaInvoiceService.getAll(req.tenant.id, {
     ...pagination,
     search,
@@ -30,26 +30,26 @@ const getAll = asyncHandler(async (req, res) => {
 });
 
 const getById = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'proforma_invoices');
   const row = await proformaInvoiceService.getById(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, row);
 });
 
 const create = asyncHandler(async (req, res) => {
   assertCanGenerateInvoice(req);
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'proforma_invoices');
   const row = await proformaInvoiceService.create(req.tenant.id, req.user.id, req.body, scope);
   return ApiResponse.created(res, row, 'Proforma invoice created');
 });
 
 const update = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'proforma_invoices');
   const row = await proformaInvoiceService.update(req.tenant.id, req.params.id, req.body, scope);
   return ApiResponse.success(res, row, 'Proforma invoice updated');
 });
 
 const remove = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'proforma_invoices');
   await proformaInvoiceService.remove(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, null, 'Proforma invoice deleted');
 });

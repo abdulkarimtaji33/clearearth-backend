@@ -12,8 +12,8 @@ router.get('/:id', quotationController.getById);
 router.post('/', quotationController.create);
 router.put('/:id', quotationController.update);
 router.post('/:id/approve', authorize('quotations.approve'), quotationController.approve);
-router.post('/:id/request-approval', authorize('quotations.update'), quotationController.requestApproval);
-router.post('/:id/approve-with-pin', authorize('quotations.update'), [
+router.post('/:id/request-approval', authorize('quotations.update.own', 'quotations.update.all'), quotationController.requestApproval);
+router.post('/:id/approve-with-pin', authorize('quotations.update.own', 'quotations.update.all'), [
   param('id').isInt().withMessage('Valid quotation ID is required'),
   body('pin').notEmpty().withMessage('Approval PIN is required'),
   validate,

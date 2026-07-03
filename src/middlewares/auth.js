@@ -50,9 +50,20 @@ const authenticate = asyncHandler(async (req, res, next) => {
   // Attach user and tenant to request
   req.user = user;
   req.tenant = { id: decoded.tenantId };
+  req.user.hasPermission = (permission) => hasPermissionForUser(req.user, permission);
 
   next();
 });
+
+/**
+ * True if the user's role holds the given permission name, or the user is super_admin.
+ */
+const hasPermissionForUser = (user, permission) => {
+  if (!user?.role) return false;
+  if (user.role.name === 'super_admin') return true;
+  const userPermissions = (user.role.permissions || []).map(p => p.name);
+  return userPermissions.includes(permission);
+};
 
 /**
  * Check if user has specific permission
@@ -68,27 +79,48 @@ const authorize = (...permissions) => {
       return next();
     }
 
-    // Get user permissions
-    const userPermissions = req.user.role.permissions.map(p => p.name);
-    const roleName = req.user.role.name;
-
-    const userHas = (permission) => {
-      if (userPermissions.includes(permission)) return true;
-      // operations_manager: any operations.* satisfies operations.<action> checks
-      if (roleName === 'operations_manager' && permission.startsWith('operations.')) {
-        return userPermissions.some((p) => p.startsWith('operations.'));
-      }
-      return false;
-    };
-
     // Check if user has required permission (any one of the listed permissions)
-    const hasPermission = permissions.some((permission) => userHas(permission));
+    const hasPermission = permissions.some((permission) => hasPermissionForUser(req.user, permission));
 
     if (!hasPermission) {
       throw ApiError.forbidden('Insufficient permissions');
     }
 
     next();
+  });
+};
+
+/**
+ * Check own-vs-all record scope for a module/action pair (e.g. 'leads', 'read').
+ * Grants access if the role holds either `${module}.${action}.all` or `.own`;
+ * `.all` takes precedence. Attaches req.scope = { scopeUserId } on `.own`,
+ * or req.scope = {} on `.all` / super_admin, for controllers to apply as a filter.
+ */
+const authorizeScoped = (module, action) => {
+  return asyncHandler(async (req, res, next) => {
+    if (!req.user) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    if (req.user.role.name === 'super_admin') {
+      req.scope = {};
+      return next();
+    }
+
+    const allPermission = `${module}.${action}.all`;
+    const ownPermission = `${module}.${action}.own`;
+
+    if (hasPermissionForUser(req.user, allPermission)) {
+      req.scope = {};
+      return next();
+    }
+
+    if (hasPermissionForUser(req.user, ownPermission)) {
+      req.scope = { scopeUserId: req.user.id };
+      return next();
+    }
+
+    throw ApiError.forbidden('Insufficient permissions');
   });
 };
 
@@ -144,6 +176,8 @@ const optionalAuth = asyncHandler(async (req, res, next) => {
 module.exports = {
   authenticate,
   authorize,
+  authorizeScoped,
   authorizeRole,
   optionalAuth,
+  hasPermissionForUser,
 };

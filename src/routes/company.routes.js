@@ -28,12 +28,12 @@ const addContactValidation = [
   validate,
 ];
 
-router.get('/', authorize('companies.read'), companyController.getAll);
-router.get('/:id', authorize('companies.read'), companyController.getById);
+router.get('/', authorize('companies.read.own', 'companies.read.all'), companyController.getAll);
+router.get('/:id', authorize('companies.read.own', 'companies.read.all'), companyController.getById);
 router.post('/', authorize('companies.create'), createValidation, companyController.create);
-router.put('/:id', authorize('companies.update'), updateValidation, companyController.update);
-router.delete('/:id', authorize('companies.delete'), companyController.remove);
-router.post('/:id/contacts', authorize('companies.update'), addContactValidation, companyController.addContact);
-router.delete('/:id/contacts/:contactId', authorize('companies.update'), companyController.removeContact);
+router.put('/:id', authorize('companies.update.own', 'companies.update.all'), updateValidation, companyController.update);
+router.delete('/:id', authorize('companies.delete.own', 'companies.delete.all'), companyController.remove);
+router.post('/:id/contacts', authorize('companies.update.own', 'companies.update.all'), addContactValidation, companyController.addContact);
+router.delete('/:id/contacts/:contactId', authorize('companies.update.own', 'companies.update.all'), companyController.removeContact);
 
 module.exports = router;

@@ -332,7 +332,7 @@ const update = async (tenantId, poId, data, actor = null) => {
       throw ApiError.badRequest('Approved purchase quotations cannot be edited');
     }
     if (status !== undefined) {
-      assertManagerCanChangeStatus(actor, po.status, status);
+      assertManagerCanChangeStatus(actor, po.status, status, 'purchase_orders');
       if (po.status === PO_STATUS.PENDING_APPROVAL && status !== PO_STATUS.REJECTED) {
         throw ApiError.badRequest('Purchase quotation is awaiting approval');
       }
@@ -345,7 +345,7 @@ const update = async (tenantId, poId, data, actor = null) => {
       nextStatus = status;
     }
   } else if (status !== undefined) {
-    assertManagerCanChangeStatus(actor, po.status, status);
+    assertManagerCanChangeStatus(actor, po.status, status, 'purchase_orders');
     nextStatus = status;
   }
 
@@ -524,7 +524,7 @@ const _approveClientQuotation = async (po, { approvedByUserId }) => {
 };
 
 const approve = async (tenantId, poId, actor = {}) => {
-  if (!isManagerRole(actor.roleName)) {
+  if (!isManagerRole(actor, 'purchase_orders')) {
     throw ApiError.forbidden('Only a manager can approve purchase quotations. Use the approval PIN or request manager approval.');
   }
 

@@ -7,13 +7,13 @@ router.use(authenticate);
 
 router.get(
   '/preview-from-quotation/:quotationId',
-  authorize('accounting.read', 'deals.read'),
+  authorize('proforma_invoices.read.own', 'proforma_invoices.read.all', 'accounting.read', 'deals.read.own', 'deals.read.all'),
   proformaInvoiceController.previewFromQuotation
 );
-router.get('/', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getAll);
-router.get('/:id', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getById);
-router.post('/', authorize('accounting.create', 'deals.create'), proformaInvoiceController.create);
-router.put('/:id', authorize('accounting.update', 'deals.update'), proformaInvoiceController.update);
-router.delete('/:id', authorize('accounting.delete', 'deals.delete'), proformaInvoiceController.remove);
+router.get('/', authorize('proforma_invoices.read.own', 'proforma_invoices.read.all', 'accounting.read', 'deals.read.own', 'deals.read.all'), proformaInvoiceController.getAll);
+router.get('/:id', authorize('proforma_invoices.read.own', 'proforma_invoices.read.all', 'accounting.read', 'deals.read.own', 'deals.read.all'), proformaInvoiceController.getById);
+router.post('/', authorize('proforma_invoices.create', 'accounting.create', 'deals.create'), proformaInvoiceController.create);
+router.put('/:id', authorize('proforma_invoices.update.own', 'proforma_invoices.update.all', 'accounting.update', 'deals.update.own', 'deals.update.all'), proformaInvoiceController.update);
+router.delete('/:id', authorize('proforma_invoices.delete.own', 'proforma_invoices.delete.all', 'accounting.delete', 'deals.delete.own', 'deals.delete.all'), proformaInvoiceController.remove);
 
 module.exports = router;

@@ -10,7 +10,7 @@ const { getSalesScope } = require('../utils/scopeHelper');
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, designation, department, companyId, supplierId, contactType, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'contacts');
 
   const result = await contactService.getAll(req.tenant.id, { ...pagination, search, status, designation, department, companyId, supplierId, contactType, dateFrom, dateTo, ...scope });
 
@@ -22,25 +22,25 @@ const getAll = asyncHandler(async (req, res) => {
 });
 
 const getById = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'contacts');
   const contact = await contactService.getById(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, contact);
 });
 
 const create = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'contacts');
   const contact = await contactService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, contact, 'Contact created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'contacts');
   const contact = await contactService.update(req.tenant.id, req.params.id, req.body, scope);
   return ApiResponse.success(res, contact, 'Contact updated successfully');
 });
 
 const remove = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'contacts');
   await contactService.remove(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, null, 'Contact deleted successfully');
 });

@@ -26,19 +26,19 @@ const updateValidation = [
   validate,
 ];
 
-router.get('/', authorize('leads.read'), leadController.getAll);
-router.get('/:id', authorize('leads.read'), leadController.getById);
+router.get('/', authorize('leads.read.own', 'leads.read.all'), leadController.getAll);
+router.get('/:id', authorize('leads.read.own', 'leads.read.all'), leadController.getById);
 router.post('/', authorize('leads.create'), createValidation, leadController.create);
-router.put('/:id', authorize('leads.update'), updateValidation, leadController.update);
+router.put('/:id', authorize('leads.update.own', 'leads.update.all'), updateValidation, leadController.update);
 router.post('/:id/qualify', authorize('leads.approve'), leadController.qualify);
-router.post('/:id/request-approval', authorize('leads.update'), leadController.requestApproval);
-router.post('/:id/approve-with-pin', authorize('leads.update'), [
+router.post('/:id/request-approval', authorize('leads.update.own', 'leads.update.all'), leadController.requestApproval);
+router.post('/:id/approve-with-pin', authorize('leads.update.own', 'leads.update.all'), [
   param('id').isInt().withMessage('Valid lead ID is required'),
   body('pin').notEmpty().withMessage('Approval PIN is required'),
   validate,
 ], leadController.approveWithPin);
-router.post('/:id/disqualify', authorize('leads.update'), leadController.disqualify);
-router.post('/:id/convert', authorize('leads.update'), leadController.convertToDeal);
-router.delete('/:id', authorize('leads.delete'), leadController.remove);
+router.post('/:id/disqualify', authorize('leads.update.own', 'leads.update.all'), leadController.disqualify);
+router.post('/:id/convert', authorize('leads.update.own', 'leads.update.all'), leadController.convertToDeal);
+router.delete('/:id', authorize('leads.delete.own', 'leads.delete.all'), leadController.remove);
 
 module.exports = router;

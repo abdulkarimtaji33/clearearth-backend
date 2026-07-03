@@ -3,32 +3,58 @@
  * Creates default permissions and assigns them to roles
  */
 const db = require('../models');
-const { MODULES, ACTIONS } = require('../constants');
+const { MODULES, ACTIONS, SCOPED_MODULES, SCOPED_ACTIONS, SCOPES, FINANCIAL_MODULES, PRICE_ACTION } = require('../constants');
+
+const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
+
+const buildPermissions = () => {
+  const permissions = [];
+  const seen = new Set();
+
+  const add = ({ module, action, scope = null }) => {
+    const name = scope ? `${module}.${action}.${scope}` : `${module}.${action}`;
+    if (seen.has(name)) return;
+    seen.add(name);
+    const displayName = scope
+      ? `${titleCase(action)} ${titleCase(module)} (${titleCase(scope)})`
+      : `${titleCase(action)} ${titleCase(module)}`;
+    permissions.push({
+      name,
+      display_name: displayName,
+      module,
+      action,
+      scope,
+      description: scope
+        ? `Permission to ${action} ${scope === 'own' ? 'own' : 'all'} ${module}`
+        : `Permission to ${action} ${module}`,
+    });
+  };
+
+  const modules = Object.values(MODULES);
+  const actions = Object.values(ACTIONS);
+
+  for (const module of modules) {
+    for (const action of actions) {
+      if (SCOPED_MODULES.includes(module) && SCOPED_ACTIONS.includes(action)) {
+        add({ module, action, scope: SCOPES.OWN });
+        add({ module, action, scope: SCOPES.ALL });
+      } else {
+        add({ module, action });
+      }
+    }
+  }
+
+  for (const module of FINANCIAL_MODULES) {
+    add({ module, action: PRICE_ACTION });
+  }
+
+  return permissions;
+};
 
 const createPermissions = async () => {
   console.log('Creating permissions...');
 
-  const permissions = [];
-
-  // Define modules and their actions
-  const modules = Object.values(MODULES);
-  const actions = Object.values(ACTIONS);
-
-  // Create permissions for each module and action combination
-  for (const module of modules) {
-    for (const action of actions) {
-      const name = `${module}.${action}`;
-      const displayName = `${action.charAt(0).toUpperCase() + action.slice(1)} ${module.charAt(0).toUpperCase() + module.slice(1)}`;
-      
-      permissions.push({
-        name,
-        display_name: displayName,
-        module,
-        action,
-        description: `Permission to ${action} ${module}`,
-      });
-    }
-  }
+  const permissions = buildPermissions();
 
   // Bulk create permissions (ignore duplicates)
   try {

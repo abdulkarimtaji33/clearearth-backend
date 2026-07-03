@@ -165,7 +165,7 @@ const _approveQuotation = async (quotation, { approvedByUserId }) => {
 };
 
 const approve = async (tenantId, quotationId, scope = {}, actor = {}) => {
-  if (!isManagerRole(actor.roleName)) {
+  if (!isManagerRole(actor, 'quotations')) {
     throw ApiError.forbidden('Only a manager can approve quotations. Use the approval PIN or request manager approval.');
   }
 

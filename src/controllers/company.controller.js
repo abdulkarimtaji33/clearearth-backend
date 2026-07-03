@@ -10,7 +10,7 @@ const { getSalesScope } = require('../utils/scopeHelper');
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, industryType, country, city, contactId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'companies');
 
   const result = await companyService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, dateFrom, dateTo, ...scope });
 
@@ -22,31 +22,31 @@ const getAll = asyncHandler(async (req, res) => {
 });
 
 const getById = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'companies');
   const company = await companyService.getById(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, company);
 });
 
 const create = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'companies');
   const company = await companyService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, company, 'Company created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'companies');
   const company = await companyService.update(req.tenant.id, req.params.id, req.body, scope);
   return ApiResponse.success(res, company, 'Company updated successfully');
 });
 
 const remove = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'companies');
   await companyService.remove(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, null, 'Company deleted successfully');
 });
 
 const addContact = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'companies');
   const { contactId, role, isPrimary } = req.body;
   const company = await companyService.addContact(
     req.tenant.id, req.params.id, contactId, role, isPrimary, scope
@@ -55,7 +55,7 @@ const addContact = asyncHandler(async (req, res) => {
 });
 
 const removeContact = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'companies');
   const company = await companyService.removeContact(
     req.tenant.id, req.params.id, req.params.contactId, scope
   );

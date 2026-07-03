@@ -25,7 +25,7 @@ const getAll = asyncHandler(async (req, res) => {
     dateFrom,
     dateTo,
   });
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   const purchaseOrders = hideFinancials
     ? result.purchaseOrders.map((po) => sanitizePurchaseOrderPayload(po, true))
     : result.purchaseOrders;
@@ -38,18 +38,18 @@ const getAll = asyncHandler(async (req, res) => {
 
 const getById = asyncHandler(async (req, res) => {
   const po = await purchaseOrderService.getById(req.tenant.id, req.params.id);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   return ApiResponse.success(res, sanitizePurchaseOrderPayload(po, hideFinancials));
 });
 
 const create = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req.user);
   const po = await purchaseOrderService.create(req.tenant.id, req.body);
   return ApiResponse.created(res, po, 'Purchase order created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req.user);
   const po = await purchaseOrderService.update(req.tenant.id, req.params.id, req.body, {
     userId: req.user.id,
     roleName: req.user.role?.name,
@@ -58,7 +58,7 @@ const update = asyncHandler(async (req, res) => {
 });
 
 const approve = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req.user);
   const po = await purchaseOrderService.approve(req.tenant.id, req.params.id, {
     userId: req.user.id,
     roleName: req.user.role?.name,
@@ -67,13 +67,13 @@ const approve = asyncHandler(async (req, res) => {
 });
 
 const requestApproval = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req.user);
   const po = await purchaseOrderService.requestApproval(req.tenant.id, req.params.id, req.user);
   return ApiResponse.success(res, po, 'Approval requested');
 });
 
 const approveWithPin = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req.user);
   const po = await purchaseOrderService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, {
     userId: req.user.id,
     roleName: req.user.role?.name,
@@ -82,13 +82,13 @@ const approveWithPin = asyncHandler(async (req, res) => {
 });
 
 const remove = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req.user);
   await purchaseOrderService.remove(req.tenant.id, req.params.id);
   return ApiResponse.success(res, null, 'Purchase order deleted');
 });
 
 const getPdf = asyncHandler(async (req, res) => {
-  if (shouldHideDealFinancials(req.user?.role?.name)) {
+  if (shouldHideDealFinancials(req.user)) {
     throw ApiError.forbidden('Operations managers cannot download quotation or order PDFs with pricing.');
   }
   const po = await purchaseOrderService.getById(req.tenant.id, req.params.id);

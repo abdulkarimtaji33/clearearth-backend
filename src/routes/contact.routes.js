@@ -27,10 +27,10 @@ const updateValidation = [
   validate,
 ];
 
-router.get('/', authorize('contacts.read'), contactController.getAll);
-router.get('/:id', authorize('contacts.read'), contactController.getById);
+router.get('/', authorize('contacts.read.own', 'contacts.read.all'), contactController.getAll);
+router.get('/:id', authorize('contacts.read.own', 'contacts.read.all'), contactController.getById);
 router.post('/', authorize('contacts.create'), createValidation, contactController.create);
-router.put('/:id', authorize('contacts.update'), updateValidation, contactController.update);
-router.delete('/:id', authorize('contacts.delete'), contactController.remove);
+router.put('/:id', authorize('contacts.update.own', 'contacts.update.all'), updateValidation, contactController.update);
+router.delete('/:id', authorize('contacts.delete.own', 'contacts.delete.all'), contactController.remove);
 
 module.exports = router;

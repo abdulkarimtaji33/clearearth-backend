@@ -14,7 +14,7 @@ const {
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, statusNot, dealId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'quotations');
   const result = await quotationService.getAll(req.tenant.id, {
     ...pagination,
     search,
@@ -25,7 +25,7 @@ const getAll = asyncHandler(async (req, res) => {
     dateTo,
     ...scope,
   });
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   const quotations = hideFinancials
     ? result.quotations.map((q) => sanitizeQuotationListItem(q, true))
     : result.quotations;
@@ -37,22 +37,22 @@ const getAll = asyncHandler(async (req, res) => {
 });
 
 const getById = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'quotations');
   const quotation = await quotationService.getById(req.tenant.id, req.params.id, scope);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials));
 });
 
 const create = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
+  assertCanModifyQuotationsAndOrders(req.user);
+  const scope = getSalesScope(req, 'quotations');
   const quotation = await quotationService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, quotation, 'Quotation created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
+  assertCanModifyQuotationsAndOrders(req.user);
+  const scope = getSalesScope(req, 'quotations');
   const quotation = await quotationService.update(req.tenant.id, req.params.id, req.body, scope, {
     userId: req.user.id,
     roleName: req.user.role?.name,
@@ -61,47 +61,47 @@ const update = asyncHandler(async (req, res) => {
 });
 
 const remove = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
+  assertCanModifyQuotationsAndOrders(req.user);
+  const scope = getSalesScope(req, 'quotations');
   await quotationService.remove(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, null, 'Quotation deleted');
 });
 
 const approve = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
+  assertCanModifyQuotationsAndOrders(req.user);
+  const scope = getSalesScope(req, 'quotations');
   const quotation = await quotationService.approve(req.tenant.id, req.params.id, scope, {
     userId: req.user.id,
     roleName: req.user.role?.name,
   });
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Quotation approved');
 });
 
 const requestApproval = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
+  assertCanModifyQuotationsAndOrders(req.user);
+  const scope = getSalesScope(req, 'quotations');
   const quotation = await quotationService.requestApproval(req.tenant.id, req.params.id, scope, req.user);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Approval requested');
 });
 
 const approveWithPin = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
+  assertCanModifyQuotationsAndOrders(req.user);
+  const scope = getSalesScope(req, 'quotations');
   const quotation = await quotationService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, scope, {
     userId: req.user.id,
     roleName: req.user.role?.name,
   });
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req.user);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Quotation approved');
 });
 
 const getPdf = asyncHandler(async (req, res) => {
-  if (shouldHideDealFinancials(req.user?.role?.name)) {
+  if (shouldHideDealFinancials(req.user)) {
     throw ApiError.forbidden('Operations managers cannot download quotation or order PDFs with pricing.');
   }
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'quotations');
   const quotation = await quotationService.getById(req.tenant.id, req.params.id, scope);
   const variant = String(req.query.documentType || req.query.variant || '').toLowerCase();
   const pdfOptions = {};

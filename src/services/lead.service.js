@@ -176,7 +176,7 @@ const _approveLead = async (lead, { notes, approvedByUserId }) => {
 };
 
 const qualify = async (tenantId, leadId, notes, scope = {}, actor = {}) => {
-  if (!isManagerRole(actor.roleName)) {
+  if (!isManagerRole(actor, 'leads')) {
     throw ApiError.forbidden('Only a manager can approve leads. Use the approval PIN or request manager approval.');
   }
 

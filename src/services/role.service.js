@@ -1,6 +1,7 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
+const { MODULES, SCOPES } = require('../constants');
 const { Op } = db.Sequelize;
 
 const getAll = async (tenantId, filters = {}) => {
@@ -187,6 +188,45 @@ const assignPermissionsToRole = async (tenantId, roleId, permissionIds) => {
   return await getById(tenantId, roleId);
 };
 
+/**
+ * Create a new permission. `module` must be a real module from the registry
+ * (constants.MODULES) — action and scope are free-form so admins can define
+ * custom actions/scopes for a module without a code change.
+ */
+const createPermission = async (data) => {
+  const module = (data.module || '').trim().toLowerCase();
+  const action = (data.action || '').trim().toLowerCase();
+  const scope = data.scope ? String(data.scope).trim().toLowerCase() : null;
+
+  if (!module || !action) {
+    throw ApiError.badRequest('module and action are required');
+  }
+
+  if (!Object.values(MODULES).includes(module)) {
+    throw ApiError.badRequest(`Unknown module "${module}"`);
+  }
+
+  if (scope && !Object.values(SCOPES).includes(scope)) {
+    throw ApiError.badRequest(`Invalid scope "${scope}" — must be "own" or "all"`);
+  }
+
+  const name = scope ? `${module}.${action}.${scope}` : `${module}.${action}`;
+
+  const existing = await db.Permission.findOne({ where: { name } });
+  if (existing) throw ApiError.conflict('Permission already exists');
+
+  const displayName = data.displayName || data.display_name || name;
+
+  return await db.Permission.create({
+    name,
+    display_name: displayName,
+    module,
+    action,
+    scope,
+    description: data.description || null,
+  });
+};
+
 module.exports = {
   getAll,
   getById,
@@ -195,4 +235,5 @@ module.exports = {
   remove,
   getAllPermissions,
   assignPermissionsToRole,
+  createPermission,
 };

@@ -7,7 +7,7 @@ const { getSalesScope } = require('../utils/scopeHelper');
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, dealId, status, priority, responseStatus, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'inspection_requests');
   const result = await inspectionRequestService.getAll(req.tenant.id, {
     ...pagination,
     search,
@@ -27,33 +27,33 @@ const getAll = asyncHandler(async (req, res) => {
 });
 
 const getById = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'inspection_requests');
   const request = await inspectionRequestService.getById(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, request);
 });
 
 const updateStatus = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'inspection_requests');
   const { status } = req.body;
   const request = await inspectionRequestService.updateStatus(req.tenant.id, req.params.id, status, scope);
   return ApiResponse.success(res, request);
 });
 
 const updatePriority = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'inspection_requests');
   const { priority } = req.body;
   const request = await inspectionRequestService.updatePriority(req.tenant.id, req.params.id, priority, scope);
   return ApiResponse.success(res, request);
 });
 
 const acceptRequest = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'inspection_requests');
   const request = await inspectionRequestService.acceptRequest(req.tenant.id, req.params.id, scope, req.user);
   return ApiResponse.success(res, request, 'Inspection request accepted');
 });
 
 const rejectRequest = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = getSalesScope(req, 'inspection_requests');
   const { reason } = req.body;
   const request = await inspectionRequestService.rejectRequest(req.tenant.id, req.params.id, reason, scope, req.user);
   return ApiResponse.success(res, request, 'Inspection request rejected');

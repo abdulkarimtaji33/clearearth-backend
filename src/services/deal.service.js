@@ -456,7 +456,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
 
     let nextStatus = deal.status;
     if (data.status !== undefined && data.status !== deal.status) {
-      assertManagerCanChangeStatus(actor, deal.status, data.status);
+      assertManagerCanChangeStatus(actor, deal.status, data.status, 'deals');
       if (deal.status === DEAL_STATUS.PENDING_APPROVAL && data.status !== DEAL_STATUS.LOST) {
         throw ApiError.badRequest('Deal is awaiting approval');
       }
@@ -770,7 +770,7 @@ const _approveDeal = async (deal, { approvedByUserId }) => {
 };
 
 const approve = async (tenantId, dealId, scope = {}, actor = {}) => {
-  if (!isManagerRole(actor.roleName)) {
+  if (!isManagerRole(actor, 'deals')) {
     throw ApiError.forbidden('Only a manager can approve deals. Use the approval PIN or request manager approval.');
   }
 

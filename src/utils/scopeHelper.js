@@ -1,13 +1,17 @@
 /**
- * Helper to build scope filters for sales role (own records only).
- * Sales Manager: no scope (sees all).
- * Sales: scopeUserId = req.user.id (sees own records only).
+ * Helper to build scope filters for a module's record visibility.
+ * Holds `${module}.read.all` -> no scope (sees all).
+ * Holds `${module}.read.own` only -> scopeUserId = req.user.id (sees own records only).
+ * Holds neither (e.g. legacy role with no scoped permissions assigned) -> no scope,
+ * matching pre-existing behavior for every role except 'sales'.
  */
-function getSalesScope(req) {
-  if (!req?.user?.role?.name) return {};
-  if (req.user.role.name === 'sales') {
-    return { scopeUserId: req.user.id };
-  }
+function getSalesScope(req, module) {
+  if (!req?.user?.role) return {};
+  if (req.user.role.name === 'super_admin') return {};
+  const hasPermission = req.user.hasPermission || (() => false);
+  if (!module) return {};
+  if (hasPermission(`${module}.read.all`)) return {};
+  if (hasPermission(`${module}.read.own`)) return { scopeUserId: req.user.id };
   return {};
 }
 
