@@ -2180,6 +2180,27 @@ async function runMigration() {
       console.warn('  Backfill purchase_orders.created_by:', e.message);
     }
 
+    console.log('Adding contact_type both enum value...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE contacts
+        MODIFY contact_type ENUM('clients', 'vendors', 'both') DEFAULT NULL
+      `);
+      console.log('  contact_type enum includes both');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  contact_type both:', e.message);
+      else console.log('  contact_type enum already updated');
+    }
+
+    console.log('Cleaning soft-deleted contact junction rows...');
+    try {
+      const [cc] = await db.sequelize.query('DELETE FROM company_contacts WHERE deleted_at IS NOT NULL');
+      const [sc] = await db.sequelize.query('DELETE FROM supplier_contacts WHERE deleted_at IS NOT NULL');
+      console.log(`  removed ${cc?.affectedRows ?? 0} company_contacts, ${sc?.affectedRows ?? 0} supplier_contacts`);
+    } catch (e) {
+      if (!e.message?.includes('Unknown column')) console.warn('  junction cleanup:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

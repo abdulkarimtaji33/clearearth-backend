@@ -76,7 +76,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'active',
       },
       contact_type: {
-        type: DataTypes.ENUM('clients', 'vendors'),
+        type: DataTypes.ENUM('clients', 'vendors', 'both'),
         allowNull: true,
       },
       created_by: {

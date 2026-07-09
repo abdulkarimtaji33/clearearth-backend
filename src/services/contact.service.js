@@ -16,6 +16,56 @@ const _buildContactWhereForSales = async (tenantId, contactId, scopeUserId) => {
   return where;
 };
 
+const _resolveContactType = (companyId, supplierId, explicitType) => {
+  const hasC = companyId != null && companyId !== '';
+  const hasS = supplierId != null && supplierId !== '';
+  if (explicitType === 'both' || (hasC && hasS)) return 'both';
+  if (hasS) return 'vendors';
+  if (hasC) return 'clients';
+  if (explicitType === 'clients' || explicitType === 'vendors' || explicitType === 'both') return explicitType;
+  return null;
+};
+
+const _normalizeOptionalId = (value) => {
+  if (value == null || value === '') return null;
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? null : n;
+};
+
+const _syncCompanyContactLink = async (contactId, prevCompanyId, nextCompanyId) => {
+  const cid = parseInt(contactId, 10);
+  const prev = _normalizeOptionalId(prevCompanyId);
+  const next = _normalizeOptionalId(nextCompanyId);
+  if (prev === next) return;
+
+  await db.CompanyContact.destroy({ where: { contact_id: cid }, force: true });
+  if (next) {
+    await db.CompanyContact.create({
+      company_id: next,
+      contact_id: cid,
+      role: null,
+      is_primary: true,
+    });
+  }
+};
+
+const _syncSupplierContactLink = async (contactId, prevSupplierId, nextSupplierId) => {
+  const cid = parseInt(contactId, 10);
+  const prev = _normalizeOptionalId(prevSupplierId);
+  const next = _normalizeOptionalId(nextSupplierId);
+  if (prev === next) return;
+
+  await db.SupplierContact.destroy({ where: { contact_id: cid }, force: true });
+  if (next) {
+    await db.SupplierContact.create({
+      supplier_id: next,
+      contact_id: cid,
+      role: null,
+      is_primary: true,
+    });
+  }
+};
+
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, status, designation, department, companyId, supplierId, contactType, scopeUserId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
@@ -45,7 +95,13 @@ const getAll = async (tenantId, filters) => {
   }
 
   if (status) where.status = status;
-  if (contactType) where.contact_type = contactType;
+  if (contactType === 'clients') {
+    where.contact_type = { [Op.in]: ['clients', 'both'] };
+  } else if (contactType === 'vendors') {
+    where.contact_type = { [Op.in]: ['vendors', 'both'] };
+  } else if (contactType) {
+    where.contact_type = contactType;
+  }
   if (designation) where.designation = designation;
   if (department) where.department = { [Op.like]: `%${department}%` };
   if (companyId) where.company_id = companyId;
@@ -119,6 +175,8 @@ const create = async (tenantId, data, scope = {}) => {
     if (!supplier) throw ApiError.notFound('Supplier not found');
   }
 
+  const resolvedContactType = _resolveContactType(companyId, supplierId, contactType);
+
   const contact = await db.Contact.create({
     tenant_id: tenantId,
     first_name: firstName,
@@ -132,7 +190,7 @@ const create = async (tenantId, data, scope = {}) => {
     company_id: companyId || null,
     supplier_id: supplierId || null,
     notes: notes || null,
-    contact_type: contactType || null,
+    contact_type: resolvedContactType,
     status: 'active',
     created_by: scope.scopeUserId || null,
   });
@@ -141,7 +199,7 @@ const create = async (tenantId, data, scope = {}) => {
 
   if (company && (setAsPrimaryContact || !company.primary_contact_id)) {
     await company.update({ primary_contact_id: contact.id });
-    
+
     const [link, created] = await db.CompanyContact.findOrCreate({
       where: { company_id: company.id, contact_id: contact.id },
       defaults: { role: null, is_primary: true },
@@ -149,6 +207,11 @@ const create = async (tenantId, data, scope = {}) => {
     if (!created) {
       await link.update({ is_primary: true });
     }
+  } else if (company) {
+    await db.CompanyContact.findOrCreate({
+      where: { company_id: company.id, contact_id: contact.id },
+      defaults: { role: null, is_primary: false },
+    });
   }
 
   if (supplier && (setAsPrimaryContact || !supplier.primary_contact_id)) {
@@ -196,9 +259,9 @@ const update = async (tenantId, contactId, data, scope = {}) => {
 
   const newCompanyId = data.companyId !== undefined ? data.companyId : contact.company_id;
   const newSupplierId = data.supplierId !== undefined ? data.supplierId : contact.supplier_id;
-  if (newCompanyId && newSupplierId) {
-    throw ApiError.badRequest('Contact cannot be linked to both company and supplier. Choose one.');
-  }
+  const resolvedContactType = data.contactType !== undefined
+    ? _resolveContactType(newCompanyId, newSupplierId, data.contactType)
+    : _resolveContactType(newCompanyId, newSupplierId, contact.contact_type);
 
   await contact.update({
     first_name: data.firstName !== undefined ? data.firstName : contact.first_name,
@@ -212,29 +275,16 @@ const update = async (tenantId, contactId, data, scope = {}) => {
     company_id: data.companyId !== undefined ? data.companyId : contact.company_id,
     supplier_id: data.supplierId !== undefined ? data.supplierId : contact.supplier_id,
     notes: data.notes !== undefined ? data.notes : contact.notes,
-    contact_type: data.contactType !== undefined ? (data.contactType || null) : contact.contact_type,
+    contact_type: resolvedContactType,
     status: data.status !== undefined ? data.status : contact.status,
   });
 
-  // Sync CompanyContact
+  // Sync junction links only when company/supplier assignment changed
   if (data.companyId !== undefined) {
-    await db.CompanyContact.destroy({ where: { contact_id: contactId } });
-    if (data.companyId) {
-      const [link] = await db.CompanyContact.findOrCreate({
-        where: { company_id: data.companyId, contact_id: contactId },
-        defaults: { role: null, is_primary: true },
-      });
-    }
+    await _syncCompanyContactLink(contactId, contact.company_id, data.companyId);
   }
-  // Sync SupplierContact
   if (data.supplierId !== undefined) {
-    await db.SupplierContact.destroy({ where: { contact_id: contactId } });
-    if (data.supplierId) {
-      const [link] = await db.SupplierContact.findOrCreate({
-        where: { supplier_id: data.supplierId, contact_id: contactId },
-        defaults: { role: null, is_primary: true },
-      });
-    }
+    await _syncSupplierContactLink(contactId, contact.supplier_id, data.supplierId);
   }
 
   return getById(tenantId, contact.id);

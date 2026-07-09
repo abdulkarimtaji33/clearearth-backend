@@ -9,7 +9,7 @@ router.use(authenticate);
 
 const createValidation = [
   body('firstName').notEmpty().withMessage('First name is required'),
-  body('contactType').notEmpty().withMessage('Contact type is required').isIn(['clients', 'vendors']).withMessage('Contact type must be clients or vendors'),
+  body('contactType').notEmpty().withMessage('Contact type is required').isIn(['clients', 'vendors', 'both']).withMessage('Contact type must be clients, vendors, or both'),
   body('lastName').optional({ values: 'falsy' }),
   body('phone').notEmpty().withMessage('Phone is required'),
   body('email')
@@ -36,6 +36,7 @@ const updateValidation = [
     .withMessage('Please enter a valid email address'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   body('supplierId').optional({ values: 'falsy' }).isInt().withMessage('Valid supplier ID is required'),
+  body('contactType').optional({ values: 'falsy' }).isIn(['clients', 'vendors', 'both']).withMessage('Contact type must be clients, vendors, or both'),
   validate,
 ];
 

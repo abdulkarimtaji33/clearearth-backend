@@ -33,6 +33,7 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'company_contacts',
       timestamps: true,
       underscored: true,
+      paranoid: false,
       indexes: [
         { fields: ['company_id'] },
         { fields: ['contact_id'] },
