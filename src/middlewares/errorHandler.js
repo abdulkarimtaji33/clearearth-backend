@@ -6,6 +6,11 @@ const ApiError = require('../utils/apiError');
 const ApiResponse = require('../utils/apiResponse');
 const logger = require('../utils/logger');
 const config = require('../config');
+const {
+  humanizeSequelizeValidationError,
+  buildUserFriendlyMessage,
+  humanizeField,
+} = require('../utils/userFriendlyErrors');
 
 /**
  * Error Handler Middleware
@@ -28,15 +33,15 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'SequelizeValidationError') {
     const errors = err.errors.map(e => ({
       field: e.path,
-      message: e.message,
+      message: humanizeSequelizeValidationError(e),
     }));
-    error = ApiError.validationError('Validation failed', errors);
+    error = ApiError.validationError(buildUserFriendlyMessage('Validation failed', errors), errors);
   }
 
   // Handle Sequelize Unique Constraint Errors
   if (err.name === 'SequelizeUniqueConstraintError') {
     const field = err.errors[0]?.path || 'field';
-    error = ApiError.conflict(`${field} already exists`);
+    error = ApiError.conflict(`${humanizeField(field)} is already in use.`);
   }
 
   // Handle Sequelize Foreign Key Constraint Errors
@@ -78,9 +83,10 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Send error response
+  const friendlyMessage = buildUserFriendlyMessage(error.message, error.errors);
   return ApiResponse.error(
     res,
-    error.message,
+    friendlyMessage,
     error.statusCode,
     config.app.env === 'development' ? error.errors || err.stack : error.errors
   );

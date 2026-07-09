@@ -10,7 +10,7 @@ const { body } = require('express-validator');
 
 // Validation rules
 const loginValidation = [
-  body('email').isEmail().withMessage('Valid email is required'),
+  body('email').isEmail().withMessage('Please enter a valid email address'),
   body('password').notEmpty().withMessage('Password is required'),
   validate,
 ];
@@ -18,7 +18,7 @@ const loginValidation = [
 const registerValidation = [
   body('tenantName').notEmpty().withMessage('Tenant name is required'),
   body('companyName').notEmpty().withMessage('Company name is required'),
-  body('email').isEmail().withMessage('Valid email is required'),
+  body('email').isEmail().withMessage('Please enter a valid email address'),
   body('password')
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
@@ -35,7 +35,7 @@ const refreshTokenValidation = [
 ];
 
 const forgotPasswordValidation = [
-  body('email').isEmail().withMessage('Valid email is required'),
+  body('email').isEmail().withMessage('Please enter a valid email address'),
   validate,
 ];
 

@@ -2155,6 +2155,31 @@ async function runMigration() {
       console.warn('  Backfill PO item UOM:', e.message);
     }
 
+    console.log('Adding created_by to purchase_orders (sales scoping)...');
+    try {
+      await db.sequelize.query('ALTER TABLE purchase_orders ADD COLUMN created_by INT NULL');
+      console.log('  created_by column added');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  created_by:', e.message);
+      else console.log('  created_by column already present');
+    }
+    try {
+      await db.sequelize.query('ALTER TABLE purchase_orders ADD INDEX idx_po_created_by (created_by)');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  idx_po_created_by:', e.message);
+    }
+    try {
+      await db.sequelize.query(`
+        UPDATE purchase_orders po
+        INNER JOIN deals d ON po.deal_id = d.id
+        SET po.created_by = d.assigned_to
+        WHERE po.created_by IS NULL AND d.assigned_to IS NOT NULL
+      `);
+      console.log('  Backfilled purchase_orders.created_by from deals');
+    } catch (e) {
+      console.warn('  Backfill purchase_orders.created_by:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

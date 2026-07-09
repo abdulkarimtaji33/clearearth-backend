@@ -3,6 +3,7 @@
  */
 const { validationResult } = require('express-validator');
 const ApiError = require('../utils/apiError');
+const { buildUserFriendlyMessage } = require('../utils/userFriendlyErrors');
 
 /**
  * Validate request and return errors if any
@@ -17,7 +18,8 @@ const validate = (req, res, next) => {
       value: error.value,
     }));
 
-    throw ApiError.validationError('Validation failed', formattedErrors);
+    const message = buildUserFriendlyMessage('Validation failed', formattedErrors);
+    throw ApiError.validationError(message, formattedErrors);
   }
 
   next();

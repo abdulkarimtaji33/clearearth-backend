@@ -66,8 +66,21 @@ const normalizePoItems = (items, existingItems = [], isBill = false) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo } = filters;
+  const { offset, limit, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo, scopeUserId } = filters;
   const where = { tenant_id: tenantId };
+  const andConditions = [];
+
+  if (scopeUserId) {
+    andConditions.push({
+      [Op.or]: [
+        { created_by: scopeUserId },
+        {
+          created_by: null,
+          '$deal.assigned_to$': scopeUserId,
+        },
+      ],
+    });
+  }
 
   if (companyId) {
     where.company_id = companyId;
@@ -88,16 +101,24 @@ const getAll = async (tenantId, filters) => {
   applyDateOnlyColumnFilter(where, 'po_date', dateFrom, dateTo);
 
   if (search) {
-    where[Op.or] = [
-      { '$supplier.company_name$': { [Op.like]: `%${search}%` } },
-      { '$company.company_name$': { [Op.like]: `%${search}%` } },
-    ];
+    andConditions.push({
+      [Op.or]: [
+        { '$supplier.company_name$': { [Op.like]: `%${search}%` } },
+        { '$company.company_name$': { [Op.like]: `%${search}%` } },
+      ],
+    });
+  }
+
+  if (andConditions.length === 1) {
+    Object.assign(where, andConditions[0]);
+  } else if (andConditions.length > 1) {
+    where[Op.and] = andConditions;
   }
 
   const { count, rows } = await db.PurchaseOrder.findAndCountAll({
     where,
     include: [
-      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number', 'assigned_to'], required: false },
       { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
       { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
       {
@@ -132,11 +153,19 @@ const getAll = async (tenantId, filters) => {
   return { purchaseOrders: rows, total: count };
 };
 
-const getById = async (tenantId, poId) => {
+const _poAccessibleByScope = (po, scopeUserId) => {
+  if (!scopeUserId) return true;
+  if (po.created_by === scopeUserId) return true;
+  const dealAssigned = po.deal?.assigned_to ?? po.get?.('deal.assigned_to');
+  if (!po.created_by && dealAssigned === scopeUserId) return true;
+  return false;
+};
+
+const getById = async (tenantId, poId, scope = {}) => {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId },
     include: [
-      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'] },
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number', 'assigned_to'] },
       { model: db.Company, as: 'company', required: false },
       { model: db.Supplier, as: 'supplier', required: false },
       {
@@ -163,6 +192,9 @@ const getById = async (tenantId, poId) => {
     ],
   });
   if (!po) throw ApiError.notFound('Purchase order not found');
+  if (scope.scopeUserId && !_poAccessibleByScope(po, scope.scopeUserId)) {
+    throw ApiError.notFound('Purchase order not found');
+  }
   return po;
 };
 
@@ -183,7 +215,7 @@ const _validateParty = async (tenantId, companyId, supplierId) => {
   return { hasC, hasS };
 };
 
-const create = async (tenantId, data) => {
+const create = async (tenantId, data, scope = {}) => {
   const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, workOrderId, documentType } = data;
 
   await _validateParty(tenantId, companyId, supplierId);
@@ -193,6 +225,9 @@ const create = async (tenantId, data) => {
   if (dealId) {
     const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
     if (!deal) throw ApiError.badRequest('Deal not found');
+    if (scope.scopeUserId && deal.assigned_to !== scope.scopeUserId) {
+      throw ApiError.forbidden('You can only create purchase quotations for your own deals');
+    }
   }
 
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -235,6 +270,7 @@ const create = async (tenantId, data) => {
         due_date: dueDate != null && dueDate !== '' ? dueDate : null,
         work_order_id: workOrderId || null,
         document_type: documentType === 'bill' ? 'bill' : 'quotation',
+        created_by: scope.scopeUserId || null,
       },
       { transaction: t }
     );
@@ -298,8 +334,8 @@ const create = async (tenantId, data) => {
   return getById(tenantId, po.id);
 };
 
-const update = async (tenantId, poId, data, actor = null) => {
-  const po = await getById(tenantId, poId);
+const update = async (tenantId, poId, data, actor = null, scope = {}) => {
+  const po = await getById(tenantId, poId, scope);
   const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate } = data;
 
   let nextCompanyId = po.company_id;
@@ -433,8 +469,8 @@ const update = async (tenantId, poId, data, actor = null) => {
   return getById(tenantId, po.id);
 };
 
-const remove = async (tenantId, poId) => {
-  const po = await getById(tenantId, poId);
+const remove = async (tenantId, poId, scope = {}) => {
+  const po = await getById(tenantId, poId, scope);
   await po.destroy();
 };
 
@@ -487,12 +523,12 @@ const _ensurePurchaseBillForWorkOrderParty = async (tenantId, workOrderId, party
   if (isClient) {
     const companyId = wo.deal.company_id;
     if (!companyId) return null;
-    return create(tenantId, { ...base, companyId, supplierId: null });
+    return create(tenantId, { ...base, companyId, supplierId: null }, { scopeUserId: wo.deal.assigned_to });
   }
 
   const supplierId = wo.deal.downstream_partner_supplier_id || wo.deal.supplier_id;
   if (!supplierId) return null;
-  return create(tenantId, { ...base, supplierId, companyId: null });
+  return create(tenantId, { ...base, supplierId, companyId: null }, { scopeUserId: wo.deal.assigned_to });
 };
 
 const ensurePurchaseBillForWorkOrder = async (tenantId, workOrderId) => {
@@ -523,13 +559,12 @@ const _approveClientQuotation = async (po, { approvedByUserId }) => {
   });
 };
 
-const approve = async (tenantId, poId, actor = {}) => {
+const approve = async (tenantId, poId, actor = {}, scope = {}) => {
   if (!isManagerRole(actor.roleName)) {
     throw ApiError.forbidden('Only a manager can approve purchase quotations. Use the approval PIN or request manager approval.');
   }
 
-  const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
-  if (!po) throw ApiError.notFound('Purchase order not found');
+  const po = await getById(tenantId, poId, scope);
 
   const prevStatus = po.status;
   await _approveClientQuotation(po, { approvedByUserId: actor.userId });
@@ -560,15 +595,8 @@ const approve = async (tenantId, poId, actor = {}) => {
   return getById(tenantId, poId);
 };
 
-const requestApproval = async (tenantId, poId, requestedByUser = null) => {
-  const po = await db.PurchaseOrder.findOne({
-    where: { id: poId, tenant_id: tenantId },
-    include: [
-      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
-      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
-    ],
-  });
-  if (!po) throw ApiError.notFound('Purchase order not found');
+const requestApproval = async (tenantId, poId, requestedByUser = null, scope = {}) => {
+  const po = await getById(tenantId, poId, scope);
   if (!_isClientQuotation(po)) {
     throw ApiError.badRequest('Only client purchase quotations can be submitted for approval');
   }
@@ -595,9 +623,8 @@ const requestApproval = async (tenantId, poId, requestedByUser = null) => {
   return getById(tenantId, poId);
 };
 
-const approveWithPin = async (tenantId, poId, pin, actor = {}) => {
-  const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
-  if (!po) throw ApiError.notFound('Purchase order not found');
+const approveWithPin = async (tenantId, poId, pin, actor = {}, scope = {}) => {
+  const po = await getById(tenantId, poId, scope);
 
   const pinValid = await verifyLeadApprovalPin(tenantId, pin);
   if (!pinValid) {

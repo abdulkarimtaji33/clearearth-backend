@@ -10,7 +10,7 @@ router.use(authenticate);
 const createValidation = [
   body('companyName').notEmpty().withMessage('Company name is required'),
   body('phone').optional({ values: 'falsy' }),
-  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
+  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Please enter a valid email address'),
   validate,
 ];
 
@@ -18,7 +18,7 @@ const updateValidation = [
   param('id').isInt().withMessage('Valid company ID is required'),
   body('companyName').optional().notEmpty().withMessage('Company name cannot be empty'),
   body('phone').optional({ values: 'falsy' }),
-  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
+  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Please enter a valid email address'),
   validate,
 ];
 

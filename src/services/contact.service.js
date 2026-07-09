@@ -203,7 +203,7 @@ const update = async (tenantId, contactId, data, scope = {}) => {
   await contact.update({
     first_name: data.firstName !== undefined ? data.firstName : contact.first_name,
     last_name: data.lastName !== undefined ? data.lastName : contact.last_name,
-    email: data.email !== undefined ? data.email : contact.email,
+    email: data.email !== undefined ? (data.email && String(data.email).trim() ? String(data.email).trim() : null) : contact.email,
     phone: data.phone !== undefined ? data.phone : contact.phone,
     mobile: data.mobile !== undefined ? data.mobile : contact.mobile,
     designation: data.designation !== undefined ? data.designation : contact.designation,

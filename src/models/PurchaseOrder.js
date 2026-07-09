@@ -26,6 +26,12 @@ module.exports = (sequelize, DataTypes) => {
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },
       approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       approved_at: { type: DataTypes.DATE, allowNull: true },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' },
+        comment: 'User who created this purchase order/quotation (sales scoping)',
+      },
       payment_status: {
         type: DataTypes.STRING(20),
         allowNull: false,
@@ -69,6 +75,7 @@ module.exports = (sequelize, DataTypes) => {
     PurchaseOrder.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
     PurchaseOrder.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     PurchaseOrder.belongsTo(models.User, { foreignKey: 'approved_by', as: 'approvedByUser' });
+    PurchaseOrder.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
     PurchaseOrder.belongsTo(models.WorkOrder, { foreignKey: 'work_order_id', as: 'workOrder' });
     PurchaseOrder.hasOne(models.WorkOrder, { foreignKey: 'purchase_order_id', as: 'sourceWorkOrder' });
     PurchaseOrder.hasMany(models.PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items' });

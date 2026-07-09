@@ -29,7 +29,16 @@ module.exports = (sequelize, DataTypes) => {
       },
       email: {
         type: DataTypes.STRING(100),
-        validate: { isEmail: true },
+        allowNull: true,
+        validate: {
+          isEmailOrEmpty(value) {
+            if (value == null || String(value).trim() === '') return;
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(String(value).trim())) {
+              throw new Error('Must be a valid email address');
+            }
+          },
+        },
       },
       phone: {
         type: DataTypes.STRING(20),

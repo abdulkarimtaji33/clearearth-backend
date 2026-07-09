@@ -12,7 +12,13 @@ const createValidation = [
   body('contactType').notEmpty().withMessage('Contact type is required').isIn(['clients', 'vendors']).withMessage('Contact type must be clients or vendors'),
   body('lastName').optional({ values: 'falsy' }),
   body('phone').notEmpty().withMessage('Phone is required'),
-  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
+  body('email')
+    .optional({ values: 'falsy' })
+    .custom((value) => {
+      if (value == null || String(value).trim() === '') return true;
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
+    })
+    .withMessage('Please enter a valid email address'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   body('supplierId').optional({ values: 'falsy' }).isInt().withMessage('Valid supplier ID is required'),
   validate,
@@ -21,7 +27,13 @@ const createValidation = [
 const updateValidation = [
   param('id').isInt().withMessage('Valid contact ID is required'),
   body('phone').optional({ values: 'falsy' }),
-  body('email').optional({ values: 'falsy' }).isEmail().withMessage('Valid email is required'),
+  body('email')
+    .optional({ values: 'falsy' })
+    .custom((value) => {
+      if (value == null || String(value).trim() === '') return true;
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
+    })
+    .withMessage('Please enter a valid email address'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   body('supplierId').optional({ values: 'falsy' }).isInt().withMessage('Valid supplier ID is required'),
   validate,
