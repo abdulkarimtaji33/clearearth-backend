@@ -11,6 +11,7 @@ router.get(
   taxInvoiceController.previewFromProforma
 );
 router.get('/', authorize('accounting.read', 'deals.read'), taxInvoiceController.getAll);
+router.get('/:id/pdf', authorize('accounting.read', 'deals.read'), taxInvoiceController.getPdf);
 router.get('/:id', authorize('accounting.read', 'deals.read'), taxInvoiceController.getById);
 router.post('/', authorize('accounting.create', 'deals.create'), taxInvoiceController.create);
 router.put('/:id', authorize('accounting.update', 'deals.update'), taxInvoiceController.update);

@@ -12,7 +12,7 @@
 body{
   font-family:Arial, Helvetica, sans-serif;
   font-size:12px;
-  margin:40px;
+  margin:36px;
   color:#333;
 }
 
@@ -20,9 +20,19 @@ body{
 
 .title{
   text-align:center;
-  font-size:24px;
+  font-size:22px;
   font-weight:bold;
-  margin-bottom:10px;
+  color:#1a1a1a;
+  margin-bottom:6px;
+}
+
+.title::after{
+  content:"";
+  display:block;
+  width:80px;
+  height:2px;
+  background:#2e7d32;
+  margin:8px auto 0 auto;
 }
 
 /* LOGO */
@@ -38,7 +48,10 @@ body{
 
 .meta{
   margin-top:10px;
-  margin-bottom:10px;
+  margin-bottom:14px;
+  text-align:center;
+  font-size:11px;
+  color:#555;
 }
 
 /* PARTY TABLE */
@@ -50,7 +63,7 @@ body{
 }
 
 .party-table td{
-  border:1px solid #333;
+  border:1px solid #ccc;
   vertical-align:top;
   padding:10px;
   width:50%;
@@ -58,12 +71,16 @@ body{
 
 .party-title{
   font-weight:bold;
+  font-size:11px;
+  color:#777;
+  text-transform:uppercase;
   margin-bottom:6px;
 }
 
 .party-line{
   margin:3px 0;
   font-size:11px;
+  color:#555;
 }
 
 /* SALUTATION */
@@ -81,14 +98,16 @@ body{
 }
 
 .items-table th{
-  border:1px solid #333;
-  background:#f3f3f3;
+  border:1px solid #ccc;
+  background:#2e7d32;
+  color:#fff;
   padding:8px;
   font-size:11px;
+  text-align:left;
 }
 
 .items-table td{
-  border:1px solid #333;
+  border:1px solid #ccc;
   padding:8px;
   font-size:11px;
 }
@@ -103,6 +122,8 @@ body{
   font-weight:bold;
   text-align:right;
   padding:10px;
+  background:#f7f7f7;
+  font-size:13px;
 }
 
 /* SIGNATURE */
@@ -114,7 +135,7 @@ body{
 }
 
 .sign-table td{
-  border:1px solid #333;
+  border:1px solid #ccc;
   width:50%;
   height:120px;
   text-align:center;
@@ -129,6 +150,7 @@ body{
 
 .sign-date{
   font-size:11px;
+  color:#777;
 }
 
 /* TERMS */
@@ -136,6 +158,7 @@ body{
 .terms{
   margin-top:10px;
   font-size:11px;
+  color:#555;
 }
 
 </style>

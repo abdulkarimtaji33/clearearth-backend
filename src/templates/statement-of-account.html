@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<style>
+
+*{
+  box-sizing:border-box;
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
+
+body{
+  font-family:Arial, Helvetica, sans-serif;
+  font-size:12px;
+  margin:36px;
+  color:#333;
+}
+
+.letterhead{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:18px;
+}
+
+.letterhead td{
+  vertical-align:top;
+  border:none;
+  padding:0;
+}
+
+.logo{
+  width:110px;
+}
+
+.company-block{
+  text-align:right;
+}
+
+.company-name{
+  font-size:16px;
+  font-weight:bold;
+  color:#1a1a1a;
+}
+
+.company-line{
+  font-size:11px;
+  color:#555;
+  line-height:1.5;
+}
+
+/* TO / TITLE */
+
+.header-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:16px;
+}
+
+.header-table td{
+  border:none;
+  vertical-align:top;
+  padding:0;
+}
+
+.to-title{
+  font-size:11px;
+  color:#777;
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+
+.to-name{
+  font-size:13px;
+  font-weight:bold;
+  margin-bottom:2px;
+}
+
+.to-line{
+  font-size:11px;
+  color:#555;
+  line-height:1.5;
+}
+
+.statement-title{
+  text-align:right;
+  font-size:16px;
+  font-weight:bold;
+  letter-spacing:0.5px;
+  color:#1a1a1a;
+}
+
+.statement-range{
+  text-align:right;
+  font-size:11px;
+  color:#777;
+  margin-top:4px;
+}
+
+/* TRANSACTIONS TABLE */
+
+.txn-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+}
+
+.txn-table th{
+  border:1px solid #ccc;
+  background:#2e7d32;
+  color:#fff;
+  padding:8px;
+  font-size:11px;
+  text-align:left;
+}
+
+.txn-table td{
+  border:1px solid #ccc;
+  padding:8px;
+  font-size:11px;
+}
+
+.text-right{
+  text-align:right;
+}
+
+.opening-row td{
+  font-style:italic;
+  color:#555;
+  background:#f7f7f7;
+}
+
+.balance-due-row td{
+  font-weight:bold;
+  font-size:13px;
+  background:#f3f3f3;
+}
+
+/* AGING */
+
+.aging-title{
+  font-size:13px;
+  font-weight:bold;
+  margin-top:26px;
+  margin-bottom:8px;
+}
+
+.aging-table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.aging-table th{
+  border:1px solid #ccc;
+  background:#f3f3f3;
+  color:#333;
+  padding:8px;
+  font-size:11px;
+  text-align:center;
+}
+
+.aging-table td{
+  border:1px solid #ccc;
+  padding:8px;
+  font-size:11px;
+  text-align:center;
+}
+
+</style>
+</head>
+<body>
+
+<table class="letterhead">
+<tr>
+<td style="width:50%">
+<img class="logo" src="{{logoDataUri}}">
+</td>
+<td class="company-block" style="width:50%">
+<div class="company-name">{{fromCompany}}</div>
+<div class="company-line">{{fromAddress}}</div>
+<div class="company-line">{{fromCity}}</div>
+<div class="company-line">TRN {{fromVat}}</div>
+<div class="company-line">{{fromEmail}}</div>
+</td>
+</tr>
+</table>
+
+<table class="header-table">
+<tr>
+<td style="width:55%">
+<div class="to-title">To</div>
+<div class="to-name">{{toCompany}}</div>
+<div class="to-line">{{toAddress}}</div>
+<div class="to-line">{{toCity}}</div>
+<div class="to-line">TRN {{toVat}}</div>
+</td>
+<td style="width:45%">
+<div class="statement-title">STATEMENT OF ACCOUNTS</div>
+<div class="statement-range">{{dateFrom}} To {{dateTo}}</div>
+</td>
+</tr>
+</table>
+
+<table class="txn-table">
+<thead>
+<tr>
+<th style="width:12%">Date</th>
+<th style="width:15%">Doc Type</th>
+<th style="width:38%">Details</th>
+<th style="width:12%" class="text-right">Amount</th>
+<th style="width:12%" class="text-right">Receipts</th>
+<th style="width:11%" class="text-right">Balance</th>
+</tr>
+</thead>
+<tbody>
+{{transactionRowsHtml}}
+</tbody>
+</table>
+
+<table class="txn-table" style="margin-top:-1px">
+<tr class="balance-due-row">
+<td colspan="5" class="text-right">Balance Due</td>
+<td class="text-right">{{balanceDueDisplay}}</td>
+</tr>
+</table>
+
+<div class="aging-title">Aging Summary (As of {{dateTo}})</div>
+<table class="aging-table">
+<thead>
+<tr>
+<th>Period (in Days)</th>
+<th>Current</th>
+<th>1 - 30</th>
+<th>31 - 60</th>
+<th>61 - 90</th>
+<th>&gt; 90</th>
+<th>Total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Amount</td>
+<td>{{agingCurrent}}</td>
+<td>{{aging1_30}}</td>
+<td>{{aging31_60}}</td>
+<td>{{aging61_90}}</td>
+<td>{{agingOver90}}</td>
+<td>{{agingTotal}}</td>
+</tr>
+</tbody>
+</table>
+
+</body>
+</html>

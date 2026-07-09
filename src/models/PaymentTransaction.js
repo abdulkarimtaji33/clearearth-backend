@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
         references: { model: 'chart_of_accounts', key: 'id' },
       },
       reference_no: { type: DataTypes.STRING(255), allowNull: true },
+      receipt_number: { type: DataTypes.STRING(50), allowNull: true },
       paid_to: { type: DataTypes.STRING(255), allowNull: true },
       received_from: { type: DataTypes.STRING(255), allowNull: true },
       notes: { type: DataTypes.TEXT, allowNull: true },

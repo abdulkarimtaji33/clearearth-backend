@@ -18,7 +18,7 @@ async function nextTaxInvoiceNumber(tenantId, transaction) {
   });
   const n = count + 1;
   const year = new Date().getFullYear();
-  return `TI-${year}-${String(n).padStart(5, '0')}`;
+  return `INV/CE/${year}/${n}`;
 }
 
 const getPreviewFromProforma = async (tenantId, proformaInvoiceId, scope = {}) => {

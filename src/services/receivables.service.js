@@ -255,10 +255,130 @@ const listPayments = async (tenantId, taxInvoiceId) => {
   return paymentTxService.listPaymentTransactions(tenantId, 'receivable', taxInvoiceId);
 };
 
+function daysOverdue(dueDateStr, asOf) {
+  if (!dueDateStr) return 0;
+  const due = new Date(`${dueDateStr}T12:00:00`);
+  return Math.floor((asOf - due) / 86400000);
+}
+
+function agingBucketByDueDate(d) {
+  if (d <= 0) return 'current';
+  if (d <= 30) return '1_30';
+  if (d <= 60) return '31_60';
+  if (d <= 90) return '61_90';
+  return 'over_90';
+}
+
+/**
+ * Customer-facing statement: opening balance + dated ledger of invoices/receipts + running
+ * balance + 5-bucket aging (current / 1-30 / 31-60 / 61-90 / >90), all as of `dateTo`.
+ */
+const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } = {}) => {
+  const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
+  if (!company) throw ApiError.notFound('Company not found');
+
+  const invoices = await db.TaxInvoice.findAll({
+    where: { tenant_id: tenantId },
+    include: [
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoice',
+        required: true,
+        include: [
+          { model: db.Deal, as: 'deal', required: true, where: { company_id: companyId } },
+        ],
+      },
+    ],
+    order: [['invoice_date', 'ASC'], ['id', 'ASC']],
+  });
+
+  const invoiceIds = invoices.map((i) => i.id);
+  const payments = invoiceIds.length
+    ? await db.PaymentTransaction.findAll({
+        where: { tenant_id: tenantId, source_type: 'receivable', source_id: { [Op.in]: invoiceIds } },
+        order: [['paid_at', 'ASC'], ['id', 'ASC']],
+      })
+    : [];
+
+  const invoiceById = {};
+  invoices.forEach((i) => { invoiceById[i.id] = i; });
+
+  const entries = [];
+  invoices.forEach((inv) => {
+    entries.push({
+      date: inv.invoice_date,
+      docType: 'Invoice',
+      details: inv.tax_invoice_number,
+      dueDate: inv.due_date || null,
+      amount: parseNum(inv.total),
+      receipts: 0,
+    });
+  });
+  payments.forEach((p) => {
+    const inv = invoiceById[p.source_id];
+    entries.push({
+      date: p.paid_at,
+      docType: 'Payment Received',
+      details: `${p.receipt_number || ''}${p.receipt_number ? '\n' : ''}${inv?.currency || 'AED'}${parseNum(p.amount).toFixed(2)} for payment of ${inv?.tax_invoice_number || ''}`.trim(),
+      amount: 0,
+      receipts: parseNum(p.amount),
+    });
+  });
+
+  entries.sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`) || 0);
+
+  const from = dateFrom || (entries[0]?.date ?? new Date().toISOString().slice(0, 10));
+  const to = dateTo || new Date().toISOString().slice(0, 10);
+
+  let openingBalance = 0;
+  const inRange = [];
+  entries.forEach((e) => {
+    if (e.date < from) {
+      openingBalance += e.amount - e.receipts;
+    } else if (e.date <= to) {
+      inRange.push(e);
+    }
+  });
+
+  let running = openingBalance;
+  const transactions = inRange.map((e) => {
+    running += e.amount - e.receipts;
+    return { ...e, balance: running };
+  });
+
+  // Balance due is the overall current outstanding balance (not limited to the date range)
+  const currentBalanceDue = entries.reduce((s, e) => s + (e.amount - e.receipts), 0);
+
+  const asOfDate = new Date(`${to}T12:00:00`);
+  const aging = { current: 0, bucket_1_30: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0 };
+  invoices.forEach((inv) => {
+    const bal = balanceDue(inv.get ? inv.get({ plain: true }) : inv);
+    if (bal <= 0.005) return;
+    const bucket = agingBucketByDueDate(daysOverdue(inv.due_date, asOfDate));
+    if (bucket === 'current') aging.current += bal;
+    else if (bucket === '1_30') aging.bucket_1_30 += bal;
+    else if (bucket === '31_60') aging.bucket_31_60 += bal;
+    else if (bucket === '61_90') aging.bucket_61_90 += bal;
+    else aging.bucket_over_90 += bal;
+  });
+
+  return {
+    company: company.get({ plain: true }),
+    dateFrom: from,
+    dateTo: to,
+    openingBalance,
+    transactions,
+    balanceDue: currentBalanceDue,
+    aging,
+    currency: invoices[0]?.currency || 'AED',
+  };
+};
+
 module.exports = {
   listReceivables,
   recordPayment,
   listPayments,
   getAgingSummary,
+  getStatementOfAccount,
   balanceDue,
 };

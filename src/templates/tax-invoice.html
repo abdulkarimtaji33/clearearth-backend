@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<style>
+
+*{
+  box-sizing:border-box;
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
+
+body{
+  font-family:Arial, Helvetica, sans-serif;
+  font-size:12px;
+  margin:36px;
+  color:#333;
+}
+
+/* LETTERHEAD */
+
+.letterhead{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:14px;
+}
+
+.letterhead td{
+  vertical-align:top;
+  border:none;
+  padding:0;
+}
+
+.logo{
+  width:120px;
+}
+
+.company-block{
+  text-align:right;
+}
+
+.company-name{
+  font-size:16px;
+  font-weight:bold;
+  color:#1a1a1a;
+}
+
+.company-line{
+  font-size:11px;
+  color:#555;
+  line-height:1.5;
+}
+
+/* TITLE BAR */
+
+.doc-title{
+  font-size:22px;
+  font-weight:bold;
+  color:#1a1a1a;
+  margin-top:10px;
+}
+
+.doc-number{
+  text-align:right;
+  font-size:12px;
+  font-weight:bold;
+  color:#333;
+  margin-top:4px;
+}
+
+hr.rule{
+  border:none;
+  border-top:2px solid #2e7d32;
+  margin:10px 0 16px 0;
+}
+
+/* BILL TO / META */
+
+.info-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:16px;
+}
+
+.info-table td{
+  vertical-align:top;
+  border:none;
+  padding:0;
+}
+
+.bill-to-title{
+  font-size:11px;
+  color:#777;
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+
+.bill-to-name{
+  font-size:13px;
+  font-weight:bold;
+  margin-bottom:2px;
+}
+
+.bill-to-line{
+  font-size:11px;
+  color:#555;
+  line-height:1.5;
+}
+
+.meta-table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.meta-table td{
+  border:none;
+  padding:2px 0;
+  font-size:11px;
+}
+
+.meta-label{
+  color:#777;
+  text-align:left;
+}
+
+.meta-value{
+  text-align:right;
+  font-weight:bold;
+  color:#333;
+}
+
+/* PROJECT REFERENCE */
+
+.project-line{
+  font-size:11px;
+  font-weight:bold;
+  color:#333;
+  background:#f3f3f3;
+  padding:6px 8px;
+  margin-bottom:0;
+}
+
+/* ITEMS TABLE */
+
+.items-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:0;
+}
+
+.items-table th{
+  border:1px solid #ccc;
+  background:#2e7d32;
+  color:#fff;
+  padding:8px;
+  font-size:11px;
+  text-align:left;
+}
+
+.items-table td{
+  border:1px solid #ccc;
+  padding:8px;
+  font-size:11px;
+}
+
+.text-right{
+  text-align:right;
+}
+
+.subtotal-row td{
+  font-weight:bold;
+  background:#f7f7f7;
+}
+
+/* TOTAL LINE */
+
+.total-line{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:6px;
+}
+
+.total-line td{
+  border:none;
+  padding:6px 0;
+}
+
+.items-in-total{
+  font-size:11px;
+  color:#777;
+}
+
+.grand-total{
+  text-align:right;
+  font-size:15px;
+  font-weight:bold;
+  color:#1a1a1a;
+}
+
+.amount-in-words{
+  text-align:center;
+  font-size:11px;
+  font-weight:bold;
+  color:#333;
+  margin-top:4px;
+  padding-top:10px;
+  border-top:1px solid #ddd;
+}
+
+/* PAYMENT INSTRUCTIONS */
+
+.payment-instructions{
+  margin-top:26px;
+  font-size:11px;
+}
+
+.payment-instructions .heading{
+  font-size:13px;
+  font-weight:bold;
+  margin-bottom:8px;
+}
+
+.payment-instructions .line{
+  line-height:1.9;
+}
+
+/* SIGNATURE */
+
+.sign-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:40px;
+}
+
+.sign-table td{
+  border:none;
+  width:50%;
+  font-size:11px;
+  padding-top:30px;
+}
+
+.sign-line{
+  border-top:1px solid #333;
+  width:70%;
+  margin-top:6px;
+}
+
+</style>
+</head>
+<body>
+
+<table class="letterhead">
+<tr>
+<td style="width:50%">
+<img class="logo" src="{{logoDataUri}}">
+</td>
+<td class="company-block" style="width:50%">
+<div class="company-name">{{fromCompany}}</div>
+<div class="company-line">{{fromAddress}}</div>
+<div class="company-line">{{fromCity}}</div>
+<div class="company-line">Phone No: {{fromPhone}}</div>
+<div class="company-line">{{fromEmail}}</div>
+<div class="company-line">TRN: {{fromVat}}</div>
+</td>
+</tr>
+</table>
+
+<div class="doc-title">TAX INVOICE</div>
+<div class="doc-number"># {{invoiceNumber}}</div>
+
+<hr class="rule">
+
+<table class="info-table">
+<tr>
+<td style="width:55%">
+<div class="bill-to-title">Bill To</div>
+<div class="bill-to-name">{{toCompany}}</div>
+<div class="bill-to-line">{{toAddress}}</div>
+<div class="bill-to-line">{{toCity}}</div>
+<div class="bill-to-line">TRN {{toVat}}</div>
+</td>
+<td style="width:45%">
+<table class="meta-table">
+<tr><td class="meta-label">Invoice Date :</td><td class="meta-value">{{invoiceDate}}</td></tr>
+<tr><td class="meta-label">Payment Terms :</td><td class="meta-value">{{paymentTerms}}</td></tr>
+<tr><td class="meta-label">Due Date :</td><td class="meta-value">{{dueDate}}</td></tr>
+<tr><td class="meta-label">Ref# :</td><td class="meta-value">{{refNo}}</td></tr>
+</table>
+</td>
+</tr>
+</table>
+
+{{projectLineHtml}}
+
+{{itemsTableHtml}}
+
+<table class="total-line">
+<tr>
+<td class="items-in-total">{{itemsInTotalLabel}}</td>
+<td class="grand-total">Total: {{totalDisplay}}</td>
+</tr>
+</table>
+
+<div class="amount-in-words">{{amountInWords}}</div>
+
+<div class="payment-instructions">
+<div class="heading">Payment Instructions</div>
+<div class="line"><strong>Beneficiary Name:</strong> {{bankBeneficiary}} &nbsp; <strong>Bank Name:</strong> {{bankName}} &nbsp; <strong>Branch:</strong> {{bankBranch}}</div>
+<div class="line"><strong>SWIFT Code:</strong> {{bankSwift}}</div>
+<div class="line"><strong>Account Number:</strong> {{bankAccountAed}} <strong>IBAN:</strong> {{bankIbanAed}}</div>
+<div class="line"><strong>Account Number:</strong> {{bankAccountUsd}} <strong>IBAN:</strong> {{bankIbanUsd}}</div>
+</div>
+
+<table class="sign-table">
+<tr>
+<td>
+For {{fromCompany}}
+<div class="sign-line"></div>
+</td>
+<td>
+Customer Signature
+<div class="sign-line"></div>
+</td>
+</tr>
+</table>
+
+</body>
+</html>

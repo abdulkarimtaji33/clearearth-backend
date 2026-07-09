@@ -4,6 +4,48 @@
 const path = require('path');
 const fs = require('fs');
 const db = require('../models');
+const { amountInWords } = require('../utils/numberToWords');
+
+const DEFAULT_BANK_DETAILS = {
+  beneficiary: 'Clear Earth Recycling LLC',
+  bankName: 'Abu Dhabi Commercial Bank',
+  branch: 'Al Riqqah Road',
+  swift: 'ADCBAEAAXXX',
+  accountAed: '128 8280 3820 001 [AED]',
+  ibanAed: 'AE07 0030 0128 8280 3820 001 [AED]',
+  accountUsd: '128 8280 3830 001 [USD]',
+  ibanUsd: 'AE55 0030 0128 8280 3830 001 [USD]',
+};
+
+const CURRENCY_SYMBOLS = { AED: 'AED', USD: '$', EUR: '€', GBP: '£', SAR: 'SAR', KWD: 'KWD' };
+
+let cachedLogoDataUri = null;
+function getLogoDataUri() {
+  if (cachedLogoDataUri) return cachedLogoDataUri;
+  const logoPath = path.join(__dirname, '../templates/logo.png');
+  const buf = fs.readFileSync(logoPath);
+  cachedLogoDataUri = `data:image/png;base64,${buf.toString('base64')}`;
+  return cachedLogoDataUri;
+}
+
+function getBankDetails(tenant) {
+  const configured = tenant?.settings?.bankDetails;
+  return { ...DEFAULT_BANK_DETAILS, ...(configured || {}) };
+}
+
+function formatMoneyWithSymbol(currency, amount) {
+  const symbol = CURRENCY_SYMBOLS[String(currency).toUpperCase()] || String(currency).toUpperCase();
+  return `${symbol}${formatNum(amount)}`;
+}
+
+function paymentTermsLabel(invoiceDateStr, dueDateStr) {
+  if (!dueDateStr) return 'Immediate';
+  const inv = new Date(`${invoiceDateStr}T00:00:00`);
+  const due = new Date(`${dueDateStr}T00:00:00`);
+  const days = Math.round((due - inv) / 86400000);
+  if (days <= 0) return 'Immediate';
+  return `Net ${days}`;
+}
 
 let puppeteer;
 try {
@@ -72,7 +114,7 @@ async function htmlToPdf(html) {
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
-    const pdfBuffer = await page.pdf({ format: 'A4', margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' } });
+    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' } });
     return Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
   } finally {
     await browser.close();
@@ -318,4 +360,244 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   return htmlToPdf(html);
 }
 
-module.exports = { generateQuotationPdf, generatePurchaseOrderPdf };
+async function generateTaxInvoicePdf(taxInvoiceId, tenantId) {
+  const invoice = await db.TaxInvoice.findOne({
+    where: { id: taxInvoiceId, tenant_id: tenantId },
+    include: [
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoice',
+        include: [
+          {
+            model: db.Deal,
+            as: 'deal',
+            include: [{ model: db.Company, as: 'company' }],
+          },
+        ],
+      },
+      {
+        model: db.TaxInvoiceItem,
+        as: 'items',
+        separate: true,
+        order: [['sort_order', 'ASC'], ['id', 'ASC']],
+        include: [{ model: db.ProductService, as: 'productService' }],
+      },
+    ],
+  });
+  if (!invoice) return null;
+
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!tenant) return null;
+
+  const company = invoice.proformaInvoice?.deal?.company;
+  const dealTitle = invoice.proformaInvoice?.deal?.title;
+  const items = invoice.items || [];
+  const currency = invoice.currency || 'AED';
+  const vatPct = parseFloat(invoice.vat_percentage) || 0;
+  const showTax = vatPct > 0.005;
+
+  let subtotal = 0;
+  let totalTax = 0;
+  let totalQty = 0;
+  let rowsHtml = '';
+
+  items.forEach((item, i) => {
+    const qty = parseFloat(item.quantity) || 0;
+    const rate = parseFloat(item.unit_price) || 0;
+    const taxable = qty * rate;
+    const tax = showTax ? (taxable * vatPct) / 100 : 0;
+    const amount = taxable + tax;
+    subtotal += taxable;
+    totalTax += tax;
+    totalQty += qty;
+    const desc = (item.description || item.productService?.name || '-').replace(/</g, '&lt;');
+    rowsHtml += `<tr>
+      <td>${i + 1}</td>
+      <td>${desc}</td>
+      <td class="text-right">${formatNum(qty)}</td>
+      <td class="text-right">${formatNum(rate)}</td>
+      <td class="text-right">${formatNum(taxable)}</td>
+      ${showTax ? `<td class="text-right">${formatNum(tax)}<br>${vatPct.toFixed(2)}%</td>` : ''}
+      <td class="text-right">${formatNum(amount)}</td>
+    </tr>`;
+  });
+
+  const total = subtotal + totalTax;
+
+  const headerCols = showTax
+    ? '<th style="width:5%">#</th><th style="width:32%">Item &amp; Description</th><th style="width:10%">Qty</th><th style="width:12%">Rate</th><th style="width:15%">Taxable Amount</th><th style="width:11%">Tax</th><th style="width:15%">Amount</th>'
+    : '<th style="width:5%">#</th><th style="width:37%">Item &amp; Description</th><th style="width:11%">Qty</th><th style="width:13%">Rate</th><th style="width:17%">Taxable Amount</th><th style="width:17%">Amount</th>';
+
+  const subtotalRow = showTax
+    ? `<tr class="subtotal-row"><td colspan="4">Sub Total</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(totalTax)}</td><td class="text-right">${formatNum(total)}</td></tr>`
+    : `<tr class="subtotal-row"><td colspan="4">Sub Total</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(total)}</td></tr>`;
+
+  const itemsTableHtml = `<table class="items-table">
+<thead><tr>${headerCols}</tr></thead>
+<tbody>${rowsHtml}${subtotalRow}</tbody>
+</table>`;
+
+  const projectLineHtml = dealTitle ? `<div class="project-line">${dealTitle.replace(/</g, '&lt;')}</div>` : '';
+
+  const fromAddr = tenant.address || '-';
+  const fromCity = [tenant.city, tenant.country].filter(Boolean).join(', ') || '-';
+  const toAddr = company?.address || '-';
+  const toCity = [company?.city, company?.country].filter(Boolean).join(', ') || '-';
+
+  const bank = getBankDetails(tenant);
+
+  const html = renderTemplate(path.join(__dirname, '../templates/tax-invoice.html'), {
+    logoDataUri: getLogoDataUri(),
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: fromAddr,
+    fromCity,
+    fromPhone: tenant.phone || '-',
+    fromEmail: tenant.email || '-',
+    fromVat: getVat(tenant),
+    invoiceNumber: invoice.tax_invoice_number,
+    toCompany: company?.company_name || '-',
+    toAddress: toAddr,
+    toCity,
+    toVat: company?.vat_number || '-',
+    invoiceDate: formatDate(invoice.invoice_date),
+    paymentTerms: paymentTermsLabel(invoice.invoice_date, invoice.due_date),
+    dueDate: invoice.due_date ? formatDate(invoice.due_date) : '-',
+    refNo: invoice.reference_no || invoice.proformaInvoice?.deal?.deal_number || '-',
+    projectLineHtml,
+    itemsTableHtml,
+    itemsInTotalLabel: `Items in Total ${formatNum(totalQty)}`,
+    totalDisplay: formatMoneyWithSymbol(currency, total),
+    amountInWords: amountInWords(total, currency),
+    bankBeneficiary: bank.beneficiary,
+    bankName: bank.bankName,
+    bankBranch: bank.branch,
+    bankSwift: bank.swift,
+    bankAccountAed: bank.accountAed,
+    bankIbanAed: bank.ibanAed,
+    bankAccountUsd: bank.accountUsd,
+    bankIbanUsd: bank.ibanUsd,
+  });
+
+  return htmlToPdf(html);
+}
+
+async function generateReceivableReceiptPdf(paymentTransactionId, tenantId) {
+  const payment = await db.PaymentTransaction.findOne({
+    where: { id: paymentTransactionId, tenant_id: tenantId, source_type: 'receivable' },
+  });
+  if (!payment) return null;
+
+  const invoice = await db.TaxInvoice.findOne({
+    where: { id: payment.source_id, tenant_id: tenantId },
+    include: [
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoice',
+        include: [
+          { model: db.Deal, as: 'deal', include: [{ model: db.Company, as: 'company' }] },
+        ],
+      },
+    ],
+  });
+  if (!invoice) return null;
+
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!tenant) return null;
+
+  const company = invoice.proformaInvoice?.deal?.company;
+  const currency = invoice.currency || 'AED';
+  const amount = parseFloat(payment.amount) || 0;
+
+  const fromAddr = tenant.address || '-';
+  const fromCity = [tenant.city, tenant.country].filter(Boolean).join(', ') || '-';
+  const receivedFromAddr = company?.address || '-';
+  const receivedFromCity = [company?.city, company?.country].filter(Boolean).join(', ') || '-';
+
+  const html = renderTemplate(path.join(__dirname, '../templates/ar-receipt.html'), {
+    logoDataUri: getLogoDataUri(),
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: fromAddr,
+    fromCity,
+    fromVat: getVat(tenant),
+    fromEmail: tenant.email || '-',
+    receiptNumber: payment.receipt_number || String(payment.id).padStart(7, '0'),
+    receiptDate: formatDate(payment.paid_at),
+    refNo: invoice.tax_invoice_number,
+    amountDisplay: formatMoneyWithSymbol(currency, amount),
+    amountInWords: amountInWords(amount, currency),
+    receivedFromName: payment.received_from || company?.company_name || '-',
+    receivedFromAddress: receivedFromAddr,
+    receivedFromCity,
+    invoiceNumber: invoice.tax_invoice_number,
+    invoiceDate: formatDate(invoice.invoice_date),
+    invoiceAmountDisplay: formatMoneyWithSymbol(currency, parseFloat(invoice.total) || 0),
+  });
+
+  return htmlToPdf(html);
+}
+
+async function generateStatementOfAccountPdf(tenantId, companyId, options = {}) {
+  const receivablesService = require('./receivables.service');
+  const statement = await receivablesService.getStatementOfAccount(tenantId, companyId, options);
+  if (!statement) return null;
+
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!tenant) return null;
+
+  const { company, currency, openingBalance, transactions, balanceDue, aging, dateFrom, dateTo } = statement;
+
+  let rowsHtml = '';
+  if (Math.abs(openingBalance) > 0.005 || transactions.length === 0) {
+    rowsHtml += `<tr class="opening-row"><td>${formatDate(dateFrom)}</td><td colspan="4">***Opening Balance***</td><td class="text-right">${formatNum(openingBalance)}</td></tr>`;
+  }
+  transactions.forEach((t) => {
+    const details = String(t.details || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')
+      + (t.dueDate ? ` - due on ${formatDate(t.dueDate)}` : '');
+    rowsHtml += `<tr>
+      <td>${formatDate(t.date)}</td>
+      <td>${t.docType}</td>
+      <td>${details}</td>
+      <td class="text-right">${t.amount ? formatNum(t.amount) : ''}</td>
+      <td class="text-right">${t.receipts ? formatNum(t.receipts) : ''}</td>
+      <td class="text-right">${formatNum(t.balance)}</td>
+    </tr>`;
+  });
+
+  const fromAddr = tenant.address || '-';
+  const fromCity = [tenant.city, tenant.country].filter(Boolean).join(', ') || '-';
+  const toAddr = company.address || '-';
+  const toCity = [company.city, company.country].filter(Boolean).join(', ') || '-';
+
+  const html = renderTemplate(path.join(__dirname, '../templates/statement-of-account.html'), {
+    logoDataUri: getLogoDataUri(),
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: fromAddr,
+    fromCity,
+    fromVat: getVat(tenant),
+    fromEmail: tenant.email || '-',
+    toCompany: company.company_name || '-',
+    toAddress: toAddr,
+    toCity,
+    toVat: company.vat_number || '-',
+    dateFrom: formatDate(dateFrom),
+    dateTo: formatDate(dateTo),
+    transactionRowsHtml: rowsHtml,
+    balanceDueDisplay: formatMoneyWithSymbol(currency, balanceDue),
+    agingCurrent: formatNum(aging.current),
+    aging1_30: formatNum(aging.bucket_1_30),
+    aging31_60: formatNum(aging.bucket_31_60),
+    aging61_90: formatNum(aging.bucket_61_90),
+    agingOver90: formatNum(aging.bucket_over_90),
+    agingTotal: formatNum(aging.current + aging.bucket_1_30 + aging.bucket_31_60 + aging.bucket_61_90 + aging.bucket_over_90),
+  });
+
+  return htmlToPdf(html);
+}
+
+module.exports = {
+  generateQuotationPdf,
+  generatePurchaseOrderPdf,
+  generateTaxInvoicePdf,
+  generateReceivableReceiptPdf,
+  generateStatementOfAccountPdf,
+};
