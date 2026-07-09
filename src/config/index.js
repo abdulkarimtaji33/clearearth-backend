@@ -2,6 +2,7 @@
  * Application Configuration
  */
 require('dotenv').config();
+const { DEFAULT_ALLOWED_MIME_TYPES } = require('../utils/uploadFileTypes');
 
 module.exports = {
   // Application
@@ -33,10 +34,8 @@ module.exports = {
     path: process.env.UPLOAD_PATH || './uploads',
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 20971520, // 20MB
     allowedTypes: process.env.ALLOWED_FILE_TYPES
-      ? process.env.ALLOWED_FILE_TYPES.split(',')
-      : ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp', 'application/pdf',
-         'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-         'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ? process.env.ALLOWED_FILE_TYPES.split(',').map((t) => t.trim()).filter(Boolean)
+      : DEFAULT_ALLOWED_MIME_TYPES,
   },
 
   // Email
