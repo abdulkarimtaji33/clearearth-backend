@@ -149,6 +149,14 @@ exports.getAllDropdowns = async (req, res) => {
  */
 exports.createDropdown = async (req, res) => {
   try {
+    const roleName = req.user?.role?.name;
+    if (!['admin', 'tenant_admin', 'super_admin'].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only administrators can create dropdown values',
+      });
+    }
+
     const { category, value, display_name, display_order, is_active } = req.body;
 
     const Model = modelMap[category];
