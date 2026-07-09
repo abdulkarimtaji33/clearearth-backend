@@ -29,6 +29,36 @@ const _validateDownstreamSupplier = async (tenantId, supplierId, downstreamPartn
   if (!ds) throw ApiError.badRequest('Downstream partner supplier not found');
 };
 
+const _serializeSupportingDocuments = (docs) => {
+  if (!docs) return null;
+  if (typeof docs === 'string') {
+    const trimmed = docs.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return JSON.stringify(parsed.map((d) => ({
+          path: d.path,
+          fileName: d.fileName || (d.path ? d.path.split('/').pop() : 'Document'),
+        })).filter((d) => d.path));
+      }
+    } catch {
+      // legacy single path
+    }
+    return JSON.stringify([{ path: trimmed, fileName: trimmed.split('/').pop() || 'Document' }]);
+  }
+  if (Array.isArray(docs) && docs.length > 0) {
+    const normalized = docs
+      .filter((d) => d?.path)
+      .map((d) => ({
+        path: d.path,
+        fileName: d.fileName || d.path.split('/').pop() || 'Document',
+      }));
+    return normalized.length > 0 ? JSON.stringify(normalized) : null;
+  }
+  return null;
+};
+
 const _hasWdsContent = (w) => {
   if (!w) return false;
   if ((w.attachments || []).length > 0) return true;
@@ -361,7 +391,7 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
           lumpsum_price: insp.quantityUom === 'lumpsum' ? (insp.lumpsumPrice || null) : null,
           safety_tools_required: Array.isArray(insp.safetyTools) && insp.safetyTools.length > 0,
           safety_tools: Array.isArray(insp.safetyTools) && insp.safetyTools.length > 0 ? JSON.stringify(insp.safetyTools) : null,
-          supporting_documents: insp.supportingDocuments || null,
+          supporting_documents: _serializeSupportingDocuments(insp.supportingDocuments),
           requested_by: insp.requestedBy || null,
           notes: insp.notes || null,
           priority: insp.priority || 'medium',
@@ -553,7 +583,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         lumpsum_price: insp.quantityUom === 'lumpsum' ? (insp.lumpsumPrice || null) : null,
         safety_tools_required: Array.isArray(insp.safetyTools) && insp.safetyTools.length > 0,
         safety_tools: Array.isArray(insp.safetyTools) && insp.safetyTools.length > 0 ? JSON.stringify(insp.safetyTools) : null,
-        supporting_documents: insp.supportingDocuments || null,
+        supporting_documents: _serializeSupportingDocuments(insp.supportingDocuments),
         requested_by: insp.requestedBy || null,
         notes: insp.notes || null,
         priority: insp.priority || existingInsp?.priority || 'medium',

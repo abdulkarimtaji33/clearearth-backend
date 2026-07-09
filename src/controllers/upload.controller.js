@@ -9,7 +9,7 @@ exports.uploadInspectionDocument = async (req, res) => {
   }
   const relativePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
   const fileUrl = getFileUrl(relativePath);
-  res.json({ success: true, data: { path: relativePath, url: fileUrl } });
+  res.json({ success: true, data: { path: relativePath, url: fileUrl, fileName: req.file.originalname } });
 };
 
 exports.uploadDealImage = async (req, res) => {
