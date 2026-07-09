@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
-const ApiError = require('../utils/apiError');
+const { isAllowedUpload, getExtension } = require('../utils/uploadFileTypes');
 
 // Ensure upload directory exists
 const uploadDir = config.upload.path;
@@ -17,15 +17,27 @@ if (!fs.existsSync(uploadDir)) {
 // Storage configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Create subdirectory based on file type
     let subDir = 'others';
+    const ext = getExtension(file.originalname);
 
     if (file.mimetype.startsWith('image/')) {
       subDir = 'images';
-    } else if (file.mimetype === 'application/pdf') {
+    } else if (file.mimetype === 'application/pdf' || ext === '.pdf') {
       subDir = 'documents';
-    } else if (file.mimetype.includes('spreadsheet') || file.mimetype.includes('excel')) {
+    } else if (
+      file.mimetype.includes('spreadsheet')
+      || file.mimetype.includes('excel')
+      || ext === '.xls'
+      || ext === '.xlsx'
+    ) {
       subDir = 'spreadsheets';
+    } else if (
+      file.mimetype === 'application/msword'
+      || file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      || ext === '.doc'
+      || ext === '.docx'
+    ) {
+      subDir = 'documents';
     }
 
     const destination = path.join(uploadDir, subDir);
@@ -44,14 +56,14 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter
+// File filter — extension check with MIME fallback (Office files often report zip/octet-stream)
 const fileFilter = (req, file, cb) => {
   const allowedTypes = config.upload.allowedTypes;
 
-  if (allowedTypes.includes(file.mimetype)) {
+  if (isAllowedUpload(file.mimetype, file.originalname, allowedTypes)) {
     cb(null, true);
   } else {
-    cb(ApiError.badRequest(`File type ${file.mimetype} is not allowed`), false);
+    cb(new Error(`File type not allowed: ${file.mimetype || 'unknown'} (${file.originalname})`), false);
   }
 };
 
