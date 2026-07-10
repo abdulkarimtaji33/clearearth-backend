@@ -66,6 +66,17 @@ function formatNum(n) {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function escapeHtml(value) {
+  return String(value || '').replace(/</g, '&lt;');
+}
+
+function formatItemWithDescription(name, description) {
+  const safeName = escapeHtml(name || '-');
+  const safeDescription = description?.toString().trim();
+  if (!safeDescription) return safeName;
+  return `${safeName}<br><span style="font-size:0.9em;color:#555">${escapeHtml(safeDescription)}</span>`;
+}
+
 function isApprovedStatus(s) {
   return String(s || '').toLowerCase() === 'approved';
 }
@@ -174,7 +185,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       totalVat += tax;
       itemsHtml += `<tr>
         <td>${i + 1}</td>
-        <td>${(item.productService?.name || item.notes || '-').replace(/</g, '&lt;')}</td>
+        <td>${formatItemWithDescription(item.productService?.name, item.notes)}</td>
         <td class="text-right">${formatNum(unitPrice)}</td>
         <td class="text-right">${formatNum(qty)}</td>
         <td class="text-right">${formatNum(amount)}</td>
