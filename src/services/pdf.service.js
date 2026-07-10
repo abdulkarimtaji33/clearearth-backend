@@ -103,6 +103,15 @@ function formatDealType(dealType) {
   return labels[dealType] || String(dealType).replace(/_/g, ' ');
 }
 
+function buildTermsSectionHtml(termsList) {
+  if (!termsList?.length) return '';
+  const content = termsList
+    .sort((a, b) => (a.DealTerm?.sort_order ?? 0) - (b.DealTerm?.sort_order ?? 0))
+    .map((t) => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong><br>${(t.content || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`)
+    .join('');
+  return `<div class="terms"><strong>Terms &amp; Conditions :</strong><br><br>${content}</div>`;
+}
+
 function renderTemplate(templatePath, data) {
   let html = fs.readFileSync(templatePath, 'utf8');
   const keys = Object.keys(data).sort((a, b) => b.length - a.length);
@@ -221,13 +230,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
 
-  const termsList = quotation.deal?.termsList || [];
-  const termsHtml = termsList.length > 0
-    ? termsList
-        .sort((a, b) => (a.DealTerm?.sort_order ?? 0) - (b.DealTerm?.sort_order ?? 0))
-        .map(t => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong><br>${(t.content || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`)
-        .join('')
-    : '<p>Payment terms: Immediate</p>';
+  const termsSectionHtml = buildTermsSectionHtml(quotation.deal?.termsList || []);
 
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
     documentTitle,
@@ -248,7 +251,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
     currency,
     totalAmount,
     dealType,
-    termsHtml,
+    termsSectionHtml,
   });
 
   return htmlToPdf(html);
@@ -323,13 +326,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
 
   const grandTotal = subtotal + totalVat;
 
-  const termsList = po.deal?.termsList || [];
-  const termsHtml = termsList.length > 0
-    ? termsList
-        .sort((a, b) => (a.DealTerm?.sort_order ?? 0) - (b.DealTerm?.sort_order ?? 0))
-        .map(t => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong><br>${(t.content || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`)
-        .join('')
-    : '<p>Payment terms: Immediate</p>';
+  const termsSectionHtml = buildTermsSectionHtml(po.deal?.termsList || []);
 
   const isBill = String(po.document_type).toLowerCase() === 'bill';
   const approved = resolvePdfAsApproved(isApprovedStatus(po.status), options, { allowOverride: !isBill });
@@ -365,7 +362,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     totalVat: isRcm ? 'RCM (Reverse Charge — paid to Govt.)' : formatNum(totalVat),
     grandTotal: formatNum(grandTotal),
     rcmNote: isRcm ? 'Note: VAT is applicable under Reverse Charge Mechanism. The recipient is liable to pay VAT directly to the government.' : '',
-    termsHtml,
+    termsSectionHtml,
   });
 
   return htmlToPdf(html);
