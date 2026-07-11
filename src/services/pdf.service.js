@@ -28,6 +28,19 @@ function getLogoDataUri() {
   return cachedLogoDataUri;
 }
 
+let cachedStampDataUri = null;
+function getStampDataUri() {
+  if (cachedStampDataUri) return cachedStampDataUri;
+  try {
+    const stampPath = path.join(__dirname, '../templates/stamp.png');
+    const buf = fs.readFileSync(stampPath);
+    cachedStampDataUri = `data:image/png;base64,${buf.toString('base64')}`;
+  } catch (e) {
+    cachedStampDataUri = '';
+  }
+  return cachedStampDataUri;
+}
+
 function getBankDetails(tenant) {
   const configured = tenant?.settings?.bankDetails;
   return { ...DEFAULT_BANK_DETAILS, ...(configured || {}) };
@@ -64,6 +77,24 @@ function formatNum(n) {
   const num = parseFloat(n);
   if (isNaN(num)) return '0.00';
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Compact number formatting for the quotation/order templates — trims trailing zeros (e.g. 1,050 / 12.5). */
+function formatCompactNum(n) {
+  const num = Math.round((parseFloat(n) || 0) * 100) / 100;
+  return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function personFullName(person) {
+  if (!person) return '';
+  return `${person.first_name || ''} ${person.last_name || ''}`.trim();
+}
+
+function buildMetaLinesHtml(lines) {
+  return lines
+    .filter((l) => l && l[1] != null)
+    .map(([label, value]) => `<div class="doc-meta-line"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>`)
+    .join('');
 }
 
 function escapeHtml(value) {
@@ -108,12 +139,12 @@ function getTermSortOrder(term) {
 }
 
 function buildTermsSectionHtml(termsList) {
-  if (!termsList?.length) return '';
-  const content = termsList
+  if (!termsList?.length) return '<ul><li>No specific terms and conditions.</li></ul>';
+  const items = termsList
     .sort((a, b) => getTermSortOrder(a) - getTermSortOrder(b))
-    .map((t) => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong></p>`)
+    .map((t) => `<li>${(t.title || '').replace(/</g, '&lt;')}</li>`)
     .join('');
-  return `<div class="terms"><strong>Terms &amp; Conditions :</strong><br><br>${content}</div>`;
+  return `<ul>${items}</ul>`;
 }
 
 function renderTemplate(templatePath, data) {
@@ -154,6 +185,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
         as: 'deal',
         include: [
           { model: db.Company, as: 'company' },
+          { model: db.Contact, as: 'contact', required: false },
           {
             model: db.DealItem,
             as: 'items',
@@ -169,6 +201,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
           },
         ],
       },
+      { model: db.User, as: 'preparedByUser', required: false },
     ],
   });
   if (!quotation) return null;
@@ -188,7 +221,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   let totalVat = 0;
 
   if (items.length > 0) {
-    items.forEach((item, i) => {
+    items.forEach((item) => {
       const qty = parseFloat(item.quantity) || 0;
       const unitPrice = isFoc ? 0 : (parseFloat(item.unit_price) || 0);
       const amount = qty * unitPrice;
@@ -196,14 +229,15 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       const total = amount + tax;
       subtotal += amount;
       totalVat += tax;
+      const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
+      const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
       itemsHtml += `<tr>
-        <td>${i + 1}</td>
         <td>${formatItemWithDescription(item.productService?.name, item.notes)}</td>
-        <td class="text-right">${formatNum(unitPrice)}</td>
-        <td class="text-right">${formatNum(qty)}</td>
-        <td class="text-right">${formatNum(amount)}</td>
-        <td class="text-right">${formatNum(tax)} @${(vatPct * 100).toFixed(1)}%</td>
-        <td class="text-right">${formatNum(total)}</td>
+        <td class="text-right">${formatCompactNum(unitPrice)}</td>
+        <td class="text-right">${qtyDisplay}</td>
+        <td class="text-right">${formatCompactNum(amount)}</td>
+        <td class="text-right">${formatCompactNum(tax)}</td>
+        <td class="text-right">${formatCompactNum(total)}</td>
       </tr>`;
     });
   } else {
@@ -213,39 +247,43 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
     subtotal = amount;
     totalVat = tax;
     itemsHtml = `<tr>
-      <td>1</td>
       <td>${(quotation.deal?.title || 'Service').replace(/</g, '&lt;')}</td>
-      <td class="text-right">${formatNum(amount)}</td>
+      <td class="text-right">${formatCompactNum(amount)}</td>
       <td class="text-right">1</td>
-      <td class="text-right">${formatNum(amount)}</td>
-      <td class="text-right">${formatNum(tax)} @${(vatPct * 100).toFixed(1)}%</td>
-      <td class="text-right">${formatNum(total)}</td>
+      <td class="text-right">${formatCompactNum(amount)}</td>
+      <td class="text-right">${formatCompactNum(tax)}</td>
+      <td class="text-right">${formatCompactNum(total)}</td>
     </tr>`;
   }
 
-  const totalAmount = formatNum(subtotal + totalVat);
+  const others = 0;
+  const grandTotal = subtotal + totalVat + others;
   const approved = resolvePdfAsApproved(isApprovedStatus(quotation.status), options);
   const quoteNumber = approved ? `SO/SERV/${quotation.id}/1` : `QT/SERV/${quotation.id}/1`;
   const quoteDate = formatDate(quotation.quotation_date);
-  const documentTitle = approved ? 'Service Order' : 'Service Quotation';
-  const docMetaLine = approved
-    ? `Order Number : ${quoteNumber} , Order Date : ${quoteDate} , Deal Type : ${dealType}`
-    : `Quote Number : ${quoteNumber} , Quote Date : ${quoteDate} , Deal Type : ${dealType}`;
+  const documentTitle = approved ? 'SERVICE ORDER' : 'SERVICE QUOTATION';
+  const metaLinesHtml = buildMetaLinesHtml([
+    ['PO Reference', quotation.deal?.deal_number || '-'],
+    [approved ? 'Order Number' : 'Quote Number', quoteNumber],
+    [approved ? 'Order Date' : 'Quote Date', quoteDate],
+  ]);
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
 
   const termsSectionHtml = buildTermsSectionHtml(quotation.deal?.termsList || []);
 
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
+    logoDataUri: getLogoDataUri(),
+    stampDataUri: getStampDataUri(),
     documentTitle,
-    docMetaLine,
-    quoteNumber,
-    quoteDate,
+    metaLinesHtml,
+    fromContactName: personFullName(quotation.preparedByUser) || '-',
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
     fromEmail: tenant.email || '-',
     fromPhone: tenant.phone || '-',
     fromAddress: fromAddr,
     fromVat: getVat(tenant),
+    toContactName: personFullName(quotation.deal?.contact) || '-',
     toCompany: company?.company_name || '-',
     toEmail: company?.email || '-',
     toPhone: company?.phone || '-',
@@ -253,7 +291,10 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
     toVat: company?.vat_number || '-',
     itemsHtml,
     currency,
-    totalAmount,
+    subtotal: formatCompactNum(subtotal),
+    totalVat: formatCompactNum(totalVat),
+    others: formatCompactNum(others),
+    grandTotal: formatCompactNum(grandTotal),
     dealType,
     termsSectionHtml,
   });
@@ -270,8 +311,9 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
       {
         model: db.Deal,
         as: 'deal',
-        attributes: ['id', 'is_rcm_applicable', 'vat_percentage', 'deal_type'],
+        attributes: ['id', 'deal_number', 'is_rcm_applicable', 'vat_percentage', 'deal_type'],
         required: false,
+        include: [{ model: db.Contact, as: 'contact', required: false }],
       },
       {
         model: db.TermsAndConditions,
@@ -286,6 +328,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
         include: [{ model: db.ProductService, as: 'productService' }],
         order: [['sort_order', 'ASC'], ['id', 'ASC']],
       },
+      { model: db.User, as: 'createdByUser', required: false },
     ],
   });
   if (!po) return null;
@@ -304,7 +347,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   let subtotal = 0;
   let totalVat = 0;
 
-  for (const [i, item] of (po.items || []).entries()) {
+  for (const item of (po.items || [])) {
     const qty = parseFloat(item.quantity) || 0;
     const price = isFoc ? 0 : (parseFloat(item.price) || 0);
     const amount = qty * price;
@@ -312,21 +355,21 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     const total = amount + vat;
     subtotal += amount;
     totalVat += vat;
-    const vatCell = isRcm
-      ? `<td class="text-right">RCM</td>`
-      : `<td class="text-right">${formatNum(vat)} @${(vatPct * 100).toFixed(1)}%</td>`;
+    const vatDisplay = isRcm ? 'RCM' : formatCompactNum(vat);
+    const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
+    const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
     itemsHtml += `<tr>
-      <td>${i + 1}</td>
       <td>${formatItemWithDescription(item.productService?.name, item.item_description)}</td>
-      <td class="text-right">${formatNum(price)}</td>
-      <td class="text-right">${formatNum(qty)} Pcs</td>
-      <td class="text-right">${formatNum(amount)}</td>
-      ${vatCell}
-      <td class="text-right">${formatNum(total)}</td>
+      <td class="text-right">${formatCompactNum(price)}</td>
+      <td class="text-right">${qtyDisplay}</td>
+      <td class="text-right">${formatCompactNum(amount)}</td>
+      <td class="text-right">${vatDisplay}</td>
+      <td class="text-right">${formatCompactNum(total)}</td>
     </tr>`;
   }
 
-  const grandTotal = subtotal + totalVat;
+  const others = 0;
+  const grandTotal = subtotal + totalVat + others;
 
   const termsSectionHtml = buildTermsSectionHtml(po.terms || []);
 
@@ -337,22 +380,29 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     ? `PB/CE/${y}/${po.id}`
     : (approved ? `PO/CE/${y}/${po.id}` : `PQT/CE/${y}/${po.id}`);
   const poDate = formatDate(po.po_date);
-  const documentTitle = isBill ? 'Purchase Bill' : (approved ? 'Purchase Order' : 'Purchase Quotation');
-  const docRefLabel = isBill ? 'Bill' : (approved ? 'PO' : 'Quotation');
+  const documentTitle = isBill ? 'PURCHASE BILL' : (approved ? 'PURCHASE ORDER' : 'PURCHASE QUOTATION');
+  const docRefLabel = isBill ? 'Bill' : (approved ? 'Order' : 'Quotation');
+  const metaLinesHtml = buildMetaLinesHtml([
+    ['Reference', po.deal?.deal_number || '-'],
+    [`${docRefLabel} Number`, poNumber],
+    [`${docRefLabel} Date`, poDate],
+  ]);
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = party ? [party.address, party.city].filter(Boolean).join(', ') || '-' : '-';
 
   const html = renderTemplate(path.join(__dirname, '../templates/purchase-order.html'), {
+    logoDataUri: getLogoDataUri(),
+    stampDataUri: getStampDataUri(),
     documentTitle,
-    docRefLabel,
-    poNumber,
-    poDate,
+    metaLinesHtml,
     dealType,
+    fromContactName: personFullName(po.createdByUser) || '-',
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
     fromEmail: tenant.email || '-',
     fromPhone: tenant.phone || '-',
     fromAddress: fromAddr,
     fromVat: getVat(tenant),
+    toContactName: personFullName(po.deal?.contact) || '-',
     toCompany: party?.company_name || '-',
     toEmail: party?.email || '-',
     toPhone: party?.phone || '-',
@@ -360,9 +410,10 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     toVat: party?.vat_number || '-',
     itemsHtml,
     currency,
-    subtotal: formatNum(subtotal),
-    totalVat: isRcm ? 'RCM (Reverse Charge — paid to Govt.)' : formatNum(totalVat),
-    grandTotal: formatNum(grandTotal),
+    subtotal: formatCompactNum(subtotal),
+    totalVat: isRcm ? 'RCM' : formatCompactNum(totalVat),
+    others: formatCompactNum(others),
+    grandTotal: formatCompactNum(grandTotal),
     rcmNote: isRcm ? 'Note: VAT is applicable under Reverse Charge Mechanism. The recipient is liable to pay VAT directly to the government.' : '',
     termsSectionHtml,
   });
