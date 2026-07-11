@@ -103,11 +103,15 @@ function formatDealType(dealType) {
   return labels[dealType] || String(dealType).replace(/_/g, ' ');
 }
 
+function getTermSortOrder(term) {
+  return term.DealTerm?.sort_order ?? term.PurchaseOrderTerm?.sort_order ?? 0;
+}
+
 function buildTermsSectionHtml(termsList) {
   if (!termsList?.length) return '';
   const content = termsList
-    .sort((a, b) => (a.DealTerm?.sort_order ?? 0) - (b.DealTerm?.sort_order ?? 0))
-    .map((t) => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong><br>${(t.content || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`)
+    .sort((a, b) => getTermSortOrder(a) - getTermSortOrder(b))
+    .map((t) => `<p><strong>${(t.title || '').replace(/</g, '&lt;')}</strong></p>`)
     .join('');
   return `<div class="terms"><strong>Terms &amp; Conditions :</strong><br><br>${content}</div>`;
 }
@@ -268,15 +272,13 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
         as: 'deal',
         attributes: ['id', 'is_rcm_applicable', 'vat_percentage', 'deal_type'],
         required: false,
-        include: [
-          {
-            model: db.TermsAndConditions,
-            as: 'termsList',
-            through: { attributes: ['sort_order'] },
-            attributes: ['id', 'title', 'content'],
-            required: false,
-          },
-        ],
+      },
+      {
+        model: db.TermsAndConditions,
+        as: 'terms',
+        through: { attributes: ['sort_order'] },
+        attributes: ['id', 'title', 'content'],
+        required: false,
       },
       {
         model: db.PurchaseOrderItem,
@@ -315,7 +317,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
       : `<td class="text-right">${formatNum(vat)} @${(vatPct * 100).toFixed(1)}%</td>`;
     itemsHtml += `<tr>
       <td>${i + 1}</td>
-      <td>${(item.productService?.name || item.item_description || '-').replace(/</g, '&lt;')}</td>
+      <td>${formatItemWithDescription(item.productService?.name, item.item_description)}</td>
       <td class="text-right">${formatNum(price)}</td>
       <td class="text-right">${formatNum(qty)} Pcs</td>
       <td class="text-right">${formatNum(amount)}</td>
@@ -326,7 +328,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
 
   const grandTotal = subtotal + totalVat;
 
-  const termsSectionHtml = buildTermsSectionHtml(po.deal?.termsList || []);
+  const termsSectionHtml = buildTermsSectionHtml(po.terms || []);
 
   const isBill = String(po.document_type).toLowerCase() === 'bill';
   const approved = resolvePdfAsApproved(isApprovedStatus(po.status), options, { allowOverride: !isBill });
