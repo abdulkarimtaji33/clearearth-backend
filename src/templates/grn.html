@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  margin: 0;
+  color: #2b3a44;
+}
+.doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+.logo { width: 128px; }
+.doc-header-right { text-align: right; }
+.doc-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #1e8449;
+  letter-spacing: 0.3px;
+  margin-bottom: 8px;
+}
+.status-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 8px;
+}
+.status-new { background: #eef0f2; color: #55606b; }
+.status-submitted { background: #e3f2fd; color: #0d6efd; }
+.status-approved { background: #e6f4ea; color: #1e8449; }
+.doc-meta { font-size: 11px; color: #445; }
+.doc-meta-line { margin: 2px 0; }
+.doc-meta-line strong { color: #1a1a1a; }
+.header-divider {
+  height: 3px;
+  background: linear-gradient(90deg, #1e8449, #2ea85c);
+  width: 100%;
+  margin: 14px 0 18px 0;
+  border-radius: 2px;
+}
+.party-grid {
+  display: flex;
+  width: 100%;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+.party-col {
+  width: 50%;
+  background: #f7f9f8;
+  border: 1px solid #e6ebe8;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.party-col-title {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #1e8449;
+  margin-bottom: 6px;
+}
+.party-line { font-size: 11px; color: #2b3a55; margin: 3px 0; }
+.party-line strong { color: #1a1a1a; font-weight: 700; }
+.summary-strip {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.summary-card {
+  flex: 1;
+  background: #f2f8f4;
+  border: 1px solid #dcecdf;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+}
+.summary-card .value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #1e8449;
+}
+.summary-card .label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #6b7a72;
+  margin-top: 2px;
+}
+.notes-box {
+  margin: 0 0 16px 0;
+  padding: 10px 14px;
+  border: 1px solid #f0e2b3;
+  border-radius: 8px;
+  background: #fdf8e8;
+  font-size: 11px;
+  color: #5c4d1a;
+}
+.notes-box strong { color: #4a3d10; }
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.items-table th {
+  background: #1e8449;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 8px 7px;
+  text-align: left;
+  border: 1px solid #176437;
+}
+.items-table td {
+  padding: 7px 7px;
+  border: 1px solid #e6e9e7;
+  vertical-align: top;
+  font-size: 10.5px;
+}
+.items-table tbody tr:nth-child(even) td { background: #f7f9f8; }
+.items-table .item-name { font-weight: 700; color: #1a1a1a; }
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.muted { color: #9aa5a0; }
+.footer-note {
+  margin-top: 22px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+  font-size: 9.5px;
+  color: #93a09b;
+  display: flex;
+  justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <div>
+    <img class="logo" src="{{logoDataUri}}" alt="Logo" />
+  </div>
+  <div class="doc-header-right">
+    <div class="doc-title">Goods Received Note</div>
+    <div class="status-badge status-{{statusClass}}">{{statusLabel}}</div>
+    <div class="doc-meta">{{metaLinesHtml}}</div>
+  </div>
+</div>
+
+<div class="header-divider"></div>
+
+<div class="party-grid">
+  <div class="party-col">
+    <div class="party-col-title">Received by</div>
+    <div class="party-line"><strong>{{fromCompany}}</strong></div>
+    <div class="party-line">{{fromAddress}}</div>
+    <div class="party-line">{{fromCity}}</div>
+    <div class="party-line"><strong>TRN:</strong> {{fromVat}}</div>
+  </div>
+  <div class="party-col">
+    <div class="party-col-title">Reference details</div>
+    <div class="party-line"><strong>Deal:</strong> {{dealLine}}</div>
+    <div class="party-line"><strong>Work order:</strong> {{workOrderLine}}</div>
+    <div class="party-line"><strong>Client:</strong> {{clientLine}}</div>
+    <div class="party-line"><strong>Created by:</strong> {{createdByLine}}</div>
+    <div class="party-line"><strong>Approved by:</strong> {{approvedByLine}}</div>
+  </div>
+</div>
+
+<div class="summary-strip">
+  <div class="summary-card">
+    <div class="value">{{itemCount}}</div>
+    <div class="label">Line items</div>
+  </div>
+  <div class="summary-card">
+    <div class="value">{{totalQuantity}}</div>
+    <div class="label">Total quantity</div>
+  </div>
+  <div class="summary-card">
+    <div class="value">{{totalUnits}}</div>
+    <div class="label">Total units (pcs)</div>
+  </div>
+</div>
+
+{{notesSectionHtml}}
+
+<table class="items-table">
+  <thead>
+    <tr>
+      <th style="width:4%">#</th>
+      <th style="width:16%">Product</th>
+      <th style="width:12%">Material type</th>
+      <th style="width:9%">Make</th>
+      <th style="width:9%">Model</th>
+      <th style="width:11%">Serial number</th>
+      <th style="width:8%" class="text-right">Quantity</th>
+      <th style="width:6%">UOM</th>
+      <th style="width:7%" class="text-right">Units (pcs)</th>
+      <th style="width:18%">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{itemRowsHtml}}
+  </tbody>
+</table>
+
+<div class="footer-note">
+  <span>Clear Earth Recycling LLC — Goods Received Note</span>
+  <span>Generated on {{generatedAt}}</span>
+</div>
+
+</body>
+</html>

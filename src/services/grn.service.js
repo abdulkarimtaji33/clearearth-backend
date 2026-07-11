@@ -162,6 +162,10 @@ const getById = async (tenantId, id) => {
 };
 
 async function createItemWithImages(grnId, item, transaction) {
+  const unitsVal = item.units ?? item.units_count;
+  const parsedUnits = unitsVal != null && String(unitsVal).trim() !== ''
+    ? parseInt(unitsVal, 10)
+    : null;
   const row = await db.GrnItem.create(
     {
       grn_id: grnId,
@@ -169,6 +173,10 @@ async function createItemWithImages(grnId, item, transaction) {
       material_type_id: item.materialTypeId || item.material_type_id || null,
       quantity: parseFloat(item.quantity) || 0,
       unit_of_measure: item.unitOfMeasure || item.unit_of_measure || 'kg',
+      make: item.make?.toString().trim() || null,
+      model: item.model?.toString().trim() || null,
+      serial_number: item.serialNumber || item.serial_number?.toString().trim() || null,
+      units: Number.isFinite(parsedUnits) ? parsedUnits : null,
       notes: item.notes || null,
     },
     { transaction }

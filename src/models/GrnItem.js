@@ -8,6 +8,10 @@ module.exports = (sequelize, DataTypes) => {
       material_type_id: { type: DataTypes.INTEGER, allowNull: true },
       quantity: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       unit_of_measure: { type: DataTypes.STRING(20), allowNull: true, defaultValue: 'kg' },
+      make: { type: DataTypes.STRING(255), allowNull: true },
+      model: { type: DataTypes.STRING(255), allowNull: true },
+      serial_number: { type: DataTypes.STRING(255), allowNull: true },
+      units: { type: DataTypes.INTEGER, allowNull: true, comment: 'Optional piece count' },
       notes: { type: DataTypes.TEXT, allowNull: true },
     },
     {

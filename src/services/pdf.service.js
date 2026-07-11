@@ -665,10 +665,96 @@ async function generateStatementOfAccountPdf(tenantId, companyId, options = {}) 
   return htmlToPdf(html);
 }
 
+async function generateGrnPdf(grnId, tenantId) {
+  const grnService = require('./grn.service');
+  const grn = await grnService.getById(tenantId, grnId);
+  if (!grn) return null;
+
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!tenant) return null;
+
+  const fromAddr = tenant.address || '-';
+  const fromCity = [tenant.city, tenant.country].filter(Boolean).join(', ') || '-';
+
+  const deal = grn.deal;
+  const dealLine = deal
+    ? `${deal.deal_number || ''}${deal.title ? ` — ${deal.title}` : ''}`.trim() || '-'
+    : '-';
+  const workOrderLine = grn.workOrder?.title || (grn.work_order_id ? `Work Order #${grn.work_order_id}` : '-');
+  const clientLine = deal?.company?.company_name
+    || deal?.lead?.company?.company_name
+    || personFullName(deal?.contact || deal?.lead?.contact)
+    || '-';
+  const createdByLine = personFullName(grn.createdByUser) || '-';
+  const approvedByLine = grn.status === 'approved'
+    ? `${personFullName(grn.approvedByUser) || '-'}${grn.approved_at ? ` (${formatDate(grn.approved_at)})` : ''}`
+    : '-';
+
+  const metaLinesHtml = buildMetaLinesHtml([
+    ['GRN No.', grn.grn_number],
+    ['Date', formatDate(grn.created_at || grn.createdAt)],
+    ['Status', String(grn.status || '').replace(/_/g, ' ')],
+  ]);
+
+  const notesSectionHtml = grn.notes?.trim()
+    ? `<div class="notes-box"><strong>General notes:</strong><br>${escapeHtml(grn.notes).replace(/\n/g, '<br>')}</div>`
+    : '';
+
+  const itemsList = grn.items || [];
+  const totalQuantity = itemsList.reduce((s, it) => s + (parseFloat(it.quantity) || 0), 0);
+  const totalUnits = itemsList.reduce((s, it) => s + (it.units != null ? parseInt(it.units, 10) || 0 : 0), 0);
+  const statusClass = ['new', 'submitted', 'approved'].includes(grn.status) ? grn.status : 'new';
+
+  let itemRowsHtml = '';
+  itemsList.forEach((it, idx) => {
+    const materialName = it.materialType?.display_name || it.materialType?.value || '-';
+    itemRowsHtml += `<tr>
+      <td class="text-center">${idx + 1}</td>
+      <td class="item-name">${escapeHtml(it.item_name || '-')}</td>
+      <td>${escapeHtml(materialName)}</td>
+      <td>${escapeHtml(it.make || '-')}</td>
+      <td>${escapeHtml(it.model || '-')}</td>
+      <td>${escapeHtml(it.serial_number || '-')}</td>
+      <td class="text-right">${formatCompactNum(it.quantity)}</td>
+      <td>${escapeHtml(it.unit_of_measure || '-')}</td>
+      <td class="text-right">${it.units != null && it.units !== '' ? escapeHtml(it.units) : '<span class="muted">-</span>'}</td>
+      <td>${escapeHtml(it.notes || '-')}</td>
+    </tr>`;
+  });
+  if (!itemRowsHtml) {
+    itemRowsHtml = '<tr><td colspan="10" class="text-center muted">No line items</td></tr>';
+  }
+
+  const html = renderTemplate(path.join(__dirname, '../templates/grn.html'), {
+    logoDataUri: getLogoDataUri(),
+    metaLinesHtml,
+    statusClass,
+    statusLabel: String(grn.status || 'new').replace(/_/g, ' '),
+    itemCount: itemsList.length,
+    totalQuantity: formatCompactNum(totalQuantity),
+    totalUnits: totalUnits > 0 ? totalUnits : '-',
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: fromAddr,
+    fromCity,
+    fromVat: getVat(tenant),
+    dealLine: escapeHtml(dealLine),
+    workOrderLine: escapeHtml(workOrderLine),
+    clientLine: escapeHtml(clientLine),
+    createdByLine: escapeHtml(createdByLine),
+    approvedByLine: escapeHtml(approvedByLine),
+    notesSectionHtml,
+    itemRowsHtml,
+    generatedAt: formatDate(new Date()),
+  });
+
+  return htmlToPdf(html);
+}
+
 module.exports = {
   generateQuotationPdf,
   generatePurchaseOrderPdf,
   generateTaxInvoicePdf,
   generateReceivableReceiptPdf,
   generateStatementOfAccountPdf,
+  generateGrnPdf,
 };

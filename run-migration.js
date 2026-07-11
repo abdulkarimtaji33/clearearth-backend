@@ -2201,6 +2201,20 @@ async function runMigration() {
       if (!e.message?.includes('Unknown column')) console.warn('  junction cleanup:', e.message);
     }
 
+    console.log('Adding GRN item extra fields (make, model, serial number, units)...');
+    for (const col of [
+      'ADD COLUMN make VARCHAR(255) NULL',
+      'ADD COLUMN model VARCHAR(255) NULL',
+      'ADD COLUMN serial_number VARCHAR(255) NULL',
+      'ADD COLUMN units INT NULL',
+    ]) {
+      try {
+        await db.sequelize.query(`ALTER TABLE grn_items ${col}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) console.warn(`  grn_items ${col}:`, e.message);
+      }
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
