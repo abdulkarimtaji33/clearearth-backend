@@ -722,7 +722,7 @@ async function generateGrnPdf(grnId, tenantId) {
     </tr>`;
   });
   if (!itemRowsHtml) {
-    itemRowsHtml = '<tr><td colspan="10" class="text-center muted">No line items</td></tr>';
+    itemRowsHtml = '<tr><td colspan="10" class="text-center muted">No items</td></tr>';
   }
 
   const html = renderTemplate(path.join(__dirname, '../templates/grn.html'), {
