@@ -147,6 +147,11 @@ function buildTermsSectionHtml(termsList) {
   return `<ul>${items}</ul>`;
 }
 
+function buildRcmNoteHtml(isRcm) {
+  if (!isRcm) return '';
+  return '<div class="rcm-note">Note: VAT is applicable under Reverse Charge Mechanism. The recipient is liable to pay VAT directly to the government.</div>';
+}
+
 function renderTemplate(templatePath, data) {
   let html = fs.readFileSync(templatePath, 'utf8');
   const keys = Object.keys(data).sort((a, b) => b.length - a.length);
@@ -155,6 +160,8 @@ function renderTemplate(templatePath, data) {
     const val = String(data[key] ?? '');
     html = html.split(placeholder).join(val);
   }
+  // Never leak unreplaced template variables into customer-facing PDFs
+  html = html.replace(/\{\{[a-zA-Z0-9_]+\}\}/g, '');
   return html;
 }
 
@@ -212,7 +219,8 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const company = quotation.deal?.company;
   const items = quotation.deal?.items || [];
   const isFoc = quotation.deal?.deal_type === 'free_of_charge';
-  const vatPct = isFoc ? 0 : (parseFloat(quotation.deal?.vat_percentage) || 5) / 100;
+  const isRcm = !isFoc && (quotation.deal?.is_rcm_applicable || false);
+  const vatPct = isFoc ? 0 : (isRcm ? 0 : (parseFloat(quotation.deal?.vat_percentage) || 5) / 100);
   const currency = quotation.currency || 'AED';
   const dealType = formatDealType(quotation.deal?.deal_type);
 
@@ -231,12 +239,13 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       totalVat += tax;
       const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
       const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
+      const vatDisplay = isRcm ? 'RCM' : formatCompactNum(tax);
       itemsHtml += `<tr>
         <td>${formatItemWithDescription(item.productService?.name, item.notes)}</td>
         <td class="text-right">${formatCompactNum(unitPrice)}</td>
         <td class="text-right">${qtyDisplay}</td>
         <td class="text-right">${formatCompactNum(amount)}</td>
-        <td class="text-right">${formatCompactNum(tax)}</td>
+        <td class="text-right">${vatDisplay}</td>
         <td class="text-right">${formatCompactNum(total)}</td>
       </tr>`;
     });
@@ -297,6 +306,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
     grandTotal: formatCompactNum(grandTotal),
     dealType,
     termsSectionHtml,
+    rcmNoteHtml: buildRcmNoteHtml(isRcm),
   });
 
   return htmlToPdf(html);
@@ -414,7 +424,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     totalVat: isRcm ? 'RCM' : formatCompactNum(totalVat),
     others: formatCompactNum(others),
     grandTotal: formatCompactNum(grandTotal),
-    rcmNote: isRcm ? 'Note: VAT is applicable under Reverse Charge Mechanism. The recipient is liable to pay VAT directly to the government.' : '',
+    rcmNoteHtml: buildRcmNoteHtml(isRcm),
     termsSectionHtml,
   });
 
