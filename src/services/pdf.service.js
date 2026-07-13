@@ -272,7 +272,6 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const quoteDate = formatDate(quotation.quotation_date);
   const documentTitle = approved ? 'SERVICE ORDER' : 'SERVICE QUOTATION';
   const metaLinesHtml = buildMetaLinesHtml([
-    ['PO Reference', quotation.deal?.deal_number || '-'],
     [approved ? 'Order Number' : 'Quote Number', quoteNumber],
     [approved ? 'Order Date' : 'Quote Date', quoteDate],
   ]);
@@ -393,7 +392,6 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   const documentTitle = isBill ? 'PURCHASE BILL' : (approved ? 'PURCHASE ORDER' : 'PURCHASE QUOTATION');
   const docRefLabel = isBill ? 'Bill' : (approved ? 'Order' : 'Quotation');
   const metaLinesHtml = buildMetaLinesHtml([
-    ['Reference', po.deal?.deal_number || '-'],
     [`${docRefLabel} Number`, poNumber],
     [`${docRefLabel} Date`, poDate],
   ]);

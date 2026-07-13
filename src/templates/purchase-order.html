@@ -80,6 +80,15 @@ body{
   color:#1a1a1a;
 }
 
+.party-label{
+  font-size:11px;
+  font-weight:800;
+  color:#1e8449;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  margin-bottom:4px;
+}
+
 .party-divider{
   height:1px;
   background:#8fca9b;
@@ -250,6 +259,7 @@ body{
 
 <div class="party-grid">
   <div class="party-col">
+    <div class="party-label">From</div>
     <div class="party-line"><strong>Name:</strong> {{fromContactName}}</div>
     <div class="party-line"><strong>Company:</strong> {{fromCompany}}</div>
     <div class="party-line"><strong>Email:</strong> {{fromEmail}}</div>
@@ -258,6 +268,7 @@ body{
     <div class="party-line"><strong>VAT No.:</strong> {{fromVat}}</div>
   </div>
   <div class="party-col">
+    <div class="party-label">To</div>
     <div class="party-line"><strong>Name:</strong> {{toContactName}}</div>
     <div class="party-line"><strong>Company:</strong> {{toCompany}}</div>
     <div class="party-line"><strong>Email:</strong> {{toEmail}}</div>
@@ -275,11 +286,11 @@ body{
 <thead>
 <tr>
 <th style="width:34%">Description</th>
-<th style="width:14%" class="text-right">Unit Charge</th>
+<th style="width:14%" class="text-right">Unit Charge (AED)</th>
 <th style="width:16%" class="text-right">Quantity</th>
-<th style="width:12%" class="text-right">Amount</th>
-<th style="width:10%" class="text-right">VAT</th>
-<th style="width:14%" class="text-right">Total</th>
+<th style="width:12%" class="text-right">Amount (AED)</th>
+<th style="width:10%" class="text-right">VAT (AED)</th>
+<th style="width:14%" class="text-right">Total (AED)</th>
 </tr>
 </thead>
 <tbody>
