@@ -4,6 +4,8 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
+const { nextReferenceNumber } = require('../utils/referenceNumber');
+const SERVICE_QUOTATION_SEED = 654; // old ERP's last service quotation was QT/SERV/654/1
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
 const { Op } = db.Sequelize;
@@ -126,16 +128,23 @@ const create = async (tenantId, data, scope = {}) => {
 
   const existingCount = await db.Quotation.count({ where: { tenant_id: tenantId, deal_id: dealId } });
 
-  const quotation = await db.Quotation.create({
-    tenant_id: tenantId,
-    deal_id: dealId,
-    prepared_by: effectivePreparedBy,
-    quotation_date: quotationDate,
-    quotation_amount: parseFloat(quotationAmount) || 0,
-    currency: 'AED',
-    status: QUOTATION_STATUS.NEW,
-    version: existingCount + 1,
-    remarks: remarks || null,
+  const quotation = await db.sequelize.transaction(async (t) => {
+    const referenceNumber = await nextReferenceNumber(db.Quotation, SERVICE_QUOTATION_SEED, t);
+    return db.Quotation.create(
+      {
+        tenant_id: tenantId,
+        deal_id: dealId,
+        prepared_by: effectivePreparedBy,
+        quotation_date: quotationDate,
+        quotation_amount: parseFloat(quotationAmount) || 0,
+        currency: 'AED',
+        status: QUOTATION_STATUS.NEW,
+        version: existingCount + 1,
+        reference_number: referenceNumber,
+        remarks: remarks || null,
+      },
+      { transaction: t }
+    );
   });
 
   return getById(tenantId, quotation.id);

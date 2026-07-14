@@ -9,6 +9,8 @@ const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval'
 const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const { nextReferenceNumber } = require('../utils/referenceNumber');
+const PURCHASE_QUOTATION_SEED = 653; // old ERP's last purchase quotation was QT/PURC/653/2
 
 const PO_STATUS = {
   NEW: 'new',
@@ -258,6 +260,7 @@ const create = async (tenantId, data, scope = {}) => {
   }
 
   const po = await db.sequelize.transaction(async (t) => {
+    const referenceNumber = await nextReferenceNumber(db.PurchaseOrder, PURCHASE_QUOTATION_SEED, t);
     const newPo = await db.PurchaseOrder.create(
       {
         tenant_id: tenantId,
@@ -271,6 +274,7 @@ const create = async (tenantId, data, scope = {}) => {
         work_order_id: workOrderId || null,
         document_type: documentType === 'bill' ? 'bill' : 'quotation',
         created_by: scope.scopeUserId || null,
+        reference_number: referenceNumber,
       },
       { transaction: t }
     );

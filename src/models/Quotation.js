@@ -14,6 +14,11 @@ module.exports = (sequelize, DataTypes) => {
       currency: { type: DataTypes.STRING(10), defaultValue: 'AED' },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
       version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+      reference_number: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Continues the old ERP\'s quotation numbering sequence (last was 654)',
+      },
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },
       approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       approved_at: { type: DataTypes.DATE, allowNull: true },

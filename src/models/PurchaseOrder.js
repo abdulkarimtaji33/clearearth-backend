@@ -52,6 +52,11 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'quotation',
         comment: 'quotation | bill',
       },
+      reference_number: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Continues the old ERP\'s purchase quotation numbering sequence (last was 653)',
+      },
     },
     {
       tableName: 'purchase_orders',

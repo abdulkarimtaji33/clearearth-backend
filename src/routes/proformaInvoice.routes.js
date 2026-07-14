@@ -11,6 +11,7 @@ router.get(
   proformaInvoiceController.previewFromQuotation
 );
 router.get('/', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getAll);
+router.get('/:id/pdf', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getPdf);
 router.get('/:id', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getById);
 router.post('/', authorize('accounting.create', 'deals.create'), proformaInvoiceController.create);
 router.put('/:id', authorize('accounting.update', 'deals.update'), proformaInvoiceController.update);

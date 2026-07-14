@@ -267,8 +267,10 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
 
   const others = 0;
   const grandTotal = subtotal + totalVat + others;
+  const vatLabel = isRcm ? 'Value-Added Tax' : `Value-Added Tax (${formatCompactNum(vatPct * 100)}%)`;
   const approved = resolvePdfAsApproved(isApprovedStatus(quotation.status), options);
-  const quoteNumber = approved ? `SO/SERV/${quotation.id}/1` : `QT/SERV/${quotation.id}/1`;
+  const quoteRef = quotation.reference_number ?? quotation.id;
+  const quoteNumber = approved ? `SO/SERV/${quoteRef}/1` : `QT/SERV/${quoteRef}/1`;
   const quoteDate = formatDate(quotation.quotation_date);
   const documentTitle = approved ? 'SERVICE ORDER' : 'SERVICE QUOTATION';
   const metaLinesHtml = buildMetaLinesHtml([
@@ -303,6 +305,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
     totalVat: formatCompactNum(totalVat),
     others: formatCompactNum(others),
     grandTotal: formatCompactNum(grandTotal),
+    vatLabel,
     dealType,
     termsSectionHtml,
     rcmNoteHtml: buildRcmNoteHtml(isRcm),
@@ -379,15 +382,16 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
 
   const others = 0;
   const grandTotal = subtotal + totalVat + others;
+  const vatLabel = isRcm ? 'Value-Added Tax' : `Value-Added Tax (${formatCompactNum(vatPct * 100)}%)`;
 
   const termsSectionHtml = buildTermsSectionHtml(po.terms || []);
 
   const isBill = String(po.document_type).toLowerCase() === 'bill';
   const approved = resolvePdfAsApproved(isApprovedStatus(po.status), options, { allowOverride: !isBill });
-  const y = new Date().getFullYear();
+  const poRef = po.reference_number ?? po.id;
   const poNumber = isBill
-    ? `PB/CE/${y}/${po.id}`
-    : (approved ? `PO/CE/${y}/${po.id}` : `PQT/CE/${y}/${po.id}`);
+    ? `PB/PURC/${poRef}/1`
+    : (approved ? `PO/PURC/${poRef}/1` : `QT/PURC/${poRef}/1`);
   const poDate = formatDate(po.po_date);
   const documentTitle = isBill ? 'PURCHASE BILL' : (approved ? 'PURCHASE ORDER' : 'PURCHASE QUOTATION');
   const docRefLabel = isBill ? 'Bill' : (approved ? 'Order' : 'Quotation');
@@ -422,6 +426,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     totalVat: isRcm ? 'RCM' : formatCompactNum(totalVat),
     others: formatCompactNum(others),
     grandTotal: formatCompactNum(grandTotal),
+    vatLabel,
     rcmNoteHtml: buildRcmNoteHtml(isRcm),
     termsSectionHtml,
   });
@@ -532,6 +537,121 @@ async function generateTaxInvoicePdf(taxInvoiceId, tenantId) {
     paymentTerms: paymentTermsLabel(invoice.invoice_date, invoice.due_date),
     dueDate: invoice.due_date ? formatDate(invoice.due_date) : '-',
     refNo: invoice.reference_no || invoice.proformaInvoice?.deal?.deal_number || '-',
+    projectLineHtml,
+    itemsTableHtml,
+    itemsInTotalLabel: `Items in Total ${formatNum(totalQty)}`,
+    totalDisplay: formatMoneyWithSymbol(currency, total),
+    amountInWords: amountInWords(total, currency),
+    bankBeneficiary: bank.beneficiary,
+    bankName: bank.bankName,
+    bankBranch: bank.branch,
+    bankSwift: bank.swift,
+    bankAccountAed: bank.accountAed,
+    bankIbanAed: bank.ibanAed,
+    bankAccountUsd: bank.accountUsd,
+    bankIbanUsd: bank.ibanUsd,
+  });
+
+  return htmlToPdf(html);
+}
+
+async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
+  const invoice = await db.ProformaInvoice.findOne({
+    where: { id: proformaInvoiceId, tenant_id: tenantId },
+    include: [
+      {
+        model: db.Deal,
+        as: 'deal',
+        include: [{ model: db.Company, as: 'company' }],
+      },
+      {
+        model: db.ProformaInvoiceItem,
+        as: 'items',
+        separate: true,
+        order: [['sort_order', 'ASC'], ['id', 'ASC']],
+        include: [{ model: db.ProductService, as: 'productService' }],
+      },
+    ],
+  });
+  if (!invoice) return null;
+
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!tenant) return null;
+
+  const company = invoice.deal?.company;
+  const dealTitle = invoice.deal?.title;
+  const items = invoice.items || [];
+  const currency = invoice.currency || 'AED';
+  const vatPct = parseFloat(invoice.vat_percentage) || 0;
+  const showTax = vatPct > 0.005;
+
+  let subtotal = 0;
+  let totalTax = 0;
+  let totalQty = 0;
+  let rowsHtml = '';
+
+  items.forEach((item, i) => {
+    const qty = parseFloat(item.quantity) || 0;
+    const rate = parseFloat(item.unit_price) || 0;
+    const taxable = qty * rate;
+    const tax = showTax ? (taxable * vatPct) / 100 : 0;
+    const amount = taxable + tax;
+    subtotal += taxable;
+    totalTax += tax;
+    totalQty += qty;
+    const desc = (item.description || item.productService?.name || '-').replace(/</g, '&lt;');
+    rowsHtml += `<tr>
+      <td>${i + 1}</td>
+      <td>${desc}</td>
+      <td class="text-right">${formatNum(qty)}</td>
+      <td class="text-right">${formatNum(rate)}</td>
+      <td class="text-right">${formatNum(taxable)}</td>
+      ${showTax ? `<td class="text-right">${formatNum(tax)}<br>${vatPct.toFixed(2)}%</td>` : ''}
+      <td class="text-right">${formatNum(amount)}</td>
+    </tr>`;
+  });
+
+  const total = subtotal + totalTax;
+
+  const headerCols = showTax
+    ? '<th style="width:5%">#</th><th style="width:32%">Item &amp; Description</th><th style="width:10%">Qty</th><th style="width:12%">Rate</th><th style="width:15%">Taxable Amount</th><th style="width:11%">Tax</th><th style="width:15%">Amount</th>'
+    : '<th style="width:5%">#</th><th style="width:37%">Item &amp; Description</th><th style="width:11%">Qty</th><th style="width:13%">Rate</th><th style="width:17%">Taxable Amount</th><th style="width:17%">Amount</th>';
+
+  const subtotalRow = showTax
+    ? `<tr class="subtotal-row"><td colspan="4">Sub Total</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(totalTax)}</td><td class="text-right">${formatNum(total)}</td></tr>`
+    : `<tr class="subtotal-row"><td colspan="4">Sub Total</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(total)}</td></tr>`;
+
+  const itemsTableHtml = `<table class="items-table">
+<thead><tr>${headerCols}</tr></thead>
+<tbody>${rowsHtml}${subtotalRow}</tbody>
+</table>`;
+
+  const projectLineHtml = dealTitle ? `<div class="project-line">${dealTitle.replace(/</g, '&lt;')}</div>` : '';
+
+  const fromAddr = tenant.address || '-';
+  const fromCity = [tenant.city, tenant.country].filter(Boolean).join(', ') || '-';
+  const toAddr = company?.address || '-';
+  const toCity = [company?.city, company?.country].filter(Boolean).join(', ') || '-';
+
+  const bank = getBankDetails(tenant);
+
+  const html = renderTemplate(path.join(__dirname, '../templates/proforma-invoice.html'), {
+    logoDataUri: getLogoDataUri(),
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: fromAddr,
+    fromCity,
+    fromPhone: tenant.phone || '-',
+    fromEmail: tenant.email || '-',
+    fromVat: getVat(tenant),
+    invoiceNumber: invoice.proforma_number,
+    toCompany: company?.company_name || '-',
+    toAddress: toAddr,
+    toCity,
+    toVat: company?.vat_number || '-',
+    invoiceDate: formatDate(invoice.invoice_date),
+    paymentTerms: paymentTermsLabel(invoice.invoice_date, invoice.due_date),
+    dueDate: invoice.due_date ? formatDate(invoice.due_date) : '-',
+    refNo: invoice.deal?.deal_number || '-',
     projectLineHtml,
     itemsTableHtml,
     itemsInTotalLabel: `Items in Total ${formatNum(totalQty)}`,
@@ -751,6 +871,7 @@ async function generateGrnPdf(grnId, tenantId) {
 module.exports = {
   generateQuotationPdf,
   generatePurchaseOrderPdf,
+  generateProformaInvoicePdf,
   generateTaxInvoicePdf,
   generateReceivableReceiptPdf,
   generateStatementOfAccountPdf,

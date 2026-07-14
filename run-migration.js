@@ -2215,6 +2215,54 @@ async function runMigration() {
       }
     }
 
+    console.log('Adding reference_number to quotations and purchase_orders (continuing old ERP numbering)...');
+    try {
+      await db.sequelize.query('ALTER TABLE quotations ADD COLUMN reference_number INT NULL');
+      console.log('  reference_number column added to quotations');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  quotations.reference_number:', e.message);
+      else console.log('  quotations.reference_number already present');
+    }
+    try {
+      await db.sequelize.query('ALTER TABLE purchase_orders ADD COLUMN reference_number INT NULL');
+      console.log('  reference_number column added to purchase_orders');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  purchase_orders.reference_number:', e.message);
+      else console.log('  purchase_orders.reference_number already present');
+    }
+    try {
+      // Old ERP's last service quotation was QT/SERV/654/1 — continue from 655.
+      const [result] = await db.sequelize.query(`
+        UPDATE quotations q
+        JOIN (
+          SELECT id, (@svn := @svn + 1) AS rn
+          FROM quotations, (SELECT @svn := 654) init
+          WHERE reference_number IS NULL
+          ORDER BY id ASC
+        ) t ON t.id = q.id
+        SET q.reference_number = t.rn
+      `);
+      if (result?.affectedRows) console.log(`  Backfilled reference_number for ${result.affectedRows} quotation(s), continuing from 655`);
+    } catch (e) {
+      console.warn('  Backfill quotations.reference_number:', e.message);
+    }
+    try {
+      // Old ERP's last purchase quotation was QT/PURC/653/2 — continue from 654.
+      const [result] = await db.sequelize.query(`
+        UPDATE purchase_orders p
+        JOIN (
+          SELECT id, (@pon := @pon + 1) AS rn
+          FROM purchase_orders, (SELECT @pon := 653) init
+          WHERE reference_number IS NULL
+          ORDER BY id ASC
+        ) t ON t.id = p.id
+        SET p.reference_number = t.rn
+      `);
+      if (result?.affectedRows) console.log(`  Backfilled reference_number for ${result.affectedRows} purchase order(s), continuing from 654`);
+    } catch (e) {
+      console.warn('  Backfill purchase_orders.reference_number:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
