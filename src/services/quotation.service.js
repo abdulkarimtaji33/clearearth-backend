@@ -104,6 +104,7 @@ const getById = async (tenantId, quotationId, scope = {}) => {
       },
       { model: db.User, as: 'preparedByUser', attributes: ['id', 'first_name', 'last_name', 'email'] },
       { model: db.WorkOrder, as: 'workOrder', attributes: ['id', 'title', 'status'], required: false },
+      { model: db.ProformaInvoice, as: 'proformaInvoice', attributes: ['id', 'proforma_number'], required: false },
     ],
   });
   if (!quotation) throw ApiError.notFound('Quotation not found');

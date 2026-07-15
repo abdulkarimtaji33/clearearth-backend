@@ -562,7 +562,17 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
       {
         model: db.Deal,
         as: 'deal',
-        include: [{ model: db.Company, as: 'company' }],
+        include: [
+          { model: db.Company, as: 'company' },
+          { model: db.Contact, as: 'contact', required: false },
+          {
+            model: db.TermsAndConditions,
+            as: 'termsList',
+            through: { attributes: ['sort_order'] },
+            attributes: ['id', 'title', 'content'],
+            required: false,
+          },
+        ],
       },
       {
         model: db.ProformaInvoiceItem,
@@ -571,6 +581,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
         order: [['sort_order', 'ASC'], ['id', 'ASC']],
         include: [{ model: db.ProductService, as: 'productService' }],
       },
+      { model: db.User, as: 'createdByUser', required: false },
     ],
   });
   if (!invoice) return null;
@@ -579,92 +590,78 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
   if (!tenant) return null;
 
   const company = invoice.deal?.company;
-  const dealTitle = invoice.deal?.title;
   const items = invoice.items || [];
+  const isFoc = invoice.deal?.deal_type === 'free_of_charge';
+  const isRcm = !isFoc && (invoice.deal?.is_rcm_applicable || false);
+  const vatPct = isFoc ? 0 : (isRcm ? 0 : (parseFloat(invoice.vat_percentage) || 5) / 100);
   const currency = invoice.currency || 'AED';
-  const vatPct = parseFloat(invoice.vat_percentage) || 0;
-  const showTax = vatPct > 0.005;
+  const dealType = formatDealType(invoice.deal?.deal_type);
 
+  let itemsHtml = '';
   let subtotal = 0;
-  let totalTax = 0;
-  let totalQty = 0;
-  let rowsHtml = '';
+  let totalVat = 0;
 
-  items.forEach((item, i) => {
+  items.forEach((item) => {
     const qty = parseFloat(item.quantity) || 0;
-    const rate = parseFloat(item.unit_price) || 0;
-    const taxable = qty * rate;
-    const tax = showTax ? (taxable * vatPct) / 100 : 0;
-    const amount = taxable + tax;
-    subtotal += taxable;
-    totalTax += tax;
-    totalQty += qty;
-    const desc = (item.description || item.productService?.name || '-').replace(/</g, '&lt;');
-    rowsHtml += `<tr>
-      <td>${i + 1}</td>
-      <td>${desc}</td>
-      <td class="text-right">${formatNum(qty)}</td>
-      <td class="text-right">${formatNum(rate)}</td>
-      <td class="text-right">${formatNum(taxable)}</td>
-      ${showTax ? `<td class="text-right">${formatNum(tax)}<br>${vatPct.toFixed(2)}%</td>` : ''}
-      <td class="text-right">${formatNum(amount)}</td>
+    const unitPrice = isFoc ? 0 : (parseFloat(item.unit_price) || 0);
+    const amount = qty * unitPrice;
+    const tax = amount * vatPct;
+    const total = amount + tax;
+    subtotal += amount;
+    totalVat += tax;
+    const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
+    const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
+    const vatDisplay = isRcm ? 'RCM' : formatCompactNum(tax);
+    itemsHtml += `<tr>
+      <td>${formatItemWithDescription(item.productService?.name, item.description)}</td>
+      <td class="text-right">${formatCompactNum(unitPrice)}</td>
+      <td class="text-right">${qtyDisplay}</td>
+      <td class="text-right">${formatCompactNum(amount)}</td>
+      <td class="text-right">${vatDisplay}</td>
+      <td class="text-right">${formatCompactNum(total)}</td>
     </tr>`;
   });
 
-  const total = subtotal + totalTax;
+  const others = 0;
+  const grandTotal = subtotal + totalVat + others;
+  const vatLabel = isRcm ? 'Value-Added Tax' : `Value-Added Tax (${formatCompactNum(vatPct * 100)}%)`;
+  const documentTitle = 'PROFORMA INVOICE';
+  const metaLinesHtml = buildMetaLinesHtml([
+    ['Invoice Number', invoice.proforma_number],
+    ['Invoice Date', formatDate(invoice.invoice_date)],
+  ]);
+  const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
+  const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
 
-  const headerCols = showTax
-    ? '<th style="width:5%">#</th><th style="width:32%">Item &amp; Description</th><th style="width:10%">Qty</th><th style="width:12%">Rate</th><th style="width:15%">Taxable Amount</th><th style="width:11%">Tax</th><th style="width:15%">Amount</th>'
-    : '<th style="width:5%">#</th><th style="width:37%">Item &amp; Description</th><th style="width:11%">Qty</th><th style="width:13%">Rate</th><th style="width:17%">Taxable Amount</th><th style="width:17%">Amount</th>';
+  const termsSectionHtml = buildTermsSectionHtml(invoice.deal?.termsList || []);
 
-  const subtotalRow = showTax
-    ? `<tr class="subtotal-row"><td colspan="4">Sub Total</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(totalTax)}</td><td class="text-right">${formatNum(total)}</td></tr>`
-    : `<tr class="subtotal-row"><td colspan="4">Sub Total</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(total)}</td></tr>`;
-
-  const itemsTableHtml = `<table class="items-table">
-<thead><tr>${headerCols}</tr></thead>
-<tbody>${rowsHtml}${subtotalRow}</tbody>
-</table>`;
-
-  const projectLineHtml = dealTitle ? `<div class="project-line">${dealTitle.replace(/</g, '&lt;')}</div>` : '';
-
-  const fromAddr = tenant.address || '-';
-  const fromCity = [tenant.city, tenant.country].filter(Boolean).join(', ') || '-';
-  const toAddr = company?.address || '-';
-  const toCity = [company?.city, company?.country].filter(Boolean).join(', ') || '-';
-
-  const bank = getBankDetails(tenant);
-
-  const html = renderTemplate(path.join(__dirname, '../templates/proforma-invoice.html'), {
+  const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
     logoDataUri: getLogoDataUri(),
+    stampDataUri: getStampDataUri(),
+    documentTitle,
+    metaLinesHtml,
+    fromContactName: personFullName(invoice.createdByUser) || '-',
     fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
-    fromAddress: fromAddr,
-    fromCity,
-    fromPhone: tenant.phone || '-',
     fromEmail: tenant.email || '-',
+    fromPhone: tenant.phone || '-',
+    fromAddress: fromAddr,
     fromVat: getVat(tenant),
-    invoiceNumber: invoice.proforma_number,
+    toContactName: personFullName(invoice.deal?.contact) || '-',
     toCompany: company?.company_name || '-',
+    toEmail: company?.email || '-',
+    toPhone: company?.phone || '-',
     toAddress: toAddr,
-    toCity,
     toVat: company?.vat_number || '-',
-    invoiceDate: formatDate(invoice.invoice_date),
-    paymentTerms: paymentTermsLabel(invoice.invoice_date, invoice.due_date),
-    dueDate: invoice.due_date ? formatDate(invoice.due_date) : '-',
-    refNo: invoice.deal?.deal_number || '-',
-    projectLineHtml,
-    itemsTableHtml,
-    itemsInTotalLabel: `Items in Total ${formatNum(totalQty)}`,
-    totalDisplay: formatMoneyWithSymbol(currency, total),
-    amountInWords: amountInWords(total, currency),
-    bankBeneficiary: bank.beneficiary,
-    bankName: bank.bankName,
-    bankBranch: bank.branch,
-    bankSwift: bank.swift,
-    bankAccountAed: bank.accountAed,
-    bankIbanAed: bank.ibanAed,
-    bankAccountUsd: bank.accountUsd,
-    bankIbanUsd: bank.ibanUsd,
+    itemsHtml,
+    currency,
+    subtotal: formatCompactNum(subtotal),
+    totalVat: formatCompactNum(totalVat),
+    others: formatCompactNum(others),
+    grandTotal: formatCompactNum(grandTotal),
+    vatLabel,
+    dealType,
+    termsSectionHtml,
+    rcmNoteHtml: buildRcmNoteHtml(isRcm),
   });
 
   return htmlToPdf(html);

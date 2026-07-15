@@ -177,6 +177,12 @@ const create = async (tenantId, userId, body, scope = {}) => {
   const quotation = await quotationService.getById(tenantId, quotationId, scope);
   const dealId = quotation.deal_id;
 
+  const existing = await db.ProformaInvoice.findOne({
+    where: { tenant_id: tenantId, quotation_id: quotationId },
+    attributes: ['id'],
+  });
+  if (existing) throw ApiError.badRequest('A proforma invoice already exists for this quotation');
+
   const t = await db.sequelize.transaction();
   let createdId;
   try {

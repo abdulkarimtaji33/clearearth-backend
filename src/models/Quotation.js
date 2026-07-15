@@ -44,6 +44,7 @@ module.exports = (sequelize, DataTypes) => {
     Quotation.belongsTo(models.User, { foreignKey: 'prepared_by', as: 'preparedByUser' });
     Quotation.belongsTo(models.User, { foreignKey: 'approved_by', as: 'approvedByUser' });
     Quotation.hasOne(models.WorkOrder, { foreignKey: 'quotation_id', as: 'workOrder' });
+    Quotation.hasOne(models.ProformaInvoice, { foreignKey: 'quotation_id', as: 'proformaInvoice' });
   };
 
   return Quotation;
