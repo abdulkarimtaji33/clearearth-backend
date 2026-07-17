@@ -239,7 +239,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       totalVat += tax;
       const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
       const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
-      const vatDisplay = isRcm ? 'RCM' : formatCompactNum(tax);
+      const vatDisplay = formatCompactNum(tax);
       itemsHtml += `<tr>
         <td>${formatItemWithDescription(item.productService?.name, item.notes)}</td>
         <td class="text-right">${formatCompactNum(unitPrice)}</td>
@@ -303,7 +303,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
     currency,
     subtotal: formatCompactNum(subtotal),
     totalVat: formatCompactNum(totalVat),
-    vatAmountDisplay: isRcm ? 'RCM' : `${currency} ${formatCompactNum(totalVat)}`,
+    vatAmountDisplay: `${currency} ${formatCompactNum(totalVat)}`,
     others: formatCompactNum(others),
     grandTotal: formatCompactNum(grandTotal),
     vatLabel,
@@ -368,7 +368,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     const total = amount + vat;
     subtotal += amount;
     totalVat += vat;
-    const vatDisplay = isRcm ? 'RCM' : formatCompactNum(vat);
+    const vatDisplay = formatCompactNum(vat);
     const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
     const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
     itemsHtml += `<tr>
@@ -424,8 +424,8 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     itemsHtml,
     currency,
     subtotal: formatCompactNum(subtotal),
-    totalVat: isRcm ? 'RCM' : formatCompactNum(totalVat),
-    vatAmountDisplay: isRcm ? 'RCM' : `${currency} ${formatCompactNum(totalVat)}`,
+    totalVat: formatCompactNum(totalVat),
+    vatAmountDisplay: `${currency} ${formatCompactNum(totalVat)}`,
     others: formatCompactNum(others),
     grandTotal: formatCompactNum(grandTotal),
     vatLabel,
@@ -613,7 +613,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
     totalVat += tax;
     const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
     const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
-    const vatDisplay = isRcm ? 'RCM' : formatCompactNum(tax);
+    const vatDisplay = formatCompactNum(tax);
     itemsHtml += `<tr>
       <td>${formatItemWithDescription(item.productService?.name, item.description)}</td>
       <td class="text-right">${formatCompactNum(unitPrice)}</td>
@@ -658,7 +658,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
     currency,
     subtotal: formatCompactNum(subtotal),
     totalVat: formatCompactNum(totalVat),
-    vatAmountDisplay: isRcm ? 'RCM' : `${currency} ${formatCompactNum(totalVat)}`,
+    vatAmountDisplay: `${currency} ${formatCompactNum(totalVat)}`,
     others: formatCompactNum(others),
     grandTotal: formatCompactNum(grandTotal),
     vatLabel,
