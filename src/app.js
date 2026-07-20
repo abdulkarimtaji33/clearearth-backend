@@ -27,9 +27,11 @@ app.use(
   })
 );
 
-// Body parsers
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+// Body parsers - scoped to /api only; the AdminJS panel mounted below
+// (finalizeApp) parses its own request bodies via express-formidable and
+// is incompatible with these running in front of it.
+app.use(`/api/${config.app.version}`, express.json({ limit: '25mb' }));
+app.use(`/api/${config.app.version}`, express.urlencoded({ extended: true, limit: '25mb' }));
 
 // Compression - skip PDF and other binary to prevent corruption
 app.use(
@@ -75,10 +77,22 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler
-app.use(notFoundHandler);
+/**
+ * Finish wiring the app: mount the super-admin DB panel (AdminJS is ESM-only,
+ * so it must be dynamically imported) and attach the catch-all/error handlers
+ * last, since Express matches middleware in registration order.
+ */
+const finalizeApp = async () => {
+  const { mountAdminPanel } = require('./admin/setup');
+  await mountAdminPanel(app);
 
-// Error handler
-app.use(errorHandler);
+  // 404 handler
+  app.use(notFoundHandler);
 
-module.exports = app;
+  // Error handler
+  app.use(errorHandler);
+
+  return app;
+};
+
+module.exports = finalizeApp;

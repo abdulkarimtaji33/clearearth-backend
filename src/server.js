@@ -2,7 +2,7 @@
  * Server Entry Point
  */
 const http = require('http');
-const app = require('./app');
+const createApp = require('./app');
 const config = require('./config');
 const logger = require('./utils/logger');
 const { testConnection, syncDatabase } = require('./database');
@@ -25,6 +25,8 @@ const startServer = async () => {
     // if (config.app.env === 'development') {
     //   await syncDatabase({ alter: true });
     // }
+
+    const app = await createApp();
 
     // Create HTTP server and attach Socket.IO
     const server = http.createServer(app);
