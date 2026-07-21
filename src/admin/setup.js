@@ -17,26 +17,42 @@ const SENSITIVE_FIELDS = {
   User: ['password', 'password_reset_token', 'two_factor_secret'],
 };
 
-function buildResourceOptions(modelName) {
-  const hidden = SENSITIVE_FIELDS[modelName];
-  if (!hidden) return {};
-
+// @adminjs/sequelize's Property.isEditable() returns false for
+// autoIncrement/primary-key/auto-generated (timestamp) columns, so AdminJS
+// omits id/created_at/updated_at/deleted_at from create/edit forms by
+// default. This is a full-control DB tool, not a scoped app CRUD screen -
+// every column on every table should be directly editable. isVisible is a
+// public ResourceOptions field (unlike the adapter's internal Property
+// class) and takes priority over isEditable() when set, so force it here
+// for every attribute instead of monkey-patching an unexported internal.
+function buildResourceOptions(modelName, model) {
+  const hiddenFields = new Set(SENSITIVE_FIELDS[modelName] || []);
   const properties = {};
-  hidden.forEach(field => {
+
+  Object.keys(model.rawAttributes).forEach(field => {
     properties[field] = {
-      isVisible: { list: false, filter: false, show: false, edit: true },
+      isVisible: {
+        list: !hiddenFields.has(field),
+        filter: !hiddenFields.has(field),
+        show: !hiddenFields.has(field),
+        edit: true,
+      },
     };
   });
 
   return { properties };
 }
 
-// @adminjs/sequelize's Resource.find/findMany/findById/count call the model's
-// findAll/findByPk/count directly with no `paranoid` override, so paranoid
-// models (soft-delete via deleted_at) silently hide deleted rows in the admin
-// panel too - filtering by any field on a soft-deleted row returns "No
-// records" with no indication why. A super admin panel should see every row
-// that physically exists, so wrap read methods to always pass paranoid: false.
+// @adminjs/sequelize's Resource.find/findMany/findById/count/update call the
+// model's findAll/findByPk/count/update directly with no `paranoid` override,
+// so paranoid models (soft-delete via deleted_at) silently hide deleted rows
+// in reads (filtering a soft-deleted row returns "No records" with no
+// indication why) AND silently no-op on writes: Model.update() auto-scopes
+// its WHERE to `deleted_at IS NULL`, so editing an already soft-deleted row
+// matches zero rows - AdminJS still reports "Successfully updated" because
+// it re-fetches by ID afterward (which works) rather than checking the
+// affected-row count. A super admin panel should see and be able to edit
+// every row that physically exists, so force paranoid: false throughout.
 function withoutParanoid(model) {
   return new Proxy(model, {
     get(target, prop, receiver) {
@@ -46,6 +62,14 @@ function withoutParanoid(model) {
       }
       if (prop === 'findByPk') {
         return (id, options = {}) => value.call(target, id, { ...options, paranoid: false });
+      }
+      if (prop === 'update') {
+        // silent: true stops Sequelize from auto-overwriting updated_at with
+        // the current time on every save, so a manually-typed value in the
+        // form (including deleted_at/created_at/updated_at themselves,
+        // which are otherwise plain editable columns) actually persists.
+        return (values, options = {}) =>
+          value.call(target, values, { ...options, paranoid: false, silent: true });
       }
       return typeof value === 'function' ? value.bind(target) : value;
     },
@@ -63,6 +87,19 @@ async function mountAdminPanel(app) {
 
   AdminJS.registerAdapter({ Database, Resource });
 
+  // Resource.delete() always calls instance.destroy() with no options, which
+  // on a paranoid model just re-stamps deleted_at - a silent no-op on a row
+  // that's already soft-deleted, since Sequelize's paranoid destroy doesn't
+  // check whether it was already deleted. Combined with the read fix above
+  // (soft-deleted rows now stay visible), every delete click looked like it
+  // did nothing. Make it a two-step delete: first click soft-deletes (as the
+  // app itself would, reversible, stays visible with Deleted At set); a
+  // second click on an already-deleted row permanently purges it.
+  Resource.prototype.delete = async function delete_(id) {
+    const model = await this.SequelizeModel.findByPk(id);
+    await model.destroy({ force: !!model.deleted_at });
+  };
+
   // employee_id carries raw FK metadata pointing at an 'employees' table that
   // has no corresponding Sequelize model/resource loaded here, which makes
   // AdminJS's reference resolver 500 on every list/show. Strip it so the
@@ -77,7 +114,7 @@ async function mountAdminPanel(app) {
   const resources = modelNames.map(name => {
     const resource = withoutParanoid(db[name]);
     proxiedModels[name] = resource;
-    return { resource, options: buildResourceOptions(name) };
+    return { resource, options: buildResourceOptions(name, db[name]) };
   });
 
   const adminJs = new AdminJS({
