@@ -12,12 +12,26 @@ const config = require('./config');
 const logger = require('./utils/logger');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler');
 const routes = require('./routes');
+const { ADMIN_ROOT_PATH } = require('./admin/setup');
 
 // Create Express app
 const app = express();
 
 // Security middleware
 app.use(helmet());
+
+// AdminJS server-renders its login/app shell with inline bootstrap <script>
+// tags it needs to execute (state hydration + the React createRoot/render
+// call). Helmet's default `script-src 'self'` silently blocks inline scripts
+// with no console-visible error, leaving a blank page. Relax CSP only for
+// this auth-gated internal path rather than loosening it globally.
+app.use(ADMIN_ROOT_PATH, (req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; font-src 'self' https: data:; img-src 'self' data: https:; connect-src 'self'"
+  );
+  next();
+});
 
 // CORS
 app.use(
