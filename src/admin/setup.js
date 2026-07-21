@@ -64,12 +64,38 @@ function withoutParanoid(model) {
         return (id, options = {}) => value.call(target, id, { ...options, paranoid: false });
       }
       if (prop === 'update') {
-        // silent: true stops Sequelize from auto-overwriting updated_at with
-        // the current time on every save, so a manually-typed value in the
-        // form (including deleted_at/created_at/updated_at themselves,
-        // which are otherwise plain editable columns) actually persists.
-        return (values, options = {}) =>
-          value.call(target, values, { ...options, paranoid: false, silent: true });
+        return async (values, options = {}) => {
+          const updatedAtAttr = target.rawAttributes.updated_at ? 'updated_at' : null;
+          const keys = Object.keys(values);
+          // AdminJS always calls update() with individualHooks: true, which
+          // makes Sequelize diff each submitted field against the row's
+          // current value and silently collapse the payload down to only
+          // the fields that actually changed. If updated_at ends up as the
+          // ONLY field left after that collapse - the normal case when you
+          // only touch the "Updated At" picker and leave everything else on
+          // the form as-is - Sequelize's own Model.update() then hits its
+          // hardcoded no-op guard for "payload is just updatedAt"
+          // (sequelize/lib/model.js), silently doing nothing despite
+          // reporting success. No combination of options avoids this: it
+          // fires deep inside Sequelize's own diffing, after our options
+          // are applied. Whenever updated_at is part of the payload, bypass
+          // Sequelize's ORM update path entirely with a raw parameterized
+          // query so every submitted field is written exactly as given.
+          if (updatedAtAttr && keys.includes(updatedAtAttr) && options.where) {
+            const columns = keys.filter(k => target.rawAttributes[k]);
+            const pk = target.primaryKeyAttribute;
+            const id = options.where[pk] ?? options.where[target.primaryKeyField];
+            const setClause = columns.map(k => `\`${k}\` = ?`).join(', ');
+            await target.sequelize.query(`UPDATE \`${target.getTableName()}\` SET ${setClause} WHERE \`${pk}\` = ?`, {
+              replacements: [...columns.map(k => values[k]), id],
+            });
+            return [1];
+          }
+          // silent: true stops Sequelize from auto-overwriting updated_at
+          // with the current time on every save, for the (more common) case
+          // where updated_at isn't part of this particular edit at all.
+          return value.call(target, values, { ...options, paranoid: false, silent: true });
+        };
       }
       return typeof value === 'function' ? value.bind(target) : value;
     },
