@@ -31,6 +31,27 @@ function buildResourceOptions(modelName) {
   return { properties };
 }
 
+// @adminjs/sequelize's Resource.find/findMany/findById/count call the model's
+// findAll/findByPk/count directly with no `paranoid` override, so paranoid
+// models (soft-delete via deleted_at) silently hide deleted rows in the admin
+// panel too - filtering by any field on a soft-deleted row returns "No
+// records" with no indication why. A super admin panel should see every row
+// that physically exists, so wrap read methods to always pass paranoid: false.
+function withoutParanoid(model) {
+  return new Proxy(model, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (prop === 'findAll' || prop === 'count') {
+        return (options = {}) => value.call(target, { ...options, paranoid: false });
+      }
+      if (prop === 'findByPk') {
+        return (id, options = {}) => value.call(target, id, { ...options, paranoid: false });
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 async function mountAdminPanel(app) {
   const [{ default: AdminJS }, { Database, Resource }, AdminJSExpress, { default: session }] =
     await Promise.all([
@@ -51,12 +72,13 @@ async function mountAdminPanel(app) {
   }
 
   const excluded = new Set(['sequelize', 'Sequelize']);
-  const resources = Object.keys(db)
-    .filter(name => !excluded.has(name))
-    .map(name => ({
-      resource: db[name],
-      options: buildResourceOptions(name),
-    }));
+  const modelNames = Object.keys(db).filter(name => !excluded.has(name));
+  const proxiedModels = {};
+  const resources = modelNames.map(name => {
+    const resource = withoutParanoid(db[name]);
+    proxiedModels[name] = resource;
+    return { resource, options: buildResourceOptions(name) };
+  });
 
   const adminJs = new AdminJS({
     resources,
@@ -70,7 +92,7 @@ async function mountAdminPanel(app) {
   });
 
   // Keep password hashes valid if a super admin edits a User's password field.
-  const userResource = adminJs.options.resources.find(r => r.resource === db.User);
+  const userResource = adminJs.options.resources.find(r => r.resource === proxiedModels.User);
   if (userResource) {
     ['new', 'edit'].forEach(actionName => {
       const action = userResource.options.actions?.[actionName] || {};
