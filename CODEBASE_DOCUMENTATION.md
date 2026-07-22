@@ -2,7 +2,7 @@
 
 **Scope:** Application source under `clearearth-backend` and `clearearth-frontend/src` (excludes `node_modules`, build output, `.git`).  
 **API base (default):** `/api/v1` — from `config.app.version` (`API_VERSION` env).  
-**Last major update:** 2026-06 — reflects lead approval, accounting/GL, GRN, purchase bills, operations workflows, and permission refactors.
+**Last major update:** 2026-07 — adds quotation/PO approve-with-pin workflow, receivables/payables receipt & statement PDFs, GRN PDF route, contact `both` type, PO `created_by`/`reference_number`, and the AdminJS super-admin DB panel.
 
 ---
 
@@ -61,6 +61,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 |--------|------|------|------------------|---------|--------|
 | GET | `/quotations/:id/pdf` | `authenticate` | — | `quotationController.getPdf` | Stream quotation PDF (Puppeteer) |
 | GET | `/purchase-orders/:id/pdf` | `authenticate` | — | `purchaseOrderController.getPdf` | Stream PO PDF |
+| GET | `/grn/:id/pdf` | `authenticate` | — | `grnController.getPdf` | Stream GRN PDF report |
 
 ### 3.2 API root
 
@@ -72,7 +73,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 
 | Method | Path | Auth | Validation / notes | Handler | Brief |
 |--------|------|------|--------------------|---------|--------|
-| POST | `/auth/register` | No | registerValidation | `register` | Create tenant + tenant_admin user; returns tokens |
+| POST | `/auth/register` | No | registerValidation | `register` | **Currently broken** — `auth.service.js` destructures `USER_ROLE` from `src/constants/index.js`, which does not export it (only `USER_STATUS`, `RECORD_STATUS`, `LEAD_STATUS`, `MANAGER_ROLES`, `MODULES`, `ACTIONS` are exported), so any genuinely-new registration 500s with `Cannot read properties of undefined (reading 'TENANT_ADMIN')`. Even once that's fixed, the new `tenant_admin` role is created with **zero permissions assigned** (no call into the permission-seeding logic that `run-migration.js` does for existing tenants), so a freshly-registered admin can log in but every `authorize()`-gated route will 403 until permissions are seeded some other way. Not used in current practice — tenants are provisioned via other means. |
 | POST | `/auth/login` | No | loginValidation | `login` | Email/password; returns user, tenant, tokens, permissions |
 | POST | `/auth/refresh-token` | No | refreshTokenValidation | `refreshToken` | New access token from refresh token |
 | POST | `/auth/logout` | `authenticate` | — | `logout` | Success stub (no blacklist) |
@@ -113,6 +114,8 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | POST | `/contacts` | Yes | `contacts.create` + createValidation | `create` | Create |
 | PUT | `/contacts/:id` | Yes | `contacts.update` + updateValidation | `update` | Update |
 | DELETE | `/contacts/:id` | Yes | `contacts.delete` | `remove` | Soft delete |
+
+**`contact_type` (ENUM):** `clients`, `vendors`, **`both`** (contact can be linked as a client and a vendor contact simultaneously).
 
 ### 3.7 Companies — `/companies`
 
@@ -174,6 +177,9 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | GET | `/deals/:id` | Yes | `deals.read` | `getById` | Full graph (items, WDS, inspection, terms, images, **`workOrders`** + tasks + **`workType`**) |
 | POST | `/deals` | Yes | `deals.create` | `create` | Create deal + items + optional WDS/inspection/images/terms |
 | PUT | `/deals/:id` | Yes | `deals.update` | `update` | Update deal; **ignores** `paymentStatus`/`paidAmount` from body |
+| POST | `/deals/:id/approve` | Yes | `deals.approve` | `approve` | Manager approval → approved status |
+| POST | `/deals/:id/request-approval` | Yes | `deals.update` | `requestApproval` | Notifies approvers |
+| POST | `/deals/:id/approve-with-pin` | Yes | `deals.update` + `{ pin }` | `approveWithPin` | Self-approve with tenant PIN |
 | PATCH | `/deals/:id/collection-details` | Yes | `deals.update` OR `operations.update` | `updateCollectionDetails` | Pickup location / contact fields only |
 | DELETE | `/deals/:id` | Yes | `deals.delete` | `remove` | Soft delete |
 | POST | `/deals/:id/payment` | Yes | `deals.update` | `updatePayment` | Manual paid amount → `payment_status` (API exists; **deal form no longer exposes payment**) |
@@ -233,7 +239,10 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 | GET | `/quotations` | Yes | `getAll` | Paginated; sales scope on `prepared_by`; **`deal`** includes **`items`** (DealItem `id` only) for list item counts |
 | GET | `/quotations/:id` | Yes | `getById` | One + **`deal`** with **`items`** (DealItem + `productService`) for line-item display |
 | POST | `/quotations` | Yes | `create` | Create quotation |
-| PUT | `/quotations/:id` | Yes | `update` | Update |
+| PUT | `/quotations/:id` | Yes | `update` | **Always returns 400** — `quotation.service.update` is a stub that unconditionally throws `'Quotations cannot be edited after creation'`; the route exists but the feature is disabled (matches frontend "lock quotations after creation") |
+| POST | `/quotations/:id/approve` | Yes, `quotations.approve` | `approve` | Manager approval → approved status |
+| POST | `/quotations/:id/request-approval` | Yes, `quotations.update` | `requestApproval` | Notifies approvers, same PIN pattern as leads |
+| POST | `/quotations/:id/approve-with-pin` | Yes, `quotations.update` | `approveWithPin` | Body `{ pin }` — self-approve with tenant PIN |
 | DELETE | `/quotations/:id` | Yes | `remove` | Delete |
 
 *Duplicate PDF route also at §3.1.*
@@ -255,6 +264,7 @@ All routes below are relative to **`/api/v1`** unless noted. **App-level** route
 |--------|------|------|------------|---------|--------|
 | GET | `/tax-invoices/preview-from-proforma/:proformaInvoiceId` | Yes | `accounting.read` OR `deals.read` | `previewFromProforma` | Defaults for tax invoice create from proforma |
 | GET | `/tax-invoices` | Yes | `accounting.read` OR `deals.read` | `getAll` | Paginated |
+| GET | `/tax-invoices/:id/pdf` | Yes | `accounting.read` OR `deals.read` | `getPdf` | Stream tax invoice PDF (own route, not in pdf.routes.js) |
 | GET | `/tax-invoices/:id` | Yes | `accounting.read` OR `deals.read` | `getById` | Detail + items + proforma link |
 | POST | `/tax-invoices` | Yes | `accounting.create` OR `deals.create` | `create` | One tax invoice per proforma; always starts `unpaid` |
 | PUT | `/tax-invoices/:id` | Yes | `accounting.update` OR `deals.update` | `update` | Patch remarks etc.; **ignores** manual `paymentStatus`/`paidAmount` from form |
@@ -281,9 +291,14 @@ All routes **authenticate**. Permissions use **`accounting.*`** with legacy **`d
 |--------|------|------|---------|--------|
 | GET | `/purchase-orders` | Yes | `getAll` | Paginated; includes nested `sourceWorkOrder` / `purchaseBills` where applicable |
 | GET | `/purchase-orders/:id` | Yes | `getById` | Items + terms |
-| POST | `/purchase-orders` | Yes | `create` | Company XOR supplier + items + terms; **`document_type`**: `quotation` (default) or `bill` |
+| POST | `/purchase-orders` | Yes | `create` | Company XOR supplier + items + terms; **`document_type`**: `quotation` (default) or `bill`; records `created_by` |
 | PUT | `/purchase-orders/:id` | Yes | `update` | Update; bill qty recalc server-side when applicable |
+| POST | `/purchase-orders/:id/approve` | Yes, `purchase_orders.approve` | `approve` | Manager approval → approved status |
+| POST | `/purchase-orders/:id/request-approval` | Yes, `purchase_orders.update` | `requestApproval` | Sets `approval_requested_at`, notifies approvers |
+| POST | `/purchase-orders/:id/approve-with-pin` | Yes, `purchase_orders.update` | `approveWithPin` | Body `{ pin }` — self-approve with tenant PIN; sets `approved_by`/`approved_at` |
 | DELETE | `/purchase-orders/:id` | Yes | `remove` | Delete |
+
+**New fields since last doc pass:** `purchase_orders.created_by` (creator FK), `purchase_orders.reference_number`, plus the approval-workflow columns `approval_requested_at`, `approved_by`, `approved_at` — mirrors the quotation/lead approve-with-pin pattern.
 
 **Purchase bills:** `document_type = 'bill'`, linked via `work_order_id`. Auto-created on WO **completed** for OTP deals — client bill (`company_id`) + vendor bill (`supplier_id`) via `ensurePurchaseBillForWorkOrder`. PDF title shows "Purchase Bill" for bills. Bills cannot spawn new work orders.
 
@@ -322,14 +337,18 @@ All routes **authenticate**. Permissions use **`accounting.*`** with legacy **`d
 |--------|------|------|------------|---------|--------|
 | GET | `/receivables` | Yes | `accounting.read` OR `deals.read` | `list` | Outstanding tax invoices (`balance_due > 0`) |
 | GET | `/receivables/aging-summary` | Yes | `accounting.read` OR `deals.read` | `agingSummary` | Aging buckets per company |
+| GET | `/receivables/payments/:paymentId/receipt/pdf` | Yes | `accounting.read` OR `deals.read` | `getReceiptPdf` | Stream AR payment receipt PDF |
+| GET | `/receivables/companies/:companyId/statement/pdf` | Yes | `accounting.read` OR `deals.read` | `getStatementPdf` | Stream statement of account PDF for a company |
 | GET | `/receivables/:id/payments` | Yes | `accounting.read` OR `deals.read` | `listPayments` | Payment transaction history |
-| POST | `/receivables/:id/payment` | Yes | `accounting.update` | `recordPayment` | Record payment + journal entry |
+| POST | `/receivables/:id/payment` | Yes | `accounting.update` | `recordPayment` | Record payment + journal entry; payment gets a `receipt_number` |
 
 ### 3.24 Payables — `/payables`
 
 | Method | Path | Auth | Permission | Handler | Brief |
 |--------|------|------|------------|---------|--------|
 | GET | `/payables` | Yes | `accounting.read` OR `deals.read` | `list` | Outstanding approved POs |
+| GET | `/payables/payment-receipts` | Yes | `accounting.read` OR `deals.read` | `listPaymentReceipts` | Paginated list of AP payment receipts |
+| GET | `/payables/payment-receipts/:paymentId` | Yes | `accounting.read` OR `deals.read` | `getPaymentReceipt` | Single AP payment receipt detail |
 | GET | `/payables/aging-summary` | Yes | `accounting.read` OR `deals.read` | `agingSummary` | Aging buckets per supplier |
 | GET | `/payables/:id/payments` | Yes | `accounting.read` OR `deals.read` | `listPayments` | Payment transaction history |
 | POST | `/payables/:id/payment` | Yes | `accounting.update` | `recordPayment` | Record payment + optional `dueDate` |
@@ -456,6 +475,15 @@ Auto-posting also occurs on receivable/payable/expense payments and PO approval 
 
 Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/password`.
 
+### 3.38 Admin panel (AdminJS) — `/system-console` *(new, not a JSON API)*
+
+Mounted directly on `app.js` (not under `/api/v1`, not JWT-protected) via `src/admin/setup.js`, using `@adminjs/express` + `@adminjs/sequelize`. Path is configurable via `ADMIN_PANEL_PATH` env (default `/system-console`).
+
+- **Auth:** session-based (`express-session`, `ADMIN_SESSION_SECRET`/`ADMIN_COOKIE_SECRET`), separate login form — not the tenant JWT flow, and not tenant-scoped (super-admin DB console).
+- **Access:** full write access to every model/column (including normally-protected fields), true hard-delete (bypasses Sequelize `paranoid` soft-delete), and read views show soft-deleted rows (`paranoid: false` on reads) so deleted records remain inspectable/restorable.
+- **CSP:** `app.js` relaxes Content-Security-Policy specifically for the `/system-console` path so AdminJS's inline scripts/styles render.
+- **Purpose:** operational/support tool for direct DB inspection and fixes across all tenants — not part of the tenant-facing product and intentionally excluded from the Postman collection (session-cookie login, not a stable JSON API).
+
 ---
 
 ## 4. Controllers — every exported handler
@@ -521,6 +549,9 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | | `getById` | May redact financials for `operations_manager` |
 | | `create` | |
 | | `update` | Ignores payment fields from form |
+| | `approve` | Manager approval → approved status |
+| | `requestApproval` | Notify approvers |
+| | `approveWithPin` | Body `{ pin }` self-approve |
 | | `updateCollectionDetails` | Pickup fields only |
 | | `updatePayment` | Body.paidAmount (API; not in deal form UI) |
 | | `remove` | |
@@ -535,12 +566,18 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | | `getById` | |
 | | `create` | |
 | | `update` | |
+| | `approve` | Manager approval → approved status |
+| | `requestApproval` | Notify approvers |
+| | `approveWithPin` | Body `{ pin }` self-approve |
 | | `remove` | |
 | | `getPdf` | `pdfService.generateQuotationPdf` → `Content-Type: application/pdf` |
 | `purchaseOrder.controller.js` | `getAll` | `purchaseOrderService.getAll` |
 | | `getById` | |
 | | `create` | |
 | | `update` | |
+| | `approve` | Manager approval → approved status |
+| | `requestApproval` | Sets `approval_requested_at` |
+| | `approveWithPin` | Body `{ pin }` self-approve |
 | | `remove` | |
 | | `getPdf` | `generatePurchaseOrderPdf` |
 | `inspectionRequest.controller.js` | `getAll` | Pagination + optional scope → `inspectionRequestService.getAll` |
@@ -564,7 +601,7 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | `notification.controller.js` | `getMine`, `markRead`, `markAllRead` | User notifications |
 | `dashboard.controller.js` | `overview` | Role-aware dashboard |
 | `expenseCategory.controller.js` | CRUD | Tenant expense categories |
-| `grn.controller.js` | `list`, `getById`, `create`, `update`, `approve`, `uploadItemImages` | GRN lifecycle |
+| `grn.controller.js` | `list`, `getById`, `create`, `update`, `approve`, `uploadItemImages`, `getPdf` | GRN lifecycle + PDF report |
 | `driver.controller.js` | `listPickups`, `startPickup`, `markPickedUp` | Driver mobile flow |
 | `chartOfAccounts.controller.js` | COA CRUD + `seedAccounts` | |
 | `journal.controller.js` | Journal list/create/void/opening balances | |
@@ -585,10 +622,10 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | | `remove` | |
 | `workType.controller.js` | `getAll`, `getById`, `create`, `update`, `remove` | `workType.service` — CRUD for `WorkType` |
 | `proformaInvoice.controller.js` | `previewFromQuotation`, `getAll`, `getById`, `create`, `update`, `remove` | `proformaInvoice.service`; `getSalesScope` on preview/list/getById |
-| `taxInvoice.controller.js` | `previewFromProforma`, `getAll`, `getById`, `create`, `update`, `remove` | `taxInvoice.service`; `getSalesScope` on preview/list/getById |
+| `taxInvoice.controller.js` | `previewFromProforma`, `getAll`, `getById`, `create`, `update`, `remove`, `getPdf` | `taxInvoice.service`; `getSalesScope` on preview/list/getById; PDF route lives in `taxInvoice.routes.js` itself, not `pdf.routes.js` |
 | `accounts.controller.js` | `listWorkOrders`, `getWorkOrder`, `listExpenses`, `createExpense`, `listExpensePayments`, `approveTaskExpense`, `rejectTaskExpense`, `updateExpensePayment` | `workOrder.service` + `expense.service` |
-| `receivables.controller.js` | `list`, `recordPayment`, `listPayments`, `agingSummary` | `receivables.service` + journal posting |
-| `payables.controller.js` | `list`, `recordPayment`, `listPayments`, `agingSummary` | `payables.service` |
+| `receivables.controller.js` | `list`, `recordPayment`, `listPayments`, `agingSummary`, `getReceiptPdf`, `getStatementPdf` | `receivables.service` + journal posting + AR PDFs |
+| `payables.controller.js` | `list`, `recordPayment`, `listPayments`, `agingSummary`, `listPaymentReceipts`, `getPaymentReceipt` | `payables.service` |
 
 ---
 
@@ -876,8 +913,11 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | `getQuotation(id)` | GET `/quotations/:id` |
 | `createQuotation(data)` | POST `/quotations` |
 | `updateQuotation(id, data)` | PUT `/quotations/:id` |
+| `approveQuotation(id)` | POST `/quotations/:id/approve` |
+| `requestQuotationApproval(id)` | POST `/quotations/:id/request-approval` |
+| `approveQuotationWithPin(id, pin)` | POST `/quotations/:id/approve-with-pin` |
 | `deleteQuotation(id)` | DELETE `/quotations/:id` |
-| `downloadQuotationPdf(id)` | GET blob `/quotations/:id/pdf`; trigger download |
+| `downloadQuotationPdf(id, { documentType })` | GET blob `/quotations/:id/pdf`; trigger download |
 | `getProformaPreviewFromQuotation(quotationId)` | GET `/proforma-invoices/preview-from-quotation/:quotationId` |
 | `getProformaInvoices(params)` | GET `/proforma-invoices` |
 | `getProformaInvoice(id)` | GET `/proforma-invoices/:id` |
@@ -890,6 +930,7 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | `createTaxInvoice(data)` | POST `/tax-invoices` |
 | `updateTaxInvoice(id, data)` | PUT `/tax-invoices/:id` |
 | `deleteTaxInvoice(id)` | DELETE `/tax-invoices/:id` |
+| `downloadTaxInvoicePdf(id)` | GET blob `/tax-invoices/:id/pdf` |
 | `uploadTaxInvoiceAttachment(file)` | POST FormData `/upload/tax-invoice-attachment` |
 | `getAccountsWorkOrders(params)` | GET `/accounts/work-orders` |
 | `getAccountsWorkOrder(id)` | GET `/accounts/work-orders/:id` |
@@ -903,13 +944,18 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | `postReceivablePayment(id, data)` | POST `/receivables/:id/payment` |
 | `getReceivablePayments(id)` | GET `/receivables/:id/payments` |
 | `getReceivablesAgingSummary(params)` | GET `/receivables/aging-summary` |
+| `downloadReceivableReceiptPdf(paymentId)` | GET blob `/receivables/payments/:paymentId/receipt/pdf` |
+| `downloadCompanyStatementPdf(companyId, params)` | GET blob `/receivables/companies/:companyId/statement/pdf` |
 | `getPayables(params)` | GET `/payables` |
 | `postPayablePayment(id, data)` | POST `/payables/:id/payment` |
 | `getPayablePayments(id)` | GET `/payables/:id/payments` |
 | `getPayablesAgingSummary(params)` | GET `/payables/aging-summary` |
+| `getPurchasePaymentReceipts(params)` | GET `/payables/payment-receipts` |
+| `getPurchasePaymentReceipt(paymentId)` | GET `/payables/payment-receipts/:paymentId` |
 | `getExpenseCategories(params)` | GET `/expense-categories` |
 | `createExpenseCategory(data)` | POST `/expense-categories` |
 | `getGrns(params)` / `getGrn(id)` / `createGrn` / `updateGrn` / `approveGrn` | `/grn` CRUD + approve |
+| `downloadGrnPdf(id)` | GET blob `/grn/:id/pdf` |
 | `getDashboardOverview()` | GET `/dashboard/overview` |
 | `getDriverPickups()` / `startDriverPickup` / `completeDriverPickup` | `/driver/pickups` |
 | `getFiscalYears()` … `reopenPeriod(fyId, periodId)` | `/fiscal-years` |
@@ -920,8 +966,11 @@ Beyond §3.4: `GET /users/drivers`, `GET /users/assignees`, `PUT /users/:id/pass
 | `getPurchaseOrder(id)` | GET `/purchase-orders/:id` |
 | `createPurchaseOrder(data)` | POST `/purchase-orders` |
 | `updatePurchaseOrder(id, data)` | PUT `/purchase-orders/:id` |
+| `approvePurchaseOrder(id)` | POST `/purchase-orders/:id/approve` |
+| `requestPurchaseOrderApproval(id)` | POST `/purchase-orders/:id/request-approval` |
+| `approvePurchaseOrderWithPin(id, pin)` | POST `/purchase-orders/:id/approve-with-pin` |
 | `deletePurchaseOrder(id)` | DELETE `/purchase-orders/:id` |
-| `downloadPurchaseOrderPdf(id)` | GET blob `/purchase-orders/:id/pdf` |
+| `downloadPurchaseOrderPdf(id, { documentType })` | GET blob `/purchase-orders/:id/pdf` |
 | `getTermsAndConditions(params)` | GET `/terms` |
 | `getTermsAndConditionsById(id)` | GET `/terms/:id` |
 | `createTermsAndConditions(data)` | POST `/terms` |
@@ -994,6 +1043,8 @@ Lazy routes use `lazyWithChunkReload` + auto-reload on stale deploy chunks (`uti
 | `/erp/accounts/expenses`, `.../create`, `.../work-orders`, `.../work-orders/view/:id` | Expenses (+ categories Add New), Accounts WO approve/reject |
 | `/erp/receivables`, `/erp/receivables/aging` | Receivables + aging |
 | `/erp/payables`, `/erp/payables/aging` | Payables + aging |
+| `/erp/payment-receipts`, `.../:id` | Purchase (AP) payment receipts list / view |
+| `/erp/account/password` | Self-service change password (all roles) |
 | `/erp/purchase-orders`, `.../create`, `.../view/:id`, `.../edit/:id` | PO form/view (`?bill=1` for purchase bills) |
 | `/erp/grn`, `.../create`, `.../edit/:id`, `.../view/:id` | GRN module |
 | `/erp/chart-of-accounts` | ChartOfAccountsList |
@@ -1037,7 +1088,7 @@ Lazy routes use `lazyWithChunkReload` + auto-reload on stale deploy chunks (`uti
   - Accounting: `chart_of_accounts`, `journal_entries`, `journal_entry_lines`, `fiscal_years`, `accounting_periods`, `payment_transactions`, `expense_categories` seed
   - ERP enhancements: `notifications`, inspection priority/accept-reject, status `draft` → `new` renames
   - Permissions: `quotations.*`, `purchase_orders.*`, `accounting.*`, `reports.*`, `operations.*`, `grn.*`, `dashboard.read`; suppliers for sales/sales_manager; accounts role matrix
-- **Sequelize migrations** (`src/database/migrations/`): includes `20260223*` initial schema, `20260224` deal-type/WDS, `20260403` status updates, `20260424` RCM, `20260525` ERP enhancements, `20260530` journal counterparty + payment_transactions + GRN + collection fields + deal location tokens, `20260601` deal location tokens, etc.
+- **Sequelize migrations** (`src/database/migrations/`): includes `20260223*` initial schema, `20260224` deal-type/WDS, `20260403` status updates, `20260424` RCM, `20260525` ERP enhancements, `20260530` journal counterparty + payment_transactions + GRN + collection fields + deal location tokens, `20260601` deal location tokens, `20260611` pickup task fields, and (new since last doc pass) `20260709000000-purchase-order-created-by`, `20260709100000-contact-type-both`, `20260709120000-payment-transaction-receipt-number`, `20260711000000-grn-item-extra-fields` (adds `grn_items.make/model/serial_number/units`).
 - **Scripts:** `scripts/deploy-production.sh`, `scripts/deploy-all-production.sh` (both VPS), `scripts/nginx-clearearth-snippet.conf` (cache: immutable `/assets/`, no-cache `index.html`), `src/scripts/migrate-historical-journal-entries.js`.
 
 ---
@@ -1086,12 +1137,15 @@ Exports: `USER_STATUS`, `RECORD_STATUS`, **`LEAD_STATUS`** (incl. `pending_appro
 - **`migrate.js` vs `run-migration.js`:** Production uses **`npm run run-migration`**; Sequelize `migrate.js` is secondary.
 - **SPA deploy:** Hashed Vite chunks require no-cache `index.html` or auto-reload (`chunkReload.js`) after deploys.
 - **`helpers.verifyToken`:** Throws generic `Error` — JWT errors normalized in `errorHandler`.
+- **Approve-with-pin now spans 3 modules:** leads, quotations, and purchase orders all share the same `request-approval` + `approve-with-pin` pattern (tenant PIN in `tenants.settings.leadApprovalPinHash`, verified by `leadApproval.js`) — despite the util's name being lead-specific, quotation/PO routes reuse it directly.
+- **Frontend dropped lead-approval UI** (commit "Remove lead approval dialogs and PIN UI — leads no longer require approval") while the backend lead routes/columns (`qualify`, `request-approval`, `approve-with-pin`) remain live — leads are effectively auto-qualified from the UI now, but the API still enforces the old workflow if called directly.
+- **Admin panel (`/system-console`)** bypasses tenant scoping and soft-delete entirely — treat it as a break-glass tool, not a tenant-facing feature (see §3.38).
 
 ---
 
 ## 15. Frontend features (non-API reference)
 
-- **Lead approval:** After save, popup offers **Enter secret PIN** or **Request manager approval**; managers approve from list/drawer (`leads.approve`); PIN configured in Company Settings (admin).
+- **Lead approval:** Backend routes (`qualify`/`request-approval`/`approve-with-pin`) still exist, but the frontend no longer shows the PIN/approval dialogs for leads (removed) — leads save straight through. **Quotations and purchase orders now use the same approve-with-pin pattern instead** (`ApprovalWorkflowDialogs.jsx`, `ApproveQuotationConfirmDialog.jsx`); PIN configured in Company Settings (admin).
 - **Notifications:** Header bell (`Notifications.js`) polls `/notifications`; links to leads/deals/inspections.
 - **Deal & quotation lists:** Inline status change; deal **Lost** prompts for **`loss_reason`**. Deal form has **no payment section** — tracking via tax invoices/receivables.
 - **Deal view:** Work progress pipeline; **location share** link for client map pin; operations_manager sees deals **without amounts**.
@@ -1100,8 +1154,9 @@ Exports: `USER_STATUS`, `RECORD_STATUS`, **`LEAD_STATUS`** (incl. `pending_appro
 - **Purchase bills:** OTP flow — bills auto-created on WO complete; editable qty; PDF; client and vendor bill lists from WO/PO screens (`?bill=1&companyId=` / `supplierId=`).
 - **Proforma & tax invoices:** Standard create chain; tax invoice payment status read-only / derived from receivable payments.
 - **Accounts:** Expenses with **expense category** `SelectWithAddNew`; payment status auto-derived on create. GL: chart of accounts, journal, opening balances, seven reports, fiscal years.
-- **Receivables / Payables:** Record payment dialogs + payment history; aging summary views.
-- **GRN:** List/create/edit/view/approve with per-item images.
+- **Receivables / Payables:** Record payment dialogs + payment history; aging summary views; AR **payment receipt PDF** and **company statement PDF** downloads; AP **payment receipts list** with receipt detail view.
+- **GRN:** List/create/edit/view/approve with per-item images plus optional make/model/serial/units fields; **GRN PDF report** download.
+- **Word/Excel uploads:** Inspection request document uploads accept Word/Excel MIME types (with by-extension fallback when the browser misreports MIME) and support multi-file drag-and-drop; supporting documents stored as a JSON array (multiple files per request).
 - **Driver:** Pickup task start/complete (role-gated menu).
 - **Company / Supplier views:** Tabbed finance snapshots (invoices, receivables/payables, work orders/POs).
 - **Chunk reload:** After deploy, stale lazy chunks auto-refresh once instead of showing import error screen.

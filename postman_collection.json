@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "clearearth-erp-v2",
+    "_postman_id": "clearearth-erp-v3",
     "name": "ClearEarth ERP API - Complete",
-    "description": "Complete API Collection - All 186 Endpoints",
+    "description": "Complete API collection for the ClearEarth ERP backend, regenerated from the live route files in src/routes/ (29 route modules + PDF routes folded into their parent resource + the app-level health/meta endpoints). Excludes the AdminJS super-admin panel at /system-console (session-cookie login, not a JSON API).\n\nRun order for a full smoke test: 00 Meta -> 01 Auth (Register/Login) -> 02 Users/Roles -> Contacts/Companies/Suppliers -> Leads -> Products -> Deals -> Quotations -> Proforma/Tax Invoices -> Purchase Orders -> Work Orders/Work Types -> GRN -> Inspection Requests -> Accounting (Chart of Accounts/Journal/Fiscal Years/Expense Categories/Accounts/Receivables/Payables/Reports) -> Dashboard/Notifications/Dropdowns/Material Types/Terms/Tenants -> Driver -> Location Share.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -21,20 +21,211 @@
       "value": "http://localhost:3000/api/v1"
     },
     {
+      "key": "server_root",
+      "value": "http://localhost:3000"
+    },
+    {
       "key": "access_token",
       "value": ""
     },
     {
       "key": "refresh_token",
       "value": ""
+    },
+    {
+      "key": "tenant_id",
+      "value": ""
+    },
+    {
+      "key": "admin_email",
+      "value": "postman.smoketest@clearearth-test.com"
+    },
+    {
+      "key": "admin_password",
+      "value": "Test123456"
+    },
+    {
+      "key": "admin_user_id",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "role_id",
+      "value": ""
+    },
+    {
+      "key": "contact_id",
+      "value": ""
+    },
+    {
+      "key": "contact_id_2",
+      "value": ""
+    },
+    {
+      "key": "company_id",
+      "value": ""
+    },
+    {
+      "key": "supplier_id",
+      "value": ""
+    },
+    {
+      "key": "lead_id",
+      "value": ""
+    },
+    {
+      "key": "lead_id_2",
+      "value": ""
+    },
+    {
+      "key": "product_id",
+      "value": ""
+    },
+    {
+      "key": "deal_id",
+      "value": ""
+    },
+    {
+      "key": "term_id",
+      "value": ""
+    },
+    {
+      "key": "quotation_id",
+      "value": ""
+    },
+    {
+      "key": "proforma_invoice_id",
+      "value": ""
+    },
+    {
+      "key": "tax_invoice_id",
+      "value": ""
+    },
+    {
+      "key": "purchase_order_id",
+      "value": ""
+    },
+    {
+      "key": "purchase_order_vendor_id",
+      "value": ""
+    },
+    {
+      "key": "inspection_request_id",
+      "value": ""
+    },
+    {
+      "key": "work_type_id",
+      "value": ""
+    },
+    {
+      "key": "work_order_id",
+      "value": ""
+    },
+    {
+      "key": "work_order_task_id",
+      "value": ""
+    },
+    {
+      "key": "work_order_task_expense_id",
+      "value": ""
+    },
+    {
+      "key": "expense_category_id",
+      "value": ""
+    },
+    {
+      "key": "expense_category_value",
+      "value": ""
+    },
+    {
+      "key": "expense_id",
+      "value": ""
+    },
+    {
+      "key": "tax_invoice_payment_id",
+      "value": ""
+    },
+    {
+      "key": "purchase_order_payment_id",
+      "value": ""
+    },
+    {
+      "key": "chart_account_id",
+      "value": ""
+    },
+    {
+      "key": "journal_entry_id",
+      "value": ""
+    },
+    {
+      "key": "fiscal_year_id",
+      "value": ""
+    },
+    {
+      "key": "fiscal_period_id",
+      "value": ""
+    },
+    {
+      "key": "notification_id",
+      "value": ""
+    },
+    {
+      "key": "grn_id",
+      "value": ""
+    },
+    {
+      "key": "grn_item_id",
+      "value": ""
+    },
+    {
+      "key": "material_type_id",
+      "value": ""
+    },
+    {
+      "key": "dropdown_id",
+      "value": ""
+    },
+    {
+      "key": "location_share_token",
+      "value": ""
     }
   ],
   "item": [
     {
+      "name": "00 - Meta",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{server_root}}/health",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "API Root Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "01 - Authentication",
       "item": [
         {
-          "name": "Register Tenant",
+          "name": "Register Tenant (KNOWN BUG: 500s on a genuinely new email — auth.service.js destructures USER_ROLE from src/constants/index.js, which never exports it; also seeds zero permissions for the new tenant_admin role even when fixed. See report.)",
           "request": {
             "method": "POST",
             "header": [
@@ -46,7 +237,15 @@
             "url": "{{base_url}}/auth/register",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenantName\": \"Test Company\",\n  \"companyName\": \"Test LLC\",\n  \"email\": \"admin@test.com\",\n  \"password\": \"Test123456\",\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\",\n  \"phone\": \"+971501234567\"\n}"
+              "raw": "{\n  \"tenantName\": \"ClearEarth Test Co\",\n  \"companyName\": \"ClearEarth Test Co LLC\",\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\",\n  \"phone\": \"+971501234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -54,12 +253,14 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "if (pm.response.code === 201) {",
+                  "if ([200, 201].includes(pm.response.code)) {",
                   "  const data = pm.response.json().data;",
-                  "  pm.environment.set('access_token', data.accessToken);",
-                  "  pm.environment.set('refresh_token', data.refreshToken);",
+                  "  if (data && data.accessToken) pm.collectionVariables.set('access_token', data.accessToken);",
+                  "  if (data && data.refreshToken) pm.collectionVariables.set('refresh_token', data.refreshToken);",
+                  "  if (data && data.tenant && data.tenant.id) pm.collectionVariables.set('tenant_id', data.tenant.id);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ]
@@ -77,7 +278,15 @@
             "url": "{{base_url}}/auth/login",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"Test123456\"\n}"
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -85,23 +294,17 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "if (pm.response.code === 200) {",
+                  "if ([200, 201].includes(pm.response.code)) {",
                   "  const data = pm.response.json().data;",
-                  "  pm.environment.set('access_token', data.accessToken);",
-                  "  pm.environment.set('refresh_token', data.refreshToken);",
+                  "  if (data && data.accessToken) pm.collectionVariables.set('access_token', data.accessToken);",
+                  "  if (data && data.refreshToken) pm.collectionVariables.set('refresh_token', data.refreshToken);",
+                  "  if (data && data.tenant && data.tenant.id) pm.collectionVariables.set('tenant_id', data.tenant.id);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ]
-        },
-        {
-          "name": "Get Current User",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/auth/me"
-          }
         },
         {
           "name": "Refresh Token",
@@ -116,7 +319,78 @@
             "url": "{{base_url}}/auth/refresh-token",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.accessToken) pm.collectionVariables.set('access_token', data.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('admin_user_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set Lead Approval PIN (early, so 07/09/14/16 approve-with-pin work)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/tenants/me/lead-approval-pin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -133,7 +407,12 @@
             "url": "{{base_url}}/auth/change-password",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"currentPassword\": \"Test123456\",\n  \"newPassword\": \"NewPass123456\"\n}"
+              "raw": "{\n  \"currentPassword\": \"{{admin_password}}\",\n  \"newPassword\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -150,12 +429,20 @@
             "url": "{{base_url}}/auth/forgot-password",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@test.com\"\n}"
+              "raw": "{\n  \"email\": \"{{admin_email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           }
         },
         {
-          "name": "Reset Password",
+          "name": "Reset Password (expect 422 — placeholder token is not a real reset token)",
           "request": {
             "method": "POST",
             "header": [
@@ -167,7 +454,15 @@
             "url": "{{base_url}}/auth/reset-password",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"reset_token\",\n  \"newPassword\": \"NewPass123456\"\n}"
+              "raw": "{\n  \"token\": \"sample-reset-token\",\n  \"newPassword\": \"NewPass123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           }
         },
@@ -182,85 +477,46 @@
       ]
     },
     {
-      "name": "02 - Users",
+      "name": "02 - Roles & Permissions",
       "item": [
         {
-          "name": "List Users",
+          "name": "Get All Permissions",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/users?page=1&pageSize=20"
+            "url": "{{base_url}}/roles/permissions/all"
           }
         },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/users/1"
-          }
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/users",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"user@test.com\",\n  \"password\": \"User123456\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"phone\": \"+971501234567\",\n  \"roleId\": 2\n}"
-            }
-          }
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/users/1",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Name\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/users/1"
-          }
-        }
-      ]
-    },
-    {
-      "name": "03 - Roles & Permissions",
-      "item": [
         {
           "name": "List Roles",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{base_url}}/roles"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  const nonSystem = arr.find(r => !r.is_system) || arr[0];",
+                  "  if (nonSystem) pm.collectionVariables.set('role_id', nonSystem.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Get Role by ID",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/roles/1"
+            "url": "{{base_url}}/roles/{{role_id}}"
           }
         },
         {
@@ -276,9 +532,33 @@
             "url": "{{base_url}}/roles",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Manager\",\n  \"description\": \"Manager role\"\n}"
+              "raw": "{\n  \"name\": \"Postman Test Role\",\n  \"description\": \"Created by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('role_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Update Role",
@@ -290,27 +570,16 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/roles/1",
+            "url": "{{base_url}}/roles/{{role_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Updated description\"\n}"
+              "raw": "{\n  \"description\": \"Updated by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "Delete Role",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/roles/1"
-          }
-        },
-        {
-          "name": "Get All Permissions",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/roles/permissions/all"
           }
         },
         {
@@ -323,44 +592,57 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/roles/1/permissions",
+            "url": "{{base_url}}/roles/{{role_id}}/permissions",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"permissions\": [\n    1,\n    2,\n    3\n  ]\n}"
+              "raw": "{\n  \"permissions\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
       ]
     },
     {
-      "name": "04 - Clients",
+      "name": "03 - Users",
       "item": [
         {
-          "name": "List Clients",
+          "name": "List Users",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/clients?page=1&pageSize=20"
+            "url": "{{base_url}}/users?page=1&pageSize=20"
           }
         },
         {
-          "name": "Get Client by ID",
+          "name": "Get Inspectors",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/clients/1"
+            "url": "{{base_url}}/users/inspectors"
           }
         },
         {
-          "name": "Get Client Statistics",
+          "name": "Get Drivers",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/clients/1/statistics"
+            "url": "{{base_url}}/users/drivers"
           }
         },
         {
-          "name": "Create Client",
+          "name": "Get Assignees",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/assignees"
+          }
+        },
+        {
+          "name": "Create User",
           "request": {
             "method": "POST",
             "header": [
@@ -369,15 +651,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/clients",
+            "url": "{{base_url}}/users",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"client_type\": \"company\",\n  \"company_name\": \"ABC Corp\",\n  \"email\": \"contact@abc.com\",\n  \"phone\": \"+971501234567\",\n  \"service_category\": \"recycling\",\n  \"address\": \"Dubai, UAE\"\n}"
+              "raw": "{\n  \"email\": \"postman.user@clearearth-test.com\",\n  \"password\": \"User123456\",\n  \"firstName\": \"Postman\",\n  \"lastName\": \"User\",\n  \"phone\": \"+971501234567\",\n  \"roleId\": \"{{role_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('user_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/{{user_id}}"
           }
         },
         {
-          "name": "Update Client",
+          "name": "Update User",
           "request": {
             "method": "PUT",
             "header": [
@@ -386,85 +700,20 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/clients/1",
+            "url": "{{base_url}}/users/{{user_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"company_name\": \"ABC Corporation\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Approve Client",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/clients/1/approve"
-          }
-        },
-        {
-          "name": "Activate Client",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/clients/1/activate"
-          }
-        },
-        {
-          "name": "Deactivate Client",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/clients/1/deactivate"
-          }
-        },
-        {
-          "name": "Delete Client",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/clients/1"
-          }
-        }
-      ]
-    },
-    {
-      "name": "05 - Vendors",
-      "item": [
-        {
-          "name": "List Vendors",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/vendors?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Vendor by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/vendors/1"
-          }
-        },
-        {
-          "name": "Create Vendor",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"firstName\": \"Postman Updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "url": "{{base_url}}/vendors",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vendor_type\": \"company\",\n  \"company_name\": \"XYZ Suppliers\",\n  \"email\": \"vendor@xyz.com\",\n  \"phone\": \"+971501234567\",\n  \"vendor_category\": \"material_supplier\"\n}"
             }
           }
         },
         {
-          "name": "Update Vendor",
+          "name": "Update User Password",
           "request": {
             "method": "PUT",
             "header": [
@@ -473,49 +722,383 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/vendors/1",
+            "url": "{{base_url}}/users/{{user_id}}/password",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"company_name\": \"XYZ Suppliers Ltd\"\n}"
+              "raw": "{\n  \"password\": \"NewUser123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Approve Vendor",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/vendors/1/approve"
-          }
-        },
-        {
-          "name": "Activate Vendor",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/vendors/1/activate"
-          }
-        },
-        {
-          "name": "Deactivate Vendor",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/vendors/1/deactivate"
-          }
-        },
-        {
-          "name": "Delete Vendor",
+          "name": "Delete User",
           "request": {
             "method": "DELETE",
             "header": [],
-            "url": "{{base_url}}/vendors/1"
+            "url": "{{base_url}}/users/{{user_id}}"
           }
         }
       ]
     },
     {
-      "name": "06 - Leads",
+      "name": "04 - Contacts",
+      "item": [
+        {
+          "name": "List Contacts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/contacts?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/contacts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"contactType\": \"both\",\n  \"phone\": \"+971501234567\",\n  \"email\": \"john.doe@clearearth-test.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('contact_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Contact by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/contacts/{{contact_id}}"
+          }
+        },
+        {
+          "name": "Update Contact",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/contacts/{{contact_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+971509999999\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Companies (Clients)",
+      "item": [
+        {
+          "name": "List Companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/companies?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/companies",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"ABC Recycling LLC\",\n  \"email\": \"contact@abc-test.com\",\n  \"phone\": \"+971501234567\",\n  \"address\": \"Dubai, UAE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('company_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Company by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/companies/{{company_id}}"
+          }
+        },
+        {
+          "name": "Update Company",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/companies/{{company_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"ABC Recycling LLC (Updated)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Contact for Contact-linking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/contacts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Company-Contact\",\n  \"contactType\": \"clients\",\n  \"phone\": \"+971502222222\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('contact_id_2', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Contact to Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/companies/{{company_id}}/contacts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contactId\": \"{{contact_id_2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Remove Contact from Company",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/companies/{{company_id}}/contacts/{{contact_id_2}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Suppliers (Vendors)",
+      "item": [
+        {
+          "name": "List Suppliers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/suppliers?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/suppliers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"XYZ Suppliers LLC\",\n  \"email\": \"vendor@xyz-test.com\",\n  \"phone\": \"+971501234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('supplier_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Supplier by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/suppliers/{{supplier_id}}"
+          }
+        },
+        {
+          "name": "Update Supplier",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/suppliers/{{supplier_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"XYZ Suppliers LLC (Updated)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Add Contact to Supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/suppliers/{{supplier_id}}/contacts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contactId\": \"{{contact_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Remove Contact from Supplier",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/suppliers/{{supplier_id}}/contacts/{{contact_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Leads",
       "item": [
         {
           "name": "List Leads",
@@ -523,14 +1106,6 @@
             "method": "GET",
             "header": [],
             "url": "{{base_url}}/leads?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Lead by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/leads/1"
           }
         },
         {
@@ -546,8 +1121,40 @@
             "url": "{{base_url}}/leads",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lead_source\": \"website\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john@example.com\",\n  \"phone\": \"+971501234567\",\n  \"service_interest\": \"recycling\"\n}"
+              "raw": "{\n  \"source\": \"website\",\n  \"phone\": \"+971501234567\",\n  \"email\": \"lead@clearearth-test.com\",\n  \"companyId\": \"{{company_id}}\",\n  \"contactId\": \"{{contact_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('lead_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/leads/{{lead_id}}"
           }
         },
         {
@@ -560,15 +1167,28 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/leads/1",
+            "url": "{{base_url}}/leads/{{lead_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"contacted\"\n}"
+              "raw": "{\n  \"phone\": \"+971509998888\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Qualify Lead",
+          "name": "Request Lead Approval",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/leads/{{lead_id}}/request-approval"
+          }
+        },
+        {
+          "name": "Approve Lead with PIN",
           "request": {
             "method": "POST",
             "header": [
@@ -577,12 +1197,82 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/leads/1/qualify",
+            "url": "{{base_url}}/leads/{{lead_id}}/approve-with-pin",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"notes\": \"Qualified lead\"\n}"
+              "raw": "{\n  \"pin\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
+        },
+        {
+          "name": "Qualify Lead (manager) (expect 400 — already qualified via PIN above; mutually exclusive approval paths)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/leads/{{lead_id}}/qualify"
+          }
+        },
+        {
+          "name": "Convert Lead to Deal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/leads/{{lead_id}}/convert"
+          }
+        },
+        {
+          "name": "Delete Lead (expect 400 — already converted, business rule)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/leads/{{lead_id}}"
+          }
+        },
+        {
+          "name": "Create Second Lead (for Disqualify)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/leads",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"referral\",\n  \"phone\": \"+971507654321\",\n  \"email\": \"lead2@clearearth-test.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('lead_id_2', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Disqualify Lead",
@@ -594,138 +1284,30 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/leads/1/disqualify",
+            "url": "{{base_url}}/leads/{{lead_id_2}}/disqualify",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Not interested\"\n}"
+              "raw": "{\n  \"reason\": \"Not interested\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Convert to Deal",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/leads/1/convert"
-          }
-        },
-        {
-          "name": "Delete Lead",
+          "name": "Delete Second Lead",
           "request": {
             "method": "DELETE",
             "header": [],
-            "url": "{{base_url}}/leads/1"
+            "url": "{{base_url}}/leads/{{lead_id_2}}"
           }
         }
       ]
     },
     {
-      "name": "07 - Deals",
-      "item": [
-        {
-          "name": "List Deals",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/deals?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Deal Statistics",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/deals/statistics"
-          }
-        },
-        {
-          "name": "Get Deal by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/deals/1"
-          }
-        },
-        {
-          "name": "Create Deal",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/deals",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"deal_name\": \"Recycling Contract\",\n  \"client_id\": 1,\n  \"service_type\": \"recycling\",\n  \"expected_value\": 50000,\n  \"expected_close_date\": \"2024-12-31\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Deal",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/deals/1",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"expected_value\": 55000\n}"
-            }
-          }
-        },
-        {
-          "name": "Move Deal Stage",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/deals/1/move-stage",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"stage\": \"proposal\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Finalize Deal",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/deals/1/finalize",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"won\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Delete Deal",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/deals/1"
-          }
-        }
-      ]
-    },
-    {
-      "name": "08 - Products",
+      "name": "08 - Products & Services",
       "item": [
         {
           "name": "List Products",
@@ -733,14 +1315,6 @@
             "method": "GET",
             "header": [],
             "url": "{{base_url}}/products?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Product by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/products/1"
           }
         },
         {
@@ -756,8 +1330,40 @@
             "url": "{{base_url}}/products",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"product_code\": \"PROD001\",\n  \"product_name\": \"Recycled Plastic\",\n  \"category\": \"materials\",\n  \"unit_price\": 100,\n  \"unit_of_measure\": \"kg\"\n}"
+              "raw": "{\n  \"name\": \"Recycled Plastic Pellets\",\n  \"type\": \"product\",\n  \"category\": \"materials\",\n  \"unitOfMeasure\": \"kg\",\n  \"price\": 100,\n  \"currency\": \"AED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('product_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/products/{{product_id}}"
           }
         },
         {
@@ -770,68 +1376,33 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/products/1",
+            "url": "{{base_url}}/products/{{product_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"unit_price\": 110\n}"
+              "raw": "{\n  \"price\": 110\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "Approve Product",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/products/1/approve"
-          }
-        },
-        {
-          "name": "Activate Product",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/products/1/activate"
-          }
-        },
-        {
-          "name": "Deactivate Product",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/products/1/deactivate"
-          }
-        },
-        {
-          "name": "Delete Product",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/products/1"
           }
         }
       ]
     },
     {
-      "name": "09 - Services",
+      "name": "09 - Deals",
       "item": [
         {
-          "name": "List Services",
+          "name": "List Deals",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/services?page=1&pageSize=20"
+            "url": "{{base_url}}/deals?page=1&pageSize=20"
           }
         },
         {
-          "name": "Get Service by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/services/1"
-          }
-        },
-        {
-          "name": "Create Service",
+          "name": "Create Deal",
           "request": {
             "method": "POST",
             "header": [
@@ -840,15 +1411,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/services",
+            "url": "{{base_url}}/deals",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"service_code\": \"SRV001\",\n  \"service_name\": \"Waste Collection\",\n  \"category\": \"collection\",\n  \"unit_price\": 500\n}"
+              "raw": "{\n  \"companyId\": \"{{company_id}}\",\n  \"title\": \"Recycling Contract - Postman Test\",\n  \"description\": \"Deal created by Postman smoke test\",\n  \"dealType\": \"offer_to_purchase\",\n  \"vatPercentage\": 5,\n  \"items\": [\n    {\n      \"productServiceId\": \"{{product_id}}\",\n      \"quantity\": 10,\n      \"unitPrice\": 100,\n      \"unitOfMeasure\": \"kg\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('deal_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Deal by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/deals/{{deal_id}}"
           }
         },
         {
-          "name": "Update Service",
+          "name": "Update Deal",
           "request": {
             "method": "PUT",
             "header": [
@@ -857,68 +1460,28 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/services/1",
+            "url": "{{base_url}}/deals/{{deal_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"unit_price\": 550\n}"
+              "raw": "{\n  \"description\": \"Updated by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Approve Service",
+          "name": "Request Deal Approval",
           "request": {
             "method": "POST",
             "header": [],
-            "url": "{{base_url}}/services/1/approve"
+            "url": "{{base_url}}/deals/{{deal_id}}/request-approval"
           }
         },
         {
-          "name": "Activate Service",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/services/1/activate"
-          }
-        },
-        {
-          "name": "Deactivate Service",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/services/1/deactivate"
-          }
-        },
-        {
-          "name": "Delete Service",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/services/1"
-          }
-        }
-      ]
-    },
-    {
-      "name": "10 - Warehouses",
-      "item": [
-        {
-          "name": "List Warehouses",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/warehouses?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Warehouse by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/warehouses/1"
-          }
-        },
-        {
-          "name": "Create Warehouse",
+          "name": "Approve Deal with PIN",
           "request": {
             "method": "POST",
             "header": [
@@ -927,15 +1490,72 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/warehouses",
+            "url": "{{base_url}}/deals/{{deal_id}}/approve-with-pin",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"warehouse_code\": \"WH001\",\n  \"warehouse_name\": \"Main Warehouse\",\n  \"location\": \"Dubai\",\n  \"capacity\": 10000\n}"
+              "raw": "{\n  \"pin\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Update Warehouse",
+          "name": "Approve Deal (manager) (expect 400 — already approved via PIN above; mutually exclusive approval paths)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/deals/{{deal_id}}/approve"
+          }
+        },
+        {
+          "name": "Update Deal Collection Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/deals/{{deal_id}}/collection-details",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pickupLocation\": \"Al Quoz Industrial Area 3, Dubai\",\n  \"pickupContactName\": \"Site Manager\",\n  \"pickupContactNumber\": \"+971501112222\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update Deal Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/deals/{{deal_id}}/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paidAmount\": 500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Save Deal Inspection Report",
           "request": {
             "method": "PUT",
             "header": [
@@ -944,76 +1564,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/warehouses/1",
+            "url": "{{base_url}}/deals/{{deal_id}}/inspection-report",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"capacity\": 12000\n}"
+              "raw": "{\n  \"inspectorId\": \"{{admin_user_id}}\",\n  \"cargoPackingType\": \"palletized\",\n  \"remarks\": \"Inspection report created by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "Activate Warehouse",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/warehouses/1/activate"
-          }
-        },
-        {
-          "name": "Deactivate Warehouse",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/warehouses/1/deactivate"
-          }
-        },
-        {
-          "name": "Delete Warehouse",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/warehouses/1"
           }
         }
       ]
     },
     {
-      "name": "11 - Inventory",
+      "name": "10 - Dropdowns",
       "item": [
         {
-          "name": "Get Inventory Summary",
+          "name": "Get All Dropdowns",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/inventory?page=1&pageSize=20"
+            "url": "{{base_url}}/dropdowns/all",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
-          "name": "Get Inventory Valuation",
+          "name": "Get Dropdowns by Category",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/inventory/valuation"
+            "url": "{{base_url}}/dropdowns/category/lead_sources",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
-          "name": "List Lots",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/inventory/lots?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Lot by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/inventory/lots/1"
-          }
-        },
-        {
-          "name": "Create Lot",
+          "name": "Create Dropdown Value (admin only)",
           "request": {
             "method": "POST",
             "header": [
@@ -1022,15 +1613,39 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/inventory/lots",
+            "url": "{{base_url}}/dropdowns",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lot_number\": \"LOT001\",\n  \"material_type_id\": 1,\n  \"warehouse_id\": 1,\n  \"quantity\": 1000,\n  \"unit_cost\": 50\n}"
+              "raw": "{\n  \"category\": \"lead_sources\",\n  \"value\": \"postman_test_{{$timestamp}}\",\n  \"display_name\": \"Postman Test\",\n  \"display_order\": 99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('dropdown_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
-          "name": "Update Lot",
+          "name": "Update Dropdown Value",
           "request": {
             "method": "PUT",
             "header": [
@@ -1039,69 +1654,83 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/inventory/lots/1",
+            "url": "{{base_url}}/dropdowns/{{dropdown_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"quantity\": 1100\n}"
+              "raw": "{\n  \"category\": \"lead_sources\",\n  \"display_name\": \"Postman Test Updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Adjust Lot Quantity",
+          "name": "Delete Dropdown Value",
           "request": {
-            "method": "POST",
+            "method": "DELETE",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/inventory/lots/1/adjust",
+            "url": "{{base_url}}/dropdowns/{{dropdown_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"adjustment_quantity\": 100,\n  \"reason\": \"Reconciliation\"\n}"
+              "raw": "{\n  \"category\": \"lead_sources\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "Close Lot",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/inventory/lots/1/close"
-          }
-        },
-        {
-          "name": "Get Stock Movements",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/inventory/movements?page=1&pageSize=20"
           }
         }
       ]
     },
     {
-      "name": "12 - Jobs",
+      "name": "11 - Material Types",
       "item": [
         {
-          "name": "List Jobs",
+          "name": "List Material Types",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/jobs?page=1&pageSize=20"
-          }
-        },
+            "url": "{{base_url}}/material-types"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('material_type_id', arr[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12 - Terms and Conditions",
+      "item": [
         {
-          "name": "Get Job by ID",
+          "name": "List Terms",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/jobs/1"
+            "url": "{{base_url}}/terms"
           }
         },
         {
-          "name": "Create Job",
+          "name": "Create Terms",
           "request": {
             "method": "POST",
             "header": [
@@ -1110,15 +1739,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/jobs",
+            "url": "{{base_url}}/terms",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"deal_id\": 1,\n  \"job_type\": \"collection\",\n  \"start_date\": \"2024-01-01\",\n  \"description\": \"Waste collection job\"\n}"
+              "raw": "{\n  \"title\": \"Standard Payment Terms\",\n  \"content\": \"Payment due within 30 days of invoice date.\",\n  \"category\": \"payment\",\n  \"isDefault\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('term_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Terms by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/terms/{{term_id}}"
           }
         },
         {
-          "name": "Update Job",
+          "name": "Update Terms",
           "request": {
             "method": "PUT",
             "header": [
@@ -1127,69 +1788,172 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/jobs/1",
+            "url": "{{base_url}}/terms/{{term_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Updated description\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Job Status",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"content\": \"Payment due within 45 days of invoice date.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "url": "{{base_url}}/jobs/1/status",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"in_progress\"\n}"
             }
           }
         },
         {
-          "name": "Delete Job",
+          "name": "Delete Terms",
           "request": {
             "method": "DELETE",
             "header": [],
-            "url": "{{base_url}}/jobs/1"
+            "url": "{{base_url}}/terms/{{term_id}}"
           }
         }
       ]
     },
     {
-      "name": "13 - Invoices",
+      "name": "13 - Upload",
       "item": [
         {
-          "name": "List Invoices",
+          "name": "Upload Inspection Document",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [],
-            "url": "{{base_url}}/invoices?page=1&pageSize=20"
+            "url": "{{base_url}}/upload/inspection-document",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
           }
         },
         {
-          "name": "Get Invoice Statistics",
+          "name": "Upload Deal Image",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [],
-            "url": "{{base_url}}/invoices/statistics"
+            "url": "{{base_url}}/upload/deal-image",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
           }
         },
         {
-          "name": "Get Invoice by ID",
+          "name": "Upload Company Document",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [],
-            "url": "{{base_url}}/invoices/1"
+            "url": "{{base_url}}/upload/company-document",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
           }
         },
         {
-          "name": "Create Invoice",
+          "name": "Upload WDS Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/upload/wds-attachment",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Tenant Logo",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/upload/tenant-logo",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Tax Invoice Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/upload/tax-invoice-attachment",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Expense Evidence",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/upload/expense-evidence",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 - Quotations",
+      "item": [
+        {
+          "name": "List Quotations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/quotations?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Quotation",
           "request": {
             "method": "POST",
             "header": [
@@ -1198,15 +1962,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/invoices",
+            "url": "{{base_url}}/quotations",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"client_id\": 1,\n  \"invoice_type\": \"sales\",\n  \"invoice_date\": \"2024-01-01\",\n  \"due_date\": \"2024-01-31\",\n  \"items\": [\n    {\n      \"description\": \"Service\",\n      \"quantity\": 1,\n      \"unit_price\": 1000\n    }\n  ]\n}"
+              "raw": "{\n  \"dealId\": \"{{deal_id}}\",\n  \"preparedBy\": \"{{admin_user_id}}\",\n  \"quotationDate\": \"2026-07-22\",\n  \"quotationAmount\": 1050,\n  \"remarks\": \"Created by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('quotation_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Quotation by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/quotations/{{quotation_id}}"
           }
         },
         {
-          "name": "Update Invoice",
+          "name": "Update Quotation (expect 400 — quotation.service.update is a permanent stub, editing is disabled after creation)",
           "request": {
             "method": "PUT",
             "header": [
@@ -1215,23 +2011,28 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/invoices/1",
+            "url": "{{base_url}}/quotations/{{quotation_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"due_date\": \"2024-02-15\"\n}"
+              "raw": "{\n  \"remarks\": \"Updated by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Approve Invoice",
+          "name": "Request Quotation Approval",
           "request": {
             "method": "POST",
             "header": [],
-            "url": "{{base_url}}/invoices/1/approve"
+            "url": "{{base_url}}/quotations/{{quotation_id}}/request-approval"
           }
         },
         {
-          "name": "Record Payment",
+          "name": "Approve Quotation with PIN",
           "request": {
             "method": "POST",
             "header": [
@@ -1240,69 +2041,57 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/invoices/1/payment",
+            "url": "{{base_url}}/quotations/{{quotation_id}}/approve-with-pin",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 1000,\n  \"payment_date\": \"2024-01-15\"\n}"
+              "raw": "{\n  \"pin\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Cancel Invoice",
+          "name": "Approve Quotation (manager)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/invoices/1/cancel",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reason\": \"Customer request\"\n}"
-            }
+            "header": [],
+            "url": "{{base_url}}/quotations/{{quotation_id}}/approve"
           }
         },
         {
-          "name": "Delete Invoice",
+          "name": "Download Quotation PDF",
           "request": {
-            "method": "DELETE",
+            "method": "GET",
             "header": [],
-            "url": "{{base_url}}/invoices/1"
+            "url": "{{base_url}}/quotations/{{quotation_id}}/pdf"
           }
         }
       ]
     },
     {
-      "name": "14 - Payments",
+      "name": "15 - Proforma & Tax Invoices",
       "item": [
         {
-          "name": "List Payments",
+          "name": "Proforma Preview from Quotation",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/payments?page=1&pageSize=20"
+            "url": "{{base_url}}/proforma-invoices/preview-from-quotation/{{quotation_id}}"
           }
         },
         {
-          "name": "Get Post-Dated Cheques",
+          "name": "List Proforma Invoices",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/payments/cheques/postdated"
+            "url": "{{base_url}}/proforma-invoices?page=1&pageSize=20"
           }
         },
         {
-          "name": "Get Payment by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/payments/1"
-          }
-        },
-        {
-          "name": "Create Payment",
+          "name": "Create Proforma Invoice",
           "request": {
             "method": "POST",
             "header": [
@@ -1311,78 +2100,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/payments",
+            "url": "{{base_url}}/proforma-invoices",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"invoice_id\": 1,\n  \"payment_date\": \"2024-01-15\",\n  \"amount\": 1000,\n  \"payment_mode\": \"bank_transfer\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Cheque Status",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"quotationId\": \"{{quotation_id}}\",\n  \"invoiceDate\": \"2026-07-22\",\n  \"dueDate\": \"2026-08-21\",\n  \"subtotal\": 1000,\n  \"vatPercentage\": 5,\n  \"vatAmount\": 50,\n  \"total\": 1050,\n  \"items\": [\n    {\n      \"productServiceId\": \"{{product_id}}\",\n      \"description\": \"Recycled Plastic Pellets\",\n      \"quantity\": 10,\n      \"unitPrice\": 100,\n      \"lineTotal\": 1000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "url": "{{base_url}}/payments/cheques/1/status",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"cleared\"\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('proforma_invoice_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
-          "name": "Delete Payment",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/payments/1"
-          }
-        }
-      ]
-    },
-    {
-      "name": "15 - Employees",
-      "item": [
-        {
-          "name": "List Employees",
+          "name": "Get Proforma Invoice by ID",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/employees?page=1&pageSize=20"
+            "url": "{{base_url}}/proforma-invoices/{{proforma_invoice_id}}"
           }
         },
         {
-          "name": "Get Employee by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/employees/1"
-          }
-        },
-        {
-          "name": "Create Employee",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/employees",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Ahmed\",\n  \"last_name\": \"Ali\",\n  \"email\": \"ahmed@company.com\",\n  \"phone\": \"+971501234567\",\n  \"job_title\": \"Driver\",\n  \"hire_date\": \"2024-01-01\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Employee",
+          "name": "Update Proforma Invoice",
           "request": {
             "method": "PUT",
             "header": [
@@ -1391,15 +2149,62 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/employees/1",
+            "url": "{{base_url}}/proforma-invoices/{{proforma_invoice_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"job_title\": \"Senior Driver\"\n}"
+              "raw": "{\n  \"dueDate\": \"2026-08-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Terminate Employee",
+          "name": "Download Proforma Invoice PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/proforma-invoices/{{proforma_invoice_id}}/pdf"
+          }
+        },
+        {
+          "name": "Upload Tax Invoice Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/upload/tax-invoice-attachment",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Tax Preview from Proforma",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tax-invoices/preview-from-proforma/{{proforma_invoice_id}}"
+          }
+        },
+        {
+          "name": "List Tax Invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tax-invoices?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Tax Invoice",
           "request": {
             "method": "POST",
             "header": [
@@ -1408,61 +2213,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/employees/1/terminate",
+            "url": "{{base_url}}/tax-invoices",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"termination_date\": \"2024-12-31\",\n  \"reason\": \"Resignation\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Delete Employee",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/employees/1"
-          }
-        }
-      ]
-    },
-    {
-      "name": "16 - Vehicles",
-      "item": [
-        {
-          "name": "List Vehicles",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/vehicles?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Vehicle by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/vehicles/1"
-          }
-        },
-        {
-          "name": "Create Vehicle",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"proformaInvoiceId\": \"{{proforma_invoice_id}}\",\n  \"invoiceDate\": \"2026-07-22\",\n  \"dueDate\": \"2026-08-21\",\n  \"paymentMethod\": \"bank_transfer\",\n  \"remarks\": \"Created by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "url": "{{base_url}}/vehicles",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"registration_number\": \"DXB-12345\",\n  \"make\": \"Mercedes\",\n  \"model\": \"Actros\",\n  \"year\": 2023,\n  \"vehicle_type\": \"truck\"\n}"
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('tax_invoice_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Tax Invoice by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tax-invoices/{{tax_invoice_id}}"
           }
         },
         {
-          "name": "Update Vehicle",
+          "name": "Update Tax Invoice",
           "request": {
             "method": "PUT",
             "header": [
@@ -1471,95 +2262,41 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/vehicles/1",
+            "url": "{{base_url}}/tax-invoices/{{tax_invoice_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"current_mileage\": 50000\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Vehicle Status",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"remarks\": \"Updated by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "url": "{{base_url}}/vehicles/1/status",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"active\"\n}"
             }
           }
         },
         {
-          "name": "Add Fuel Log",
+          "name": "Download Tax Invoice PDF",
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/vehicles/1/fuel",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"liters\": 100,\n  \"cost\": 300,\n  \"date\": \"2024-01-01\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Add Maintenance Log",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/vehicles/1/maintenance",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"service_type\": \"Oil Change\",\n  \"cost\": 500,\n  \"date\": \"2024-01-01\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Delete Vehicle",
-          "request": {
-            "method": "DELETE",
+            "method": "GET",
             "header": [],
-            "url": "{{base_url}}/vehicles/1"
+            "url": "{{base_url}}/tax-invoices/{{tax_invoice_id}}/pdf"
           }
         }
       ]
     },
     {
-      "name": "17 - Documents",
+      "name": "16 - Purchase Orders",
       "item": [
         {
-          "name": "List Documents",
+          "name": "List Purchase Orders",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/documents?page=1&pageSize=20"
+            "url": "{{base_url}}/purchase-orders?page=1&pageSize=20"
           }
         },
         {
-          "name": "Get Document by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/documents/1"
-          }
-        },
-        {
-          "name": "Upload Document",
+          "name": "Create Client Purchase Quotation (company-based)",
           "request": {
             "method": "POST",
             "header": [
@@ -1568,23 +2305,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/documents",
+            "url": "{{base_url}}/purchase-orders",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"document_name\": \"Contract\",\n  \"document_type\": \"contract\",\n  \"related_module\": \"deals\",\n  \"related_id\": 1\n}"
+              "raw": "{\n  \"companyId\": \"{{company_id}}\",\n  \"documentType\": \"quotation\",\n  \"poDate\": \"2026-07-22\",\n  \"items\": [\n    {\n      \"productServiceId\": \"{{product_id}}\",\n      \"itemDescription\": \"Baled Scrap Metal\",\n      \"quantity\": 5,\n      \"price\": 200\n    }\n  ],\n  \"terms\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('purchase_order_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
-          "name": "Create Document Version",
+          "name": "Get Purchase Order by ID",
           "request": {
-            "method": "POST",
+            "method": "GET",
             "header": [],
-            "url": "{{base_url}}/documents/1/version"
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_id}}"
           }
         },
         {
-          "name": "Update Document",
+          "name": "Update Purchase Order",
           "request": {
             "method": "PUT",
             "header": [
@@ -1593,52 +2354,120 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/documents/1",
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"document_name\": \"Updated Contract\"\n}"
+              "raw": "{\n  \"remarks\": \"Updated by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Deactivate Document",
+          "name": "Request PO Approval",
           "request": {
             "method": "POST",
             "header": [],
-            "url": "{{base_url}}/documents/1/deactivate"
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_id}}/request-approval"
           }
         },
         {
-          "name": "Delete Document",
+          "name": "Approve PO with PIN",
           "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/documents/1"
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_id}}/approve-with-pin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
+        },
+        {
+          "name": "Approve PO (manager) (expect 400 — already approved via PIN above; mutually exclusive approval paths)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_id}}/approve"
+          }
+        },
+        {
+          "name": "Download PO PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_id}}/pdf"
+          }
+        },
+        {
+          "name": "Create Vendor Purchase Order (supplier-based, auto-approved)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/purchase-orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplier_id}}\",\n  \"documentType\": \"quotation\",\n  \"poDate\": \"2026-07-22\",\n  \"items\": [\n    {\n      \"productServiceId\": \"{{product_id}}\",\n      \"itemDescription\": \"Baled Scrap Metal\",\n      \"quantity\": 5,\n      \"price\": 200\n    }\n  ],\n  \"terms\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('purchase_order_vendor_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "18 - Certificates",
+      "name": "17 - Work Types",
       "item": [
         {
-          "name": "List Certificates",
+          "name": "List Work Types",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/certificates?page=1&pageSize=20"
+            "url": "{{base_url}}/work-types"
           }
         },
         {
-          "name": "Get Certificate by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/certificates/1"
-          }
-        },
-        {
-          "name": "Create Certificate",
+          "name": "Create Work Type",
           "request": {
             "method": "POST",
             "header": [
@@ -1647,64 +2476,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/certificates",
+            "url": "{{base_url}}/work-types",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"certificate_type\": \"destruction\",\n  \"client_id\": 1,\n  \"job_id\": 1,\n  \"issue_date\": \"2024-01-01\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Verify Certificate",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/certificates/1/verify"
-          }
-        },
-        {
-          "name": "Delete Certificate",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{base_url}}/certificates/1"
-          }
-        },
-        {
-          "name": "List Certificate Templates",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/certificates/templates/all"
-          }
-        },
-        {
-          "name": "Get Template by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/certificates/templates/1"
-          }
-        },
-        {
-          "name": "Create Certificate Template",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"name\": \"Pickup\",\n  \"description\": \"Collection / pickup task\",\n  \"isDefault\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "url": "{{base_url}}/certificates/templates",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"template_name\": \"Destruction Certificate\",\n  \"template_content\": \"Template content here\"\n}"
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('work_type_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Work Type by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/work-types/{{work_type_id}}"
           }
         },
         {
-          "name": "Update Certificate Template",
+          "name": "Update Work Type",
           "request": {
             "method": "PUT",
             "header": [
@@ -1713,44 +2525,33 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/certificates/templates/1",
+            "url": "{{base_url}}/work-types/{{work_type_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"template_content\": \"Updated content\"\n}"
+              "raw": "{\n  \"description\": \"Updated by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
       ]
     },
     {
-      "name": "19 - Commissions",
+      "name": "18 - Work Orders",
       "item": [
         {
-          "name": "List Commissions",
+          "name": "List Work Orders",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/commissions?page=1&pageSize=20"
+            "url": "{{base_url}}/work-orders?page=1&pageSize=20"
           }
         },
         {
-          "name": "Get Commission Summary",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/commissions/summary"
-          }
-        },
-        {
-          "name": "Get Commission by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/commissions/1"
-          }
-        },
-        {
-          "name": "Calculate Commission",
+          "name": "Create Work Order",
           "request": {
             "method": "POST",
             "header": [
@@ -1759,95 +2560,169 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/commissions/calculate",
+            "url": "{{base_url}}/work-orders",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"invoice_id\": 1,\n  \"sales_person_id\": 1\n}"
+              "raw": "{\n  \"quotationId\": \"{{quotation_id}}\",\n  \"title\": \"Collection Work Order - Postman Test\",\n  \"notes\": \"Created by Postman smoke test\",\n  \"tasks\": [\n    {\n      \"workTypeId\": \"{{work_type_id}}\",\n      \"description\": \"Collect material from site\",\n      \"assignedTo\": \"{{admin_user_id}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  try {",
+                  "    const data = pm.response.json().data;",
+                  "    if (data && data.id) pm.collectionVariables.set('work_order_id', data.id);",
+                  "    if (Array.isArray(data.tasks) && data.tasks.length) pm.collectionVariables.set('work_order_task_id', data.tasks[0].id);",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Work Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/work-orders/{{work_order_id}}"
+          }
+        },
+        {
+          "name": "Update Task Notes",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/work-orders/{{work_order_id}}/tasks/{{work_order_task_id}}/notes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Task note updated by Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Create Commission",
+          "name": "Assign Task",
           "request": {
-            "method": "POST",
+            "method": "PATCH",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/commissions",
+            "url": "{{base_url}}/work-orders/{{work_order_id}}/tasks/{{work_order_task_id}}/assign",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sales_person_id\": 1,\n  \"invoice_id\": 1,\n  \"commission_amount\": 500,\n  \"commission_rate\": 5\n}"
+              "raw": "{\n  \"assignedTo\": \"{{admin_user_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Approve Commission",
+          "name": "Update Task Status to Completed",
           "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/commissions/1/approve"
-          }
-        },
-        {
-          "name": "Process Commission Payment",
-          "request": {
-            "method": "POST",
+            "method": "PATCH",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/commissions/1/payment",
+            "url": "{{base_url}}/work-orders/{{work_order_id}}/tasks/{{work_order_task_id}}/status",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"payment_date\": \"2024-01-31\"\n}"
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Reverse Commission",
+          "name": "Update Work Order (status: completed — triggers GRN/purchase-bill auto-create)",
           "request": {
-            "method": "POST",
+            "method": "PUT",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/commissions/1/reverse",
+            "url": "{{base_url}}/work-orders/{{work_order_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Invoice cancelled\"\n}"
+              "raw": "{\n  \"notes\": \"Updated by Postman smoke test\",\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
       ]
     },
     {
-      "name": "20 - Inbound (GRN)",
+      "name": "19 - GRN (Goods Receipt Notes)",
       "item": [
         {
           "name": "List GRNs",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/inbound/grn?page=1&pageSize=20"
-          }
+            "url": "{{base_url}}/grn?page=1&pageSize=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('grn_id', arr[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Get GRN by ID",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/inbound/grn/1"
+            "url": "{{base_url}}/grn/{{grn_id}}"
           }
         },
         {
-          "name": "Create GRN",
+          "name": "Create GRN (expect 409/400 — one was already auto-created when the work order was marked completed in 18 Work Orders; ensureGrnForWorkOrder is one-per-work-order)",
           "request": {
             "method": "POST",
             "header": [
@@ -1856,23 +2731,180 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/inbound/grn",
+            "url": "{{base_url}}/grn",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"deal_id\": 1,\n  \"grn_type\": \"purchase\",\n  \"received_date\": \"2024-01-01\",\n  \"items\": [\n    {\n      \"material_type_id\": 1,\n      \"quantity\": 1000,\n      \"unit_cost\": 50\n    }\n  ]\n}"
+              "raw": "{\n  \"workOrderId\": \"{{work_order_id}}\",\n  \"notes\": \"Created by Postman smoke test\",\n  \"items\": [\n    {\n      \"itemName\": \"Baled Scrap Metal\",\n      \"quantity\": 500,\n      \"unitOfMeasure\": \"kg\",\n      \"make\": \"N/A\",\n      \"model\": \"N/A\",\n      \"units\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
+        },
+        {
+          "name": "Update GRN (adds an item, since the auto-created GRN starts with none)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/grn/{{grn_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Updated by Postman smoke test\",\n  \"items\": [\n    {\n      \"itemName\": \"Baled Scrap Metal\",\n      \"materialTypeId\": \"{{material_type_id}}\",\n      \"quantity\": 500,\n      \"unitOfMeasure\": \"kg\",\n      \"make\": \"N/A\",\n      \"model\": \"N/A\",\n      \"units\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  try {",
+                  "    const items = pm.response.json().data.items;",
+                  "    if (Array.isArray(items) && items.length) pm.collectionVariables.set('grn_item_id', items[0].id);",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Approve GRN",
           "request": {
             "method": "POST",
             "header": [],
-            "url": "{{base_url}}/inbound/grn/1/approve"
+            "url": "{{base_url}}/grn/{{grn_id}}/approve"
           }
         },
         {
-          "name": "Reject GRN",
+          "name": "Upload GRN Item Images (expect 400 — no real file attached; same limitation as 13 Upload)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/grn/{{grn_id}}/items/{{grn_item_id}}/images",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Download GRN PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/grn/{{grn_id}}/pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 - Inspection Requests",
+      "item": [
+        {
+          "name": "List Inspection Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inspection-requests?page=1&pageSize=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('inspection_request_id', arr[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Inspection Request by ID (best-effort, needs a deal with inspection_required=true)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/inspection-requests/{{inspection_request_id}}"
+          }
+        },
+        {
+          "name": "Update Inspection Request Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/inspection-requests/{{inspection_request_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update Inspection Request Priority",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/inspection-requests/{{inspection_request_id}}/priority",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"high\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Accept Inspection Request",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/inspection-requests/{{inspection_request_id}}/accept"
+          }
+        },
+        {
+          "name": "Reject Inspection Request",
           "request": {
             "method": "POST",
             "header": [
@@ -1881,490 +2913,111 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/inbound/grn/1/reject",
+            "url": "{{base_url}}/inspection-requests/{{inspection_request_id}}/reject",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Quality issues\"\n}"
+              "raw": "{\n  \"reason\": \"Rejected by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
       ]
     },
     {
-      "name": "21 - Outbound",
+      "name": "21 - Driver",
       "item": [
         {
-          "name": "List Outbound Records",
+          "name": "List My Pickups (expect 403 — authorizeRole only allows driver/admin/tenant_admin/operations_manager; our test role is super_admin, which authorizeRole does not special-case)",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/outbound?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Outbound by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/outbound/1"
-          }
-        },
-        {
-          "name": "Create Outbound",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            "url": "{{base_url}}/driver/pickups"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('work_order_task_id', arr[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
-            ],
-            "url": "{{base_url}}/outbound",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"deal_id\": 1,\n  \"dispatch_date\": \"2024-01-01\",\n  \"items\": [\n    {\n      \"lot_id\": 1,\n      \"quantity\": 500\n    }\n  ]\n}"
             }
+          ]
+        },
+        {
+          "name": "Get Pickup Task (expect 403 — same authorizeRole restriction)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/driver/pickups/{{work_order_task_id}}"
           }
         },
         {
-          "name": "Confirm Dispatch",
+          "name": "Start Pickup (expect 403 — same authorizeRole restriction)",
           "request": {
             "method": "POST",
             "header": [],
-            "url": "{{base_url}}/outbound/1/dispatch"
+            "url": "{{base_url}}/driver/pickups/{{work_order_task_id}}/start"
           }
         },
         {
-          "name": "Complete Delivery",
+          "name": "Complete Pickup (expect 403 — same authorizeRole restriction)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/outbound/1/delivery",
+            "header": [],
+            "url": "{{base_url}}/driver/pickups/{{work_order_task_id}}/complete",
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"delivery_date\": \"2024-01-02\",\n  \"received_by\": \"Customer\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "quantity",
+                  "value": "500",
+                  "type": "text"
+                },
+                {
+                  "key": "uom",
+                  "value": "kg",
+                  "type": "text"
+                },
+                {
+                  "key": "condition",
+                  "value": "good",
+                  "type": "text"
+                },
+                {
+                  "key": "remarks",
+                  "value": "Completed by Postman smoke test",
+                  "type": "text"
+                },
+                {
+                  "key": "photos",
+                  "type": "file",
+                  "src": []
+                }
+              ]
             }
           }
         }
       ]
     },
     {
-      "name": "22 - Accounting",
+      "name": "22 - Expense Categories",
       "item": [
-        {
-          "name": "List Journal Entries",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/accounting/journal-entries?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Get Journal Entry by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/accounting/journal-entries/1"
-          }
-        },
-        {
-          "name": "Create Journal Entry",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/accounting/journal-entries",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"entry_date\": \"2024-01-01\",\n  \"description\": \"Sales entry\",\n  \"line_items\": [\n    {\n      \"account_id\": 1,\n      \"debit\": 1000,\n      \"credit\": 0\n    },\n    {\n      \"account_id\": 2,\n      \"debit\": 0,\n      \"credit\": 1000\n    }\n  ]\n}"
-            }
-          }
-        },
-        {
-          "name": "List Expenses",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/accounting/expenses?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Create Expense",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/accounting/expenses",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"expense_date\": \"2024-01-01\",\n  \"expense_category_id\": 1,\n  \"amount\": 500,\n  \"description\": \"Office supplies\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Approve Expense",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{base_url}}/accounting/expenses/1/approve"
-          }
-        },
-        {
-          "name": "List Fixed Assets",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/accounting/fixed-assets?page=1&pageSize=20"
-          }
-        },
-        {
-          "name": "Create Fixed Asset",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/accounting/fixed-assets",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"asset_name\": \"Truck\",\n  \"acquisition_cost\": 100000,\n  \"acquisition_date\": \"2024-01-01\",\n  \"useful_life_years\": 10\n}"
-            }
-          }
-        },
-        {
-          "name": "Calculate Depreciation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/accounting/depreciation/calculate",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fixed_asset_id\": 1\n}"
-            }
-          }
-        },
-        {
-          "name": "List Bank Accounts",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/accounting/bank-accounts"
-          }
-        },
-        {
-          "name": "Create Bank Account",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/accounting/bank-accounts",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_name\": \"Operating Account\",\n  \"bank_name\": \"Emirates NBD\",\n  \"account_number\": \"1234567890\",\n  \"currency\": \"AED\"\n}"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "23 - Dashboard",
-      "item": [
-        {
-          "name": "Get Overview KPIs",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/dashboard/overview"
-          }
-        },
-        {
-          "name": "Get Sales Trends",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/dashboard/sales-trends"
-          }
-        },
-        {
-          "name": "Get Material Breakdown",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/dashboard/material-breakdown"
-          }
-        },
-        {
-          "name": "Get Top Clients",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/dashboard/top-clients"
-          }
-        },
-        {
-          "name": "Get Recent Activities",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/dashboard/recent-activities"
-          }
-        }
-      ]
-    },
-    {
-      "name": "24 - Reports",
-      "item": [
-        {
-          "name": "Deal Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/deals"
-          }
-        },
-        {
-          "name": "Invoice Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/invoices"
-          }
-        },
-        {
-          "name": "Inventory Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/inventory"
-          }
-        },
-        {
-          "name": "Sales Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/sales"
-          }
-        },
-        {
-          "name": "VAT Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/vat"
-          }
-        },
-        {
-          "name": "Customer Ageing Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/customer-ageing"
-          }
-        },
-        {
-          "name": "Commission Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/commissions"
-          }
-        },
-        {
-          "name": "Expense Report",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/reports/expenses"
-          }
-        }
-      ]
-    },
-    {
-      "name": "25 - Settings",
-      "item": [
-        {
-          "name": "Get Tenant Settings",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/settings"
-          }
-        },
-        {
-          "name": "Update Tenant Settings",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/settings",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"company_name\": \"Updated Company Name\"\n}"
-            }
-          }
-        },
-        {
-          "name": "List Currencies",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/settings/currencies"
-          }
-        },
-        {
-          "name": "Create Currency",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/settings/currencies",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"AED\",\n  \"name\": \"UAE Dirham\",\n  \"symbol\": \"\\u062f.\\u0625\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Currency",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/settings/currencies/1",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Name\"\n}"
-            }
-          }
-        },
-        {
-          "name": "List Taxes",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/settings/taxes"
-          }
-        },
-        {
-          "name": "Create Tax",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/settings/taxes",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"VAT\",\n  \"rate\": 5,\n  \"type\": \"percentage\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Tax",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/settings/taxes/1",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"rate\": 5.5\n}"
-            }
-          }
-        },
-        {
-          "name": "List Payment Modes",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{base_url}}/settings/payment-modes"
-          }
-        },
-        {
-          "name": "Create Payment Mode",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/settings/payment-modes",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Bank Transfer\",\n  \"code\": \"BANK\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update Payment Mode",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{base_url}}/settings/payment-modes/1",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Name\"\n}"
-            }
-          }
-        },
         {
           "name": "List Expense Categories",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/settings/expense-categories"
+            "url": "{{base_url}}/expense-categories"
           }
         },
         {
@@ -2377,11 +3030,39 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/settings/expense-categories",
+            "url": "{{base_url}}/expense-categories",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Office Supplies\",\n  \"code\": \"OFFICE\"\n}"
+              "raw": "{\n  \"name\": \"Postman Test Category\",\n  \"displayOrder\": 99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.id) pm.collectionVariables.set('expense_category_id', data.id);",
+                  "  if (data && data.value) pm.collectionVariables.set('expense_category_value', data.value);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Expense Category by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/expense-categories/{{expense_category_id}}"
           }
         },
         {
@@ -2394,23 +3075,41 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/settings/expense-categories/1",
+            "url": "{{base_url}}/expense-categories/{{expense_category_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+              "raw": "{\n  \"name\": \"Postman Test Category (Updated)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "23 - Chart of Accounts",
+      "item": [
         {
-          "name": "List Material Types",
+          "name": "List Chart of Accounts",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/settings/material-types"
+            "url": "{{base_url}}/chart-of-accounts"
           }
         },
         {
-          "name": "Create Material Type",
+          "name": "Seed Default Accounts",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/chart-of-accounts/seed"
+          }
+        },
+        {
+          "name": "Create Account",
           "request": {
             "method": "POST",
             "header": [
@@ -2419,15 +3118,47 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/settings/material-types",
+            "url": "{{base_url}}/chart-of-accounts",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Plastic\",\n  \"category\": \"recyclable\"\n}"
+              "raw": "{\n  \"code\": \"PMT-9999\",\n  \"name\": \"Postman Test Account\",\n  \"type\": \"asset\",\n  \"normalBalance\": \"debit\",\n  \"isGroup\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('chart_account_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Account by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/chart-of-accounts/{{chart_account_id}}"
           }
         },
         {
-          "name": "Update Material Type",
+          "name": "Update Account",
           "request": {
             "method": "PUT",
             "header": [
@@ -2436,11 +3167,882 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{base_url}}/settings/material-types/1",
+            "url": "{{base_url}}/chart-of-accounts/{{chart_account_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+              "raw": "{\n  \"name\": \"Postman Test Account (Updated)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 - Accounts (Expenses & Task Expenses)",
+      "item": [
+        {
+          "name": "List Accounts Work Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounts/work-orders?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Accounts Work Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounts/work-orders/{{work_order_id}}"
+          }
+        },
+        {
+          "name": "List Accounts Expenses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounts/expenses?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Manual Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/accounts/expenses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"{{expense_category_value}}\",\n  \"amount\": 250,\n  \"expenseDate\": \"2026-07-22\",\n  \"paidTo\": \"Postman Fuel Station\",\n  \"paymentMethod\": \"cash\",\n  \"notes\": \"Created by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('expense_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Expense Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/accounts/expenses/{{expense_id}}/payments"
+          }
+        },
+        {
+          "name": "Record Expense Payment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/accounts/expenses/{{expense_id}}/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paidAmount\": 250\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Approve Task Expense (best-effort, needs a pending task expense line)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/accounts/work-orders/{{work_order_id}}/task-expenses/{{work_order_task_expense_id}}/approve"
+          }
+        },
+        {
+          "name": "Reject Task Expense (best-effort, needs a pending task expense line)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/accounts/work-orders/{{work_order_id}}/task-expenses/{{work_order_task_expense_id}}/reject"
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 - Receivables",
+      "item": [
+        {
+          "name": "List Receivables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/receivables?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Receivables Aging Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/receivables/aging-summary"
+          }
+        },
+        {
+          "name": "Record Receivable Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/receivables/{{tax_invoice_id}}/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500,\n  \"paymentDate\": \"2026-07-22\",\n  \"paymentMethod\": \"bank_transfer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Receivable Payments (captures latest payment id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/receivables/{{tax_invoice_id}}/payments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('tax_invoice_payment_id', arr[arr.length - 1].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download Receivable Payment Receipt PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/receivables/payments/{{tax_invoice_payment_id}}/receipt/pdf"
+          }
+        },
+        {
+          "name": "Download Company Statement PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/receivables/companies/{{company_id}}/statement/pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 - Payables",
+      "item": [
+        {
+          "name": "List Payables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payables?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Payables Aging Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payables/aging-summary"
+          }
+        },
+        {
+          "name": "Record Payable Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/payables/{{purchase_order_vendor_id}}/payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 300,\n  \"dueDate\": \"2026-08-22\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Payable Payments (captures latest payment id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payables/{{purchase_order_vendor_id}}/payments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('purchase_order_payment_id', arr[arr.length - 1].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Purchase Payment Receipts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payables/payment-receipts?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Get Purchase Payment Receipt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/payables/payment-receipts/{{purchase_order_payment_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 - Journal",
+      "item": [
+        {
+          "name": "List Journal Entries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/journal?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Create Manual Journal Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/journal",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entryDate\": \"2026-07-22\",\n  \"description\": \"Postman smoke test manual entry\",\n  \"lines\": [\n    {\n      \"accountId\": \"{{chart_account_id}}\",\n      \"debit\": 100,\n      \"credit\": 0,\n      \"description\": \"Debit line\"\n    },\n    {\n      \"accountId\": \"{{chart_account_id}}\",\n      \"debit\": 0,\n      \"credit\": 100,\n      \"description\": \"Credit line\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('journal_entry_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Journal Entry by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/journal/{{journal_entry_id}}"
+          }
+        },
+        {
+          "name": "Post Opening Balances",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/journal/opening-balances",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entryDate\": \"2026-01-01\",\n  \"balances\": [\n    {\n      \"code\": \"1000\",\n      \"balance\": 10000\n    },\n    {\n      \"code\": \"3000\",\n      \"balance\": 10000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Void Journal Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/journal/{{journal_entry_id}}/void",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Voided by Postman smoke test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "28 - Fiscal Years",
+      "item": [
+        {
+          "name": "List Fiscal Years",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/fiscal-years"
+          }
+        },
+        {
+          "name": "Create Fiscal Year",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/fiscal-years",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"FY2027 (Postman Test)\",\n  \"startDate\": \"2027-01-01\",\n  \"endDate\": \"2027-12-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200,201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    const src = body.data;",
+                  "    if (src && src.id !== undefined) {",
+                  "      pm.collectionVariables.set('fiscal_year_id', src.id);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Fiscal Year Periods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/fiscal-years/{{fiscal_year_id}}/periods"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json().data;",
+                  "  const arr = Array.isArray(list) ? list : (list && list.items) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('fiscal_period_id', arr[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Close Fiscal Period",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/fiscal-years/{{fiscal_year_id}}/periods/{{fiscal_period_id}}/close"
+          }
+        },
+        {
+          "name": "Reopen Fiscal Period",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/fiscal-years/{{fiscal_year_id}}/periods/{{fiscal_period_id}}/reopen"
+          }
+        },
+        {
+          "name": "Close Fiscal Year",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/fiscal-years/{{fiscal_year_id}}/close"
+          }
+        }
+      ]
+    },
+    {
+      "name": "29 - Financial Reports",
+      "item": [
+        {
+          "name": "Trial Balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/trial-balance?asOfDate=2026-12-31"
+          }
+        },
+        {
+          "name": "General Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/general-ledger?dateFrom=2026-01-01&dateTo=2026-12-31"
+          }
+        },
+        {
+          "name": "Income Statement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/income-statement?dateFrom=2026-01-01&dateTo=2026-12-31"
+          }
+        },
+        {
+          "name": "Balance Sheet",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/balance-sheet?asOfDate=2026-12-31"
+          }
+        },
+        {
+          "name": "Cash Flow",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/cash-flow?dateFrom=2026-01-01&dateTo=2026-12-31"
+          }
+        },
+        {
+          "name": "Changes in Equity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/changes-in-equity?dateFrom=2026-01-01&dateTo=2026-12-31"
+          }
+        },
+        {
+          "name": "VAT Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/reports/vat-report?dateFrom=2026-01-01&dateTo=2026-12-31"
+          }
+        }
+      ]
+    },
+    {
+      "name": "30 - Notifications",
+      "item": [
+        {
+          "name": "Get My Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/notifications"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json().data;",
+                  "  const arr = Array.isArray(body) ? body : (body && (body.notifications || body.items)) || [];",
+                  "  if (arr.length) pm.collectionVariables.set('notification_id', arr[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{base_url}}/notifications/{{notification_id}}/read"
+          }
+        },
+        {
+          "name": "Mark All Notifications Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{base_url}}/notifications/read-all"
+          }
+        }
+      ]
+    },
+    {
+      "name": "31 - Tenants (Company Settings)",
+      "item": [
+        {
+          "name": "Get Public Tenant Logo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tenants/logo",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get My Tenant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tenants/me"
+          }
+        },
+        {
+          "name": "Update My Tenant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/tenants/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"Updated address, Dubai, UAE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update Lead Approval PIN",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/tenants/me/lead-approval-pin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "32 - Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/dashboard/overview"
+          }
+        }
+      ]
+    },
+    {
+      "name": "33 - Location Share",
+      "item": [
+        {
+          "name": "Generate Location Share Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/location-share/deals/{{deal_id}}/token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  try {",
+                  "    const body = pm.response.json();",
+                  "    if (body.shareUrl) {",
+                  "      const token = body.shareUrl.split('/').pop();",
+                  "      pm.collectionVariables.set('location_share_token', token);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Location Share Info (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/location-share/pin/{{location_share_token}}",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Submit Client Location (public)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/location-share/pin/{{location_share_token}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pickupLocation\": \"25.2048,55.2708\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "34 - Cleanup (Deletes for chained resources)",
+      "item": [
+        {
+          "name": "Delete Work Order",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/work-orders/{{work_order_id}}"
+          }
+        },
+        {
+          "name": "Delete Tax Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/tax-invoices/{{tax_invoice_id}}"
+          }
+        },
+        {
+          "name": "Delete Proforma Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/proforma-invoices/{{proforma_invoice_id}}"
+          }
+        },
+        {
+          "name": "Delete Purchase Order (client quotation)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_id}}"
+          }
+        },
+        {
+          "name": "Delete Purchase Order (vendor order)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/purchase-orders/{{purchase_order_vendor_id}}"
+          }
+        },
+        {
+          "name": "Delete Quotation (expect 400 — a Work Order was created from this quotation; even after that Work Order is soft-deleted above, its row (and FK to quotation_id) still exists at the DB level, so the hard FK constraint blocks this)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/quotations/{{quotation_id}}"
+          }
+        },
+        {
+          "name": "Delete Deal",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/deals/{{deal_id}}"
+          }
+        },
+        {
+          "name": "Delete Chart of Accounts Entry (expect 400 — account has journal entry lines from 27 Journal, business rule requires disabling instead)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/chart-of-accounts/{{chart_account_id}}"
+          }
+        },
+        {
+          "name": "Delete Expense Category (expect 400 — category is used by the expense created in 23 Accounts, business rule)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/expense-categories/{{expense_category_id}}"
+          }
+        },
+        {
+          "name": "Delete Work Type",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/work-types/{{work_type_id}}"
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/products/{{product_id}}"
+          }
+        },
+        {
+          "name": "Delete Supplier",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/suppliers/{{supplier_id}}"
+          }
+        },
+        {
+          "name": "Delete Company",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/companies/{{company_id}}"
+          }
+        },
+        {
+          "name": "Delete Contact",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/contacts/{{contact_id}}"
+          }
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/roles/{{role_id}}"
           }
         }
       ]
