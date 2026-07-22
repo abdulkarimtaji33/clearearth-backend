@@ -88,6 +88,12 @@ const PICKUP_DETAIL_INCLUDES = (tenantId) => [
               },
             ],
           },
+          {
+            model: db.DealInspectionReport,
+            as: 'inspectionReport',
+            required: false,
+            attributes: ['id', 'images'],
+          },
         ],
       },
     ],
@@ -180,6 +186,10 @@ function shapeTaskDetail(plain) {
           specification: ir.notes || null,
         }
       : null,
+    inspectionPhotos: (deal?.inspectionReport?.images || []).map((p, idx) => ({
+      id: idx,
+      imageUrl: p.startsWith('/') ? p : `/uploads/${p}`,
+    })),
   };
 }
 
