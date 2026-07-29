@@ -13,18 +13,29 @@ const generateToken = asyncHandler(async (req, res) => {
   const deal = await Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
   if (!deal) return res.status(404).json({ success: false, message: 'Deal not found' });
 
-  // Expire any existing active tokens for this deal
-  await DealLocationToken.destroy({ where: { deal_id: dealId, tenant_id: tenantId } });
-
-  const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-  await DealLocationToken.create({
-    token,
-    deal_id: dealId,
-    tenant_id: tenantId,
-    expires_at: expiresAt,
+  // Reuse an existing unused, unexpired token so a link already sent to the
+  // client keeps working if the link is generated again — only refresh its
+  // expiry instead of invalidating it.
+  const existing = await DealLocationToken.findOne({
+    where: { deal_id: dealId, tenant_id: tenantId, used_at: null },
   });
+
+  let token;
+  if (existing && existing.expires_at > new Date()) {
+    token = existing.token;
+    await existing.update({ expires_at: expiresAt });
+  } else {
+    await DealLocationToken.destroy({ where: { deal_id: dealId, tenant_id: tenantId } });
+    token = crypto.randomBytes(32).toString('hex');
+    await DealLocationToken.create({
+      token,
+      deal_id: dealId,
+      tenant_id: tenantId,
+      expires_at: expiresAt,
+    });
+  }
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const shareUrl = `${frontendUrl}/location-pin/${token}`;
@@ -42,7 +53,7 @@ const getTokenInfo = asyncHandler(async (req, res) => {
     include: [{ model: Deal, as: 'deal', attributes: ['id', 'deal_number', 'pickup_contact_name', 'pickup_location'] }],
   });
 
-  if (!record) return res.status(404).json({ success: false, message: 'Link not found or expired' });
+  if (!record) return res.status(404).json({ success: false, message: 'Link not found' });
   if (new Date() > record.expires_at) return res.status(410).json({ success: false, message: 'This link has expired' });
 
   res.json({
