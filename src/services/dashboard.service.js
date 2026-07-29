@@ -108,31 +108,73 @@ async function getAdminOverview(tenantId) {
 }
 
 async function getSalesOverview(tenantId, userId) {
-  const deals = await db.Deal.findAll({
-    where: { tenant_id: tenantId, assigned_to: userId },
-    attributes: ['id', 'deal_number', 'title', 'status', 'total', 'updated_at', 'pickup_location'],
-    order: [['updated_at', 'DESC']],
-    limit: 100,
-  });
+  const monthFrom = monthStart();
+  const baseWhere = { tenant_id: tenantId, assigned_to: userId };
 
+  const [deals, openCount, wonMonthCount, openValueRows, missingPickupCount, staleCount] = await Promise.all([
+    db.Deal.findAll({
+      where: baseWhere,
+      attributes: ['id', 'deal_number', 'title', 'status', 'total', 'updated_at', 'pickup_location'],
+      order: [['updated_at', 'DESC']],
+      limit: 100,
+    }),
+    db.Deal.count({ where: { ...baseWhere, status: { [Op.in]: OPEN_DEAL_STATUSES } } }),
+    db.Deal.count({
+      where: { ...baseWhere, status: CLOSED_WON, updated_at: { [Op.gte]: monthFrom } },
+    }),
+    db.Deal.findAll({
+      where: { ...baseWhere, status: { [Op.in]: OPEN_DEAL_STATUSES } },
+      attributes: [[fn('COALESCE', fn('SUM', col('total')), 0), 'total']],
+      raw: true,
+    }),
+    db.Deal.count({
+      where: {
+        ...baseWhere,
+        status: CLOSED_WON,
+        [Op.or]: [{ pickup_location: null }, { pickup_location: '' }],
+      },
+    }),
+    db.Deal.count({
+      where: {
+        ...baseWhere,
+        status: { [Op.in]: OPEN_DEAL_STATUSES },
+        updated_at: { [Op.lt]: new Date(daysAgo(7)) },
+      },
+    }),
+  ]);
+
+  const openValue = parseFloat(openValueRows[0]?.total || 0);
   const open = deals.filter((d) => OPEN_DEAL_STATUSES.includes(d.status));
-  const wonMonth = deals.filter((d) => d.status === CLOSED_WON && d.updated_at >= new Date(monthStart()));
   const stale = open.filter((d) => d.updated_at < new Date(daysAgo(7)));
   const missingPickup = deals.filter((d) => d.status === CLOSED_WON && !d.pickup_location);
 
-  const pipeline = OPEN_DEAL_STATUSES.map((st) => ({
-    status: st,
-    count: open.filter((d) => d.status === st).length,
-    value: open.filter((d) => d.status === st).reduce((s, d) => s + parseFloat(d.total || 0), 0),
-  }));
+  const pipeline = await Promise.all(
+    OPEN_DEAL_STATUSES.map(async (st) => {
+      const rows = await db.Deal.findAll({
+        where: { ...baseWhere, status: st },
+        attributes: [[fn('COUNT', col('id')), 'count'], [fn('COALESCE', fn('SUM', col('total')), 0), 'value']],
+        raw: true,
+      });
+      return {
+        status: st,
+        count: parseInt(rows[0]?.count || 0, 10),
+        value: parseFloat(rows[0]?.value || 0),
+      };
+    })
+  );
 
   return {
     role: 'sales',
     kpis: [
-      { label: 'My open deals', value: open.length, sub: `AED ${open.reduce((s, d) => s + parseFloat(d.total || 0), 0).toLocaleString()}`, format: 'number' },
-      { label: 'Won this month', value: wonMonth.length, format: 'number' },
-      { label: 'Needs follow-up', value: stale.length, format: 'number' },
-      { label: 'Missing collection info', value: missingPickup.length, format: 'number' },
+      {
+        label: 'My open deals',
+        value: openCount,
+        sub: `AED ${openValue.toLocaleString()}`,
+        format: 'number',
+      },
+      { label: 'Won this month', value: wonMonthCount, format: 'number' },
+      { label: 'Needs follow-up', value: staleCount, format: 'number' },
+      { label: 'Missing collection info', value: missingPickupCount, format: 'number' },
     ],
     actionables: [
       ...stale.slice(0, 5).map((d) => ({ id: `deal-${d.id}`, label: `${d.deal_number} — no update 7+ days`, href: `/erp/deals/view/${d.id}` })),
@@ -189,6 +231,8 @@ async function getSalesManagerOverview(tenantId) {
 
   const pipelineValue = deals.reduce((s, d) => s + parseFloat(d.total || 0), 0);
   const won = deals.filter((d) => d.status === CLOSED_WON);
+  const monthFromDate = new Date(monthStart());
+  const wonThisMonth = won.filter((d) => d.updated_at >= monthFromDate);
   const stale = deals.filter((d) => OPEN_DEAL_STATUSES.includes(d.status) && d.updated_at < new Date(daysAgo(10)));
 
   const byRep = {};
@@ -205,7 +249,7 @@ async function getSalesManagerOverview(tenantId) {
     role: 'sales_manager',
     kpis: [
       { label: 'Pipeline value', value: pipelineValue, format: 'currency' },
-      { label: 'Won deals', value: won.length, format: 'number' },
+      { label: 'Won this month', value: wonThisMonth.length, sub: `${won.length} all time`, format: 'number' },
       { label: 'Stale deals (10d+)', value: stale.length, format: 'number' },
       { label: 'Active deals', value: activeDealRows.length, format: 'number' },
     ],

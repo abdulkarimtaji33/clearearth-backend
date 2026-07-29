@@ -3,7 +3,6 @@ const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
-const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 
 const DEAL_STATUS = {
@@ -486,12 +485,16 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
 
     let nextStatus = deal.status;
     if (data.status !== undefined && data.status !== deal.status) {
-      assertManagerCanChangeStatus(actor, deal.status, data.status);
+      // Approval statuses must go through the approve workflow (manager / PIN).
+      // Sales (and anyone with deals.update) may change other pipeline statuses.
+      if (data.status === DEAL_STATUS.APPROVED || data.status === DEAL_STATUS.PENDING_APPROVAL) {
+        if (!isManagerRole(actor?.roleName)) {
+          throw ApiError.forbidden('Only a manager can approve deals. Use the approval workflow.');
+        }
+        throw ApiError.badRequest('Deal approval is required. Use the approval workflow.');
+      }
       if (deal.status === DEAL_STATUS.PENDING_APPROVAL && data.status !== DEAL_STATUS.LOST) {
         throw ApiError.badRequest('Deal is awaiting approval');
-      }
-      if (data.status === DEAL_STATUS.APPROVED || data.status === DEAL_STATUS.PENDING_APPROVAL) {
-        throw ApiError.badRequest('Deal approval is required. Use the approval workflow.');
       }
       if (!EDITABLE_STATUSES.includes(data.status)) {
         throw ApiError.badRequest('Deal status cannot be set directly. Use the approval workflow.');
