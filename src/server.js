@@ -5,6 +5,7 @@ const http = require('http');
 const createApp = require('./app');
 const config = require('./config');
 const logger = require('./utils/logger');
+const { persistErrorLog } = require('./utils/persistErrorLog');
 const { testConnection, syncDatabase } = require('./database');
 const { initSocket } = require('./socket');
 
@@ -70,12 +71,27 @@ const startServer = async () => {
     // Handle uncaught exceptions
     process.on('uncaughtException', error => {
       logger.error('Uncaught Exception:', error);
+      persistErrorLog({
+        statusCode: 500,
+        errorName: error?.name || 'UncaughtException',
+        message: error?.message || String(error),
+        stack: error?.stack,
+        url: 'process:uncaughtException',
+      });
       gracefulShutdown('UNCAUGHT_EXCEPTION');
     });
 
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (reason, promise) => {
       logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+      const err = reason instanceof Error ? reason : new Error(String(reason));
+      persistErrorLog({
+        statusCode: 500,
+        errorName: err.name || 'UnhandledRejection',
+        message: err.message,
+        stack: err.stack,
+        url: 'process:unhandledRejection',
+      });
       gracefulShutdown('UNHANDLED_REJECTION');
     });
   } catch (error) {

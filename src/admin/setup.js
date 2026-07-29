@@ -40,6 +40,86 @@ function buildResourceOptions(modelName, model) {
     };
   });
 
+  // Error logs: read-mostly monitoring view for super admins (newest first).
+  if (modelName === 'ErrorLog') {
+    const listFields = new Set([
+      'id',
+      'status_code',
+      'error_name',
+      'message',
+      'method',
+      'url',
+      'tenant_id',
+      'user_id',
+      'created_at',
+    ]);
+    Object.keys(model.rawAttributes).forEach(field => {
+      properties[field] = {
+        ...(properties[field] || {}),
+        isVisible: {
+          list: listFields.has(field),
+          filter: listFields.has(field),
+          show: true,
+          edit: false,
+        },
+      };
+    });
+    properties.stack = {
+      ...(properties.stack || {}),
+      type: 'textarea',
+      isVisible: { list: false, filter: false, show: true, edit: false },
+    };
+    properties.message = {
+      ...(properties.message || {}),
+      type: 'textarea',
+      isVisible: { list: true, filter: true, show: true, edit: false },
+    };
+    return {
+      navigation: { name: 'Monitoring', icon: 'AlertTriangle' },
+      sort: { sortBy: 'created_at', direction: 'desc' },
+      listProperties: [
+        'id',
+        'created_at',
+        'status_code',
+        'error_name',
+        'method',
+        'url',
+        'message',
+        'tenant_id',
+        'user_id',
+      ],
+      filterProperties: [
+        'status_code',
+        'error_name',
+        'method',
+        'url',
+        'tenant_id',
+        'user_id',
+        'created_at',
+      ],
+      showProperties: [
+        'id',
+        'created_at',
+        'status_code',
+        'error_name',
+        'message',
+        'stack',
+        'method',
+        'url',
+        'ip_address',
+        'tenant_id',
+        'user_id',
+      ],
+      properties,
+      actions: {
+        new: { isAccessible: false },
+        edit: { isAccessible: false },
+        delete: { isAccessible: true },
+        bulkDelete: { isAccessible: true },
+      },
+    };
+  }
+
   return { properties };
 }
 
@@ -57,7 +137,7 @@ function withoutParanoid(model) {
   return new Proxy(model, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
-      if (prop === 'findAll' || prop === 'count') {
+      if (prop === 'findAll' || prop === 'count' || prop === 'findAndCountAll') {
         return (options = {}) => value.call(target, { ...options, paranoid: false });
       }
       if (prop === 'findByPk') {
@@ -151,6 +231,29 @@ async function mountAdminPanel(app) {
     branding: {
       companyName: 'ClearEarth Super Admin',
       softwareBrothers: false,
+    },
+    locale: {
+      translations: {
+        labels: {
+          ErrorLog: 'Error Logs',
+        },
+        resources: {
+          ErrorLog: {
+            properties: {
+              status_code: 'Status',
+              error_name: 'Error type',
+              message: 'Message',
+              stack: 'Stack trace',
+              method: 'HTTP method',
+              url: 'URL',
+              ip_address: 'IP',
+              tenant_id: 'Tenant',
+              user_id: 'User',
+              created_at: 'When',
+            },
+          },
+        },
+      },
     },
   });
 

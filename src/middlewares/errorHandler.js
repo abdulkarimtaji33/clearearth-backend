@@ -6,35 +6,12 @@ const ApiError = require('../utils/apiError');
 const ApiResponse = require('../utils/apiResponse');
 const logger = require('../utils/logger');
 const config = require('../config');
+const { persistErrorLog } = require('../utils/persistErrorLog');
 const {
   humanizeSequelizeValidationError,
   buildUserFriendlyMessage,
   humanizeField,
 } = require('../utils/userFriendlyErrors');
-
-/**
- * Persist a genuine server-side error (5xx) to the error_logs table.
- * Fire-and-forget: never awaited by the request, and any failure here
- * only goes to the winston error log — it must never throw back out.
- */
-const logErrorToDb = (error, req) => {
-  const db = require('../models');
-  if (!db.ErrorLog) return;
-
-  db.ErrorLog.create({
-    tenant_id: req.tenant?.id,
-    user_id: req.user?.id,
-    status_code: error.statusCode,
-    error_name: error.name,
-    message: error.message,
-    stack: error.stack,
-    method: req.method,
-    url: req.originalUrl || req.url,
-    ip_address: req.ip,
-  }).catch(dbErr => {
-    logger.error('Failed to write error_logs row:', { message: dbErr.message, stack: dbErr.stack });
-  });
-};
 
 /**
  * Error Handler Middleware
@@ -110,10 +87,17 @@ const errorHandler = (err, req, res, next) => {
   // (bad input, unauthorized, not found, etc.) are normal application flow,
   // not bugs, and are never written to error_logs.
   if (error.statusCode >= StatusCodes.INTERNAL_SERVER_ERROR) {
-    logErrorToDb(
-      { statusCode: error.statusCode, name: err.name, message: err.message, stack: err.stack },
-      req
-    );
+    persistErrorLog({
+      statusCode: error.statusCode,
+      errorName: err.name,
+      message: err.message,
+      stack: err.stack,
+      method: req.method,
+      url: req.originalUrl || req.url,
+      ipAddress: req.ip,
+      tenantId: req.tenant?.id ?? null,
+      userId: req.user?.id ?? null,
+    });
   }
 
   // Send error response

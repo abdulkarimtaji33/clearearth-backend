@@ -63,6 +63,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: 'error_logs',
       updatedAt: false,
+      paranoid: false, // append-only log; no soft-delete column
       indexes: [
         { fields: ['tenant_id'] },
         { fields: ['user_id'] },
