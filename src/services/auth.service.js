@@ -222,6 +222,10 @@ const refreshToken = async token => {
       throw ApiError.unauthorized('Invalid refresh token');
     }
 
+    if (user.tenant?.status && user.tenant.status !== RECORD_STATUS.ACTIVE) {
+      throw ApiError.forbidden('Your organization account is not active');
+    }
+
     const accessToken = generateToken({
       userId: user.id,
       tenantId: user.tenant_id,
@@ -229,8 +233,15 @@ const refreshToken = async token => {
       role: user.role.name,
     });
 
-    return { accessToken };
+    // Rotate refresh token so active sessions keep extending until logout
+    const newRefreshToken = generateRefreshToken({
+      userId: user.id,
+      tenantId: user.tenant_id,
+    });
+
+    return { accessToken, refreshToken: newRefreshToken };
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw ApiError.unauthorized('Invalid refresh token');
   }
 };

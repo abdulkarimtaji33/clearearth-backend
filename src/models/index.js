@@ -11,6 +11,7 @@ const Role = require('./Role')(sequelize, DataTypes);
 const Permission = require('./Permission')(sequelize, DataTypes);
 const RolePermission = require('./RolePermission')(sequelize, DataTypes);
 const AuditLog = require('./AuditLog')(sequelize, DataTypes);
+const ErrorLog = require('./ErrorLog')(sequelize, DataTypes);
 const Notification = require('./Notification')(sequelize, DataTypes);
 
 // Contacts, Companies & Suppliers
@@ -98,6 +99,7 @@ const db = {
   Permission,
   RolePermission,
   AuditLog,
+  ErrorLog,
   Notification,
   Contact,
   CompanyContact,

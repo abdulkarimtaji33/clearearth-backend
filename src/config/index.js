@@ -16,12 +16,12 @@ module.exports = {
   // Database
   database: require('./database'),
 
-  // JWT
+  // JWT — long-lived by default so users stay signed in until explicit logout
   jwt: {
     secret: process.env.JWT_SECRET || 'your-secret-key',
-    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+    expiresIn: process.env.JWT_EXPIRES_IN || '3650d',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret',
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '3650d',
   },
 
   // Security

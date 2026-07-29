@@ -2263,6 +2263,27 @@ async function runMigration() {
       console.warn('  Backfill purchase_orders.reference_number:', e.message);
     }
 
+    console.log('Creating error_logs table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS error_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NULL,
+        user_id INT NULL,
+        status_code INT NOT NULL,
+        error_name VARCHAR(100) NULL,
+        message TEXT NOT NULL,
+        stack LONGTEXT NULL,
+        method VARCHAR(10) NULL,
+        url VARCHAR(500) NULL,
+        ip_address VARCHAR(45) NULL,
+        created_at DATETIME NOT NULL,
+        INDEX idx_error_logs_tenant (tenant_id),
+        INDEX idx_error_logs_user (user_id),
+        INDEX idx_error_logs_status (status_code),
+        INDEX idx_error_logs_created (created_at)
+      )
+    `);
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

@@ -13,6 +13,30 @@ const {
 } = require('../utils/userFriendlyErrors');
 
 /**
+ * Persist a genuine server-side error (5xx) to the error_logs table.
+ * Fire-and-forget: never awaited by the request, and any failure here
+ * only goes to the winston error log — it must never throw back out.
+ */
+const logErrorToDb = (error, req) => {
+  const db = require('../models');
+  if (!db.ErrorLog) return;
+
+  db.ErrorLog.create({
+    tenant_id: req.tenant?.id,
+    user_id: req.user?.id,
+    status_code: error.statusCode,
+    error_name: error.name,
+    message: error.message,
+    stack: error.stack,
+    method: req.method,
+    url: req.originalUrl || req.url,
+    ip_address: req.ip,
+  }).catch(dbErr => {
+    logger.error('Failed to write error_logs row:', { message: dbErr.message, stack: dbErr.stack });
+  });
+};
+
+/**
  * Error Handler Middleware
  */
 const errorHandler = (err, req, res, next) => {
@@ -79,6 +103,16 @@ const errorHandler = (err, req, res, next) => {
     error = new ApiError(
       config.app.env === 'production' ? 'Internal server error' : err.message,
       err.statusCode || StatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+
+  // Record genuine server errors (5xx) only — operational 4xx client errors
+  // (bad input, unauthorized, not found, etc.) are normal application flow,
+  // not bugs, and are never written to error_logs.
+  if (error.statusCode >= StatusCodes.INTERNAL_SERVER_ERROR) {
+    logErrorToDb(
+      { statusCode: error.statusCode, name: err.name, message: err.message, stack: err.stack },
+      req
     );
   }
 

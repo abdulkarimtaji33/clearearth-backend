@@ -36,24 +36,20 @@ const generateRefreshToken = (payload, expiresIn = config.jwt.refreshExpiresIn) 
 
 /**
  * Verify JWT token
+ *
+ * Deliberately does not catch/rewrap: jwt.verify's own errors carry
+ * `.name` ('JsonWebTokenError' / 'TokenExpiredError') that errorHandler
+ * relies on to return 401 instead of a false 500 for expired/invalid tokens.
  */
 const verifyToken = token => {
-  try {
-    return jwt.verify(token, config.jwt.secret);
-  } catch (error) {
-    throw new Error('Invalid token');
-  }
+  return jwt.verify(token, config.jwt.secret);
 };
 
 /**
  * Verify refresh token
  */
 const verifyRefreshToken = token => {
-  try {
-    return jwt.verify(token, config.jwt.refreshSecret);
-  } catch (error) {
-    throw new Error('Invalid refresh token');
-  }
+  return jwt.verify(token, config.jwt.refreshSecret);
 };
 
 /**
