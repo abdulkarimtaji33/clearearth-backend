@@ -4,12 +4,13 @@ const companyController = require('../controllers/company.controller');
 const { authenticate, authorize } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validator');
 const { body, param } = require('express-validator');
+const { phoneValidator } = require('../utils/phone');
 
 router.use(authenticate);
 
 const createValidation = [
   body('companyName').notEmpty().withMessage('Company name is required'),
-  body('phone').optional({ values: 'falsy' }),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Please enter a valid email address'),
   validate,
 ];
@@ -17,7 +18,7 @@ const createValidation = [
 const updateValidation = [
   param('id').isInt().withMessage('Valid company ID is required'),
   body('companyName').optional().notEmpty().withMessage('Company name cannot be empty'),
-  body('phone').optional({ values: 'falsy' }),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Please enter a valid email address'),
   validate,
 ];

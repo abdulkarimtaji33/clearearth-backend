@@ -7,6 +7,14 @@ const dealController = require('../controllers/deal.controller');
 const { authenticate, authorize } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validator');
 const { body, param } = require('express-validator');
+const { phoneValidator } = require('../utils/phone');
+
+// Pickup contact number is entered by sales and later dialled by drivers, so it is
+// validated on every endpoint that can write it.
+const pickupContactValidation = [
+  body('pickupContactNumber').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Contact number' })),
+  validate,
+];
 
 // All routes require authentication
 router.use(authenticate);
@@ -14,8 +22,8 @@ router.use(authenticate);
 // Deal CRUD
 router.get('/', authorize('deals.read'), dealController.getAll);
 router.get('/:id', authorize('deals.read'), dealController.getById);
-router.post('/', authorize('deals.create'), dealController.create);
-router.put('/:id', authorize('deals.update'), dealController.update);
+router.post('/', authorize('deals.create'), pickupContactValidation, dealController.create);
+router.put('/:id', authorize('deals.update'), pickupContactValidation, dealController.update);
 router.post('/:id/approve', authorize('deals.approve'), dealController.approve);
 router.post('/:id/request-approval', authorize('deals.update'), dealController.requestApproval);
 router.post('/:id/approve-with-pin', authorize('deals.update'), [
@@ -23,7 +31,7 @@ router.post('/:id/approve-with-pin', authorize('deals.update'), [
   body('pin').notEmpty().withMessage('Approval PIN is required'),
   validate,
 ], dealController.approveWithPin);
-router.patch('/:id/collection-details', authorize('deals.update', 'operations.update'), dealController.updateCollectionDetails);
+router.patch('/:id/collection-details', authorize('deals.update', 'operations.update'), pickupContactValidation, dealController.updateCollectionDetails);
 router.delete('/:id', authorize('deals.delete'), dealController.remove);
 
 // Payment tracking

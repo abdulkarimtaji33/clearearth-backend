@@ -4,6 +4,7 @@
 const path = require('path');
 const fs = require('fs');
 const db = require('../models');
+const config = require('../config');
 const { amountInWords } = require('../utils/numberToWords');
 
 const DEFAULT_BANK_DETAILS = {
@@ -44,6 +45,64 @@ function getStampDataUri() {
 function getBankDetails(tenant) {
   const configured = tenant?.settings?.bankDetails;
   return { ...DEFAULT_BANK_DETAILS, ...(configured || {}) };
+}
+
+const SIGNATURE_MIME_BY_EXT = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+};
+
+/**
+ * Inline the tenant's uploaded signature as a data URI. Unlike the logo/stamp this is
+ * per-tenant and user-replaceable, so it is read fresh rather than cached for the
+ * process lifetime. Returns '' when no signature is configured.
+ */
+function getSignatureDataUri(tenant) {
+  const relativePath = tenant?.signature;
+  if (!relativePath) return '';
+  try {
+    const uploadRoot = config.upload.path;
+    const absolute = path.resolve(uploadRoot, relativePath);
+    // Guard against a stored path escaping the upload directory.
+    if (!absolute.startsWith(path.resolve(uploadRoot))) return '';
+    const mime = SIGNATURE_MIME_BY_EXT[path.extname(absolute).toLowerCase()];
+    if (!mime) return '';
+    return `data:${mime};base64,${fs.readFileSync(absolute).toString('base64')}`;
+  } catch (e) {
+    // A missing/unreadable signature file must not break the document.
+    return '';
+  }
+}
+
+/** Only emit the <img> when a signature exists, so the signing line stays clean otherwise. */
+function buildSignatureImgHtml(tenant) {
+  const dataUri = getSignatureDataUri(tenant);
+  return dataUri ? `<img class="signature" src="${dataUri}">` : '';
+}
+
+/**
+ * Line items store the raw UOM value ("kg"); documents must show the catalog display
+ * name ("Kilograms (kg)"). The catalog is tiny and global, so it is loaded once per
+ * PDF and handed to the row builders as a lookup map.
+ */
+async function loadUomMap() {
+  try {
+    const units = await db.UnitOfMeasure.findAll({ attributes: ['value', 'display_name'] });
+    return new Map(units.map((u) => [String(u.value), u.display_name || String(u.value)]));
+  } catch (e) {
+    // A catalog lookup failure must not block the document — fall back to raw values.
+    return new Map();
+  }
+}
+
+/** Resolve a stored UOM value for display, falling back to the raw value. */
+function formatUom(uomMap, value) {
+  if (value == null || value === '') return '';
+  const raw = String(value);
+  return (uomMap && uomMap.get(raw)) || raw;
 }
 
 function formatMoneyWithSymbol(currency, amount) {
@@ -215,6 +274,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
 
   const tenant = await db.Tenant.findByPk(tenantId);
   if (!tenant) return null;
+  const uomMap = await loadUomMap();
 
   const company = quotation.deal?.company;
   const items = quotation.deal?.items || [];
@@ -237,7 +297,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       const total = amount + tax;
       subtotal += amount;
       totalVat += tax;
-      const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
+      const unit = formatUom(uomMap, item.unit_of_measure || item.productService?.unit_of_measure);
       const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
       const vatDisplay = formatCompactNum(tax);
       itemsHtml += `<tr>
@@ -285,6 +345,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
     logoDataUri: getLogoDataUri(),
     stampDataUri: getStampDataUri(),
+    signatureImgHtml: buildSignatureImgHtml(tenant),
     documentTitle,
     metaLinesHtml,
     fromContactName: personFullName(quotation.preparedByUser) || '-',
@@ -348,6 +409,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
 
   const tenant = await db.Tenant.findByPk(tenantId);
   if (!tenant) return null;
+  const uomMap = await loadUomMap();
 
   const party = po.company || po.supplier;
   const isFoc = po.deal?.deal_type === 'free_of_charge';
@@ -369,7 +431,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     subtotal += amount;
     totalVat += vat;
     const vatDisplay = formatCompactNum(vat);
-    const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
+    const unit = formatUom(uomMap, item.unit_of_measure || item.productService?.unit_of_measure);
     const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
     itemsHtml += `<tr>
       <td>${formatItemWithDescription(item.productService?.name, item.item_description)}</td>
@@ -406,6 +468,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   const html = renderTemplate(path.join(__dirname, '../templates/purchase-order.html'), {
     logoDataUri: getLogoDataUri(),
     stampDataUri: getStampDataUri(),
+    signatureImgHtml: buildSignatureImgHtml(tenant),
     documentTitle,
     metaLinesHtml,
     dealType,
@@ -590,6 +653,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
 
   const tenant = await db.Tenant.findByPk(tenantId);
   if (!tenant) return null;
+  const uomMap = await loadUomMap();
 
   const company = invoice.deal?.company;
   const items = invoice.items || [];
@@ -611,7 +675,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
     const total = amount + tax;
     subtotal += amount;
     totalVat += tax;
-    const unit = item.unit_of_measure || item.productService?.unit_of_measure || '';
+    const unit = formatUom(uomMap, item.unit_of_measure || item.productService?.unit_of_measure);
     const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
     const vatDisplay = formatCompactNum(tax);
     itemsHtml += `<tr>
@@ -640,6 +704,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
     logoDataUri: getLogoDataUri(),
     stampDataUri: getStampDataUri(),
+    signatureImgHtml: buildSignatureImgHtml(tenant),
     documentTitle,
     metaLinesHtml,
     fromContactName: personFullName(invoice.createdByUser) || '-',
@@ -790,6 +855,7 @@ async function generateGrnPdf(grnId, tenantId) {
 
   const tenant = await db.Tenant.findByPk(tenantId);
   if (!tenant) return null;
+  const uomMap = await loadUomMap();
 
   const fromAddr = tenant.address || '-';
   const fromCity = [tenant.city, tenant.country].filter(Boolean).join(', ') || '-';
@@ -834,7 +900,7 @@ async function generateGrnPdf(grnId, tenantId) {
       <td>${escapeHtml(it.model || '-')}</td>
       <td>${escapeHtml(it.serial_number || '-')}</td>
       <td class="text-right">${formatCompactNum(it.quantity)}</td>
-      <td>${escapeHtml(it.unit_of_measure || '-')}</td>
+      <td>${escapeHtml(formatUom(uomMap, it.unit_of_measure) || '-')}</td>
       <td class="text-right">${it.units != null && it.units !== '' ? escapeHtml(it.units) : '<span class="muted">-</span>'}</td>
       <td>${escapeHtml(it.notes || '-')}</td>
     </tr>`;

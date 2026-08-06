@@ -2284,6 +2284,15 @@ async function runMigration() {
       )
     `);
 
+    console.log('Adding tenants.signature column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE tenants ADD COLUMN signature VARCHAR(255) NULL COMMENT 'Relative upload path to the authorised signature image, stamped onto quotations/POs'`);
+      console.log('  Added tenants.signature');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  tenants.signature already exists, skipping');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

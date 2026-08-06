@@ -176,7 +176,7 @@ const getById = async (tenantId, poId, scope = {}) => {
         include: [{ model: db.ProductService, as: 'productService' }],
         order: [['sort_order', 'ASC'], ['id', 'ASC']],
       },
-      { model: db.TermsAndConditions, as: 'terms', through: { attributes: [] } },
+      { model: db.TermsAndConditions, as: 'terms', through: { attributes: ['sort_order'] } },
       {
         model: db.WorkOrder,
         as: 'sourceWorkOrder',
@@ -194,6 +194,10 @@ const getById = async (tenantId, poId, scope = {}) => {
     ],
   });
   if (!po) throw ApiError.notFound('Purchase order not found');
+  // Preserve the arranged terms order for the form and the PDF.
+  if (po.terms?.length) {
+    po.terms.sort((a, b) => (a.PurchaseOrderTerm?.sort_order ?? 0) - (b.PurchaseOrderTerm?.sort_order ?? 0));
+  }
   if (scope.scopeUserId && !_poAccessibleByScope(po, scope.scopeUserId)) {
     throw ApiError.notFound('Purchase order not found');
   }

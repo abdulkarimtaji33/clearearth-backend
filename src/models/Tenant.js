@@ -54,6 +54,10 @@ module.exports = (sequelize, DataTypes) => {
       logo: {
         type: DataTypes.STRING(255),
       },
+      signature: {
+        type: DataTypes.STRING(255),
+        comment: 'Relative upload path to the authorised signature image, stamped onto quotations/POs',
+      },
       status: {
         type: DataTypes.ENUM(...Object.values(RECORD_STATUS)),
         defaultValue: RECORD_STATUS.ACTIVE,

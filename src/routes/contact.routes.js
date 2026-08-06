@@ -4,6 +4,7 @@ const contactController = require('../controllers/contact.controller');
 const { authenticate, authorize } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validator');
 const { body, param } = require('express-validator');
+const { phoneValidator } = require('../utils/phone');
 
 router.use(authenticate);
 
@@ -11,7 +12,8 @@ const createValidation = [
   body('firstName').notEmpty().withMessage('First name is required'),
   body('contactType').notEmpty().withMessage('Contact type is required').isIn(['clients', 'vendors', 'both']).withMessage('Contact type must be clients, vendors, or both'),
   body('lastName').optional({ values: 'falsy' }),
-  body('phone').notEmpty().withMessage('Phone is required'),
+  body('phone').notEmpty().withMessage('Phone number is required.').bail().custom(phoneValidator({ label: 'Phone number' })),
+  body('mobile').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Mobile number' })),
   body('email')
     .optional({ values: 'falsy' })
     .custom((value) => {
@@ -26,7 +28,8 @@ const createValidation = [
 
 const updateValidation = [
   param('id').isInt().withMessage('Valid contact ID is required'),
-  body('phone').optional({ values: 'falsy' }),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
+  body('mobile').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Mobile number' })),
   body('email')
     .optional({ values: 'falsy' })
     .custom((value) => {

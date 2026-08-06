@@ -7,6 +7,7 @@ const userController = require('../controllers/user.controller');
 const { authenticate, authorize } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validator');
 const { body, param } = require('express-validator');
+const { phoneValidator } = require('../utils/phone');
 
 // All routes require authentication
 router.use(authenticate);
@@ -18,6 +19,7 @@ const createUserValidation = [
   body('lastName').notEmpty().withMessage('Last name is required'),
   body('roleId').isInt().withMessage('Valid role ID is required'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
   validate,
 ];
 
@@ -28,12 +30,14 @@ const updateUserValidation = [
   body('email').optional().isEmail(),
   body('roleId').optional().isInt(),
   body('status').optional().isIn(['active', 'inactive', 'suspended', 'pending']),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
   validate,
 ];
 
 const changePasswordValidation = [
   param('id').isInt().withMessage('Valid user ID is required'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
   validate,
 ];
 

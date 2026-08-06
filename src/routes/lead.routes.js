@@ -4,11 +4,12 @@ const leadController = require('../controllers/lead.controller');
 const { authenticate, authorize } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validator');
 const { body, param } = require('express-validator');
+const { phoneValidator } = require('../utils/phone');
 
 router.use(authenticate);
 
 const createValidation = [
-  body('phone').optional({ values: 'falsy' }),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Please enter a valid email address'),
   body('source').notEmpty().withMessage('Lead source is required'),
   body('productServiceId').optional({ values: 'falsy' }).isInt().withMessage('Valid product/service ID is required'),
@@ -19,7 +20,7 @@ const createValidation = [
 
 const updateValidation = [
   param('id').isInt().withMessage('Valid lead ID is required'),
-  body('phone').optional({ values: 'falsy' }),
+  body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Please enter a valid email address'),
   body('companyId').optional({ values: 'falsy' }).isInt().withMessage('Valid company ID is required'),
   body('contactId').optional({ values: 'falsy' }).isInt().withMessage('Valid contact ID is required'),

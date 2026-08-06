@@ -294,6 +294,11 @@ const getById = async (tenantId, dealId, scope = {}) => {
     ],
   });
   if (!deal) throw ApiError.notFound('Deal not found');
+  // Terms are printed on documents in the order the user arranged them, so the saved
+  // junction sort_order must survive the round-trip to the form.
+  if (deal.termsList?.length) {
+    deal.termsList.sort((a, b) => (a.DealTerm?.sort_order ?? 0) - (b.DealTerm?.sort_order ?? 0));
+  }
   if (deal.workOrders?.length) {
     deal.workOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     deal.workOrders.forEach((wo) => {

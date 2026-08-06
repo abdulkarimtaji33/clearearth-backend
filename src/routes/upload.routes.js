@@ -9,6 +9,8 @@ router.post('/deal-image', authenticate, uploadSingle('file'), uploadController.
 router.post('/company-document', authenticate, uploadSingle('file'), uploadController.uploadCompanyDocument);
 router.post('/wds-attachment', authenticate, uploadSingle('file'), uploadController.uploadWdsAttachment);
 router.post('/tenant-logo', authenticate, uploadSingle('file'), uploadController.uploadTenantLogo);
+router.post('/tenant-signature', authenticate, uploadSingle('file'), uploadController.uploadTenantSignature);
+router.delete('/tenant-signature', authenticate, uploadController.deleteTenantSignature);
 router.post('/tax-invoice-attachment', authenticate, uploadSingle('file'), uploadController.uploadTaxInvoiceAttachment);
 router.post('/expense-evidence', authenticate, uploadSingle('file'), uploadController.uploadExpenseEvidence);
 
