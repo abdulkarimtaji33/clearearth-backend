@@ -1,15 +1,15 @@
 /**
  * Phone number validation shared by every route that accepts one.
  *
- * Permissive about formatting (spaces, dashes, brackets, leading +) but strict about
- * digit count: 7–15 digits, where 15 is the E.164 maximum. Mirrors
+ * Only digits and a single leading "+" (country code) are accepted — no spaces,
+ * dashes, brackets or letters. Digit count must be 9–16. Mirrors
  * clearearth-frontend/src/utils/phone.js — keep both in sync.
  */
 
-const PHONE_MIN_DIGITS = 7;
-const PHONE_MAX_DIGITS = 15;
+const PHONE_MIN_DIGITS = 9;
+const PHONE_MAX_DIGITS = 16;
 
-const ALLOWED_CHARS = /^[+()\d\s.-]+$/;
+const ALLOWED_CHARS = /^[+\d]+$/;
 
 /** Strip formatting down to digits so length rules apply to the number itself. */
 function phoneDigits(value) {
@@ -28,21 +28,21 @@ function validatePhone(value, { required = false, label = 'Phone number' } = {})
   }
 
   if (!ALLOWED_CHARS.test(raw)) {
-    return `${label} can only contain digits, spaces and + ( ) -  — remove any letters or other symbols.`;
+    return `${label} can only contain numbers and a leading + — remove any spaces, letters or other symbols.`;
   }
 
   if (raw.includes('+') && !raw.startsWith('+')) {
-    return `${label} can only use + at the start, for the country code (e.g. +971 50 123 4567).`;
+    return `${label} can only use + at the start, for the country code (e.g. +971501234567).`;
   }
 
   const digits = phoneDigits(raw);
 
   if (digits.length < PHONE_MIN_DIGITS) {
-    return `${label} is too short — enter at least ${PHONE_MIN_DIGITS} digits (e.g. +971 50 123 4567).`;
+    return `${label} is too short — enter at least ${PHONE_MIN_DIGITS} digits (e.g. +971501234567).`;
   }
 
   if (digits.length > PHONE_MAX_DIGITS) {
-    return `${label} is too long — enter no more than ${PHONE_MAX_DIGITS} digits (e.g. +971 50 123 4567).`;
+    return `${label} is too long — enter no more than ${PHONE_MAX_DIGITS} digits (e.g. +971501234567).`;
   }
 
   return null;
