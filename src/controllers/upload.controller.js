@@ -75,8 +75,44 @@ exports.uploadTenantLogo = async (req, res) => {
 };
 
 /**
- * Authorised signature image, rendered next to the stamp on quotations and purchase
- * orders. A transparent PNG gives the best result over the stamp.
+ * Signature of the signed-in user, rendered next to the stamp on documents they
+ * prepare. Every user manages their own — no admin permission required.
+ */
+exports.uploadMySignature = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No file uploaded. Choose a signature image and try again.' });
+  }
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  const user = await db.User.findByPk(userId);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+  const relativePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
+  await user.update({ signature: relativePath });
+  const fileUrl = getFileUrl(relativePath);
+  res.json({ success: true, data: { path: relativePath, url: fileUrl } });
+};
+
+/** Remove the signed-in user's signature. */
+exports.deleteMySignature = async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  const user = await db.User.findByPk(userId);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+  await user.update({ signature: null });
+  res.json({ success: true, data: { path: null, url: null } });
+};
+
+/**
+ * Company-wide fallback signature, used when the preparing user has none of their own.
+ * A transparent PNG gives the best result over the stamp.
  */
 exports.uploadTenantSignature = async (req, res) => {
   if (!req.file) {

@@ -334,6 +334,7 @@ const getCurrentUser = async userId => {
     lastName: user.last_name,
     phone: user.phone,
     avatar: user.avatar,
+    signature: user.signature,
     role: {
       id: user.role.id,
       name: user.role.name,

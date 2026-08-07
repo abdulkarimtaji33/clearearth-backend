@@ -60,8 +60,8 @@ const SIGNATURE_MIME_BY_EXT = {
  * per-tenant and user-replaceable, so it is read fresh rather than cached for the
  * process lifetime. Returns '' when no signature is configured.
  */
-function getSignatureDataUri(tenant) {
-  const relativePath = tenant?.signature;
+function getSignatureDataUri(owner) {
+  const relativePath = owner?.signature;
   if (!relativePath) return '';
   try {
     const uploadRoot = config.upload.path;
@@ -77,9 +77,13 @@ function getSignatureDataUri(tenant) {
   }
 }
 
-/** Only emit the <img> when a signature exists, so the signing line stays clean otherwise. */
-function buildSignatureImgHtml(tenant) {
-  const dataUri = getSignatureDataUri(tenant);
+/**
+ * Only emit the <img> when a signature exists, so the signing line stays clean
+ * otherwise. The document is signed by the person who prepared it; the tenant-level
+ * signature is a fallback for users who have not uploaded one.
+ */
+function buildSignatureImgHtml(preparer, tenant) {
+  const dataUri = getSignatureDataUri(preparer) || getSignatureDataUri(tenant);
   return dataUri ? `<img class="signature" src="${dataUri}">` : '';
 }
 
@@ -345,7 +349,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
     logoDataUri: getLogoDataUri(),
     stampDataUri: getStampDataUri(),
-    signatureImgHtml: buildSignatureImgHtml(tenant),
+    signatureImgHtml: buildSignatureImgHtml(quotation.preparedByUser, tenant),
     documentTitle,
     metaLinesHtml,
     fromContactName: personFullName(quotation.preparedByUser) || '-',
@@ -468,7 +472,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   const html = renderTemplate(path.join(__dirname, '../templates/purchase-order.html'), {
     logoDataUri: getLogoDataUri(),
     stampDataUri: getStampDataUri(),
-    signatureImgHtml: buildSignatureImgHtml(tenant),
+    signatureImgHtml: buildSignatureImgHtml(po.createdByUser, tenant),
     documentTitle,
     metaLinesHtml,
     dealType,
@@ -704,7 +708,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
   const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
     logoDataUri: getLogoDataUri(),
     stampDataUri: getStampDataUri(),
-    signatureImgHtml: buildSignatureImgHtml(tenant),
+    signatureImgHtml: buildSignatureImgHtml(invoice.createdByUser, tenant),
     documentTitle,
     metaLinesHtml,
     fromContactName: personFullName(invoice.createdByUser) || '-',

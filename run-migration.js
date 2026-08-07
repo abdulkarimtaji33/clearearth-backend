@@ -2325,6 +2325,15 @@ async function runMigration() {
       console.warn('  De-duplicate deal_terms:', e.message);
     }
 
+    console.log('Adding users.signature column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE users ADD COLUMN signature VARCHAR(255) NULL COMMENT 'Relative upload path to this user signature image, printed beside the stamp on documents they prepare'`);
+      console.log('  Added users.signature');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  users.signature already exists, skipping');
+    }
+
     console.log('Adding tenants.signature column...');
     try {
       await db.sequelize.query(`ALTER TABLE tenants ADD COLUMN signature VARCHAR(255) NULL COMMENT 'Relative upload path to the authorised signature image, stamped onto quotations/POs'`);
