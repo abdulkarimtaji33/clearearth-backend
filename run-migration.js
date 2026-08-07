@@ -132,13 +132,25 @@ async function runMigration() {
         WHERE terms_and_conditions_id IS NOT NULL AND deleted_at IS NULL
       `);
       if (deals && deals.length > 0) {
+        // NOTE: this cannot rely on INSERT IGNORE for idempotency — the unique key
+        // uk_deal_terms is dropped further down this same script (terms are reusable
+        // across deals), so a blind INSERT IGNORE appends a duplicate on every run.
+        // Guard on an explicit existence check instead.
+        let inserted = 0;
         for (const d of deals) {
-          await db.sequelize.query(`
-            INSERT IGNORE INTO deal_terms (deal_id, terms_and_conditions_id, sort_order, created_at, updated_at)
-            VALUES (?, ?, 0, NOW(), NOW())
-          `, { replacements: [d.id, d.terms_and_conditions_id] });
+          const [existing] = await db.sequelize.query(
+            `SELECT id FROM deal_terms WHERE deal_id = ? AND terms_and_conditions_id = ? LIMIT 1`,
+            { replacements: [d.id, d.terms_and_conditions_id] }
+          );
+          if (existing.length === 0) {
+            await db.sequelize.query(`
+              INSERT INTO deal_terms (deal_id, terms_and_conditions_id, sort_order, created_at, updated_at)
+              VALUES (?, ?, 0, NOW(), NOW())
+            `, { replacements: [d.id, d.terms_and_conditions_id] });
+            inserted += 1;
+          }
         }
-        console.log(`  Migrated ${deals.length} deal(s) to deal_terms`);
+        console.log(`  Migrated ${inserted} deal(s) to deal_terms (${deals.length - inserted} already present)`);
       }
     } catch (e) {
       console.warn('  Could not migrate existing deal terms:', e.message);
@@ -2283,6 +2295,35 @@ async function runMigration() {
         INDEX idx_error_logs_created (created_at)
       )
     `);
+
+    console.log('De-duplicating deal_terms rows...');
+    try {
+      // Earlier runs of this script appended a duplicate junction row per deal on every
+      // execution (INSERT IGNORE with no unique key to ignore against). Collapse each
+      // (deal_id, terms_and_conditions_id) pair to its earliest row, which preserves the
+      // originally saved sort_order.
+      const [dupes] = await db.sequelize.query(`
+        SELECT COUNT(*) - COUNT(DISTINCT deal_id, terms_and_conditions_id) AS extra FROM deal_terms
+      `);
+      const extra = dupes?.[0]?.extra || 0;
+      if (extra > 0) {
+        await db.sequelize.query(`
+          DELETE dt FROM deal_terms dt
+          JOIN (
+            SELECT MIN(id) AS keep_id, deal_id, terms_and_conditions_id
+            FROM deal_terms
+            GROUP BY deal_id, terms_and_conditions_id
+          ) k ON k.deal_id = dt.deal_id
+             AND k.terms_and_conditions_id = dt.terms_and_conditions_id
+          WHERE dt.id > k.keep_id
+        `);
+        console.log(`  Removed ${extra} duplicate deal_terms row(s)`);
+      } else {
+        console.log('  No duplicate deal_terms rows');
+      }
+    } catch (e) {
+      console.warn('  De-duplicate deal_terms:', e.message);
+    }
 
     console.log('Adding tenants.signature column...');
     try {
