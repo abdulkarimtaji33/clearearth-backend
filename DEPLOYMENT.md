@@ -4,8 +4,8 @@
 
 | Host | URL | SSH |
 |------|-----|-----|
-| **Primary** | http://72.60.223.25:3333/ | `ssh root@72.60.223.25` |
-| **Secondary** | http://72.60.222.81:3333/ | `ssh root@72.60.222.81` |
+| **Primary (dev server)** | http://72.60.223.25:3333/ | `ssh root@72.60.223.25` |
+| **Secondary (Live Server)** | http://72.60.222.81:3333/ | `ssh root@72.60.222.81` |
 
 Both use the same layout:
 

@@ -207,28 +207,22 @@ body{
 }
 
 .stamp-wrap{
-  position:relative;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  gap:8px;
   height:110px;
 }
 
 .stamp{
-  position:absolute;
-  bottom:-4px;
-  left:50%;
-  transform:translateX(-50%);
-  width:140px;
+  width:110px;
   opacity:0.95;
 }
 
-/* The signature sits above the line and slightly left of the stamp, so both remain
-   legible where they overlap — mirroring how a document is signed then stamped. */
+/* The signature sits beside the stamp (not overlapping it), so both remain fully legible. */
 .signature{
-  position:absolute;
-  bottom:6px;
-  left:22%;
-  transform:translateX(-50%);
-  max-width:130px;
-  max-height:70px;
+  max-width:110px;
+  max-height:80px;
 }
 
 .sign-line{
