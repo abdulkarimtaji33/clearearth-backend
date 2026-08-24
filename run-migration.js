@@ -2368,6 +2368,26 @@ async function runMigration() {
       console.log('  payment_transactions.journal_entry_id already exists, skipping');
     }
 
+    // payment_transactions.receipt_number: added to the model/schema long ago but never
+    // captured as an ALTER step here, so any environment whose table predates that feature
+    // (created via the CREATE TABLE IF NOT EXISTS above) is missing the column — every
+    // receivable payment 500s with "Unknown column 'receipt_number' in 'INSERT INTO'".
+    console.log('Adding payment_transactions.receipt_number column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE payment_transactions ADD COLUMN receipt_number VARCHAR(50) NULL COMMENT 'Customer-facing receipt number, assigned for receivable-side payments'`);
+      console.log('  Added payment_transactions.receipt_number');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  payment_transactions.receipt_number already exists, skipping');
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE payment_transactions ADD INDEX idx_payment_transactions_receipt_number (tenant_id, receipt_number)`);
+      console.log('  Added idx_payment_transactions_receipt_number');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  idx_payment_transactions_receipt_number already exists, skipping');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
