@@ -56,6 +56,12 @@ const getReceiptPdf = asyncHandler(async (req, res) => {
   sendPdf(res, pdfBuffer, `receipt-${req.params.paymentId}.pdf`);
 });
 
+const getStatement = asyncHandler(async (req, res) => {
+  const { dateFrom, dateTo } = req.query;
+  const data = await receivablesService.getStatementOfAccount(req.tenant.id, req.params.companyId, { dateFrom, dateTo });
+  return ApiResponse.success(res, data);
+});
+
 const getStatementPdf = asyncHandler(async (req, res) => {
   const { dateFrom, dateTo } = req.query;
   const raw = await pdfService.generateStatementOfAccountPdf(req.tenant.id, req.params.companyId, { dateFrom, dateTo });
@@ -69,4 +75,4 @@ const getStatementPdf = asyncHandler(async (req, res) => {
   sendPdf(res, pdfBuffer, `statement-of-account-${req.params.companyId}.pdf`);
 });
 
-module.exports = { list, recordPayment, listPayments, agingSummary, getReceiptPdf, getStatementPdf };
+module.exports = { list, recordPayment, listPayments, agingSummary, getReceiptPdf, getStatement, getStatementPdf };

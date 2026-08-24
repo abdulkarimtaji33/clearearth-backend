@@ -264,6 +264,8 @@ const getById = async (tenantId, workOrderId) => {
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+          { model: db.Supplier, as: 'downstreamPartner', attributes: ['id', 'company_name'], required: false },
+          { model: db.Contact, as: 'contact', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
           { model: db.DealInspectionReport, as: 'inspectionReport', required: false },
         ],
         required: false,

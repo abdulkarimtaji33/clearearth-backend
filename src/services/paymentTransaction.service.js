@@ -67,6 +67,7 @@ const listPaymentTransactions = async (tenantId, sourceType, sourceId) => {
     },
     include: [
       { model: db.ChartOfAccounts, as: 'paymentAccount', attributes: ['id', 'code', 'name'], required: false },
+      { model: db.JournalEntry, as: 'journalEntry', attributes: ['id', 'entry_number'], required: false },
       { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
     ],
     order: [['paid_at', 'ASC'], ['id', 'ASC']],

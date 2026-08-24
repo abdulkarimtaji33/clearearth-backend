@@ -31,6 +31,12 @@ module.exports = (sequelize, DataTypes) => {
       paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true },
       paid_at: { type: DataTypes.DATEONLY, allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
+      expense_account_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'chart_of_accounts', key: 'id' },
+        comment: 'Chart of accounts row debited by this expense; falls back to the category map when null',
+      },
     },
     {
       tableName: 'expenses',
@@ -50,6 +56,7 @@ module.exports = (sequelize, DataTypes) => {
     Expense.belongsTo(models.Tenant, { foreignKey: 'tenant_id' });
     Expense.belongsTo(models.WorkOrderTaskExpense, { foreignKey: 'work_order_task_expense_id', as: 'taskExpense' });
     Expense.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
+    Expense.belongsTo(models.ChartOfAccounts, { foreignKey: 'expense_account_id', as: 'expenseAccount' });
   };
 
   return Expense;

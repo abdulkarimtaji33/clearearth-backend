@@ -2343,6 +2343,31 @@ async function runMigration() {
       console.log('  tenants.signature already exists, skipping');
     }
 
+    console.log('Adding expenses.expense_account_id column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses ADD COLUMN expense_account_id INT NULL COMMENT 'Chart of accounts row debited by this expense; falls back to the category map when null'`);
+      console.log('  Added expenses.expense_account_id');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  expenses.expense_account_id already exists, skipping');
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expenses ADD CONSTRAINT fk_expenses_account FOREIGN KEY (expense_account_id) REFERENCES chart_of_accounts (id)`);
+      console.log('  Added fk_expenses_account constraint');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  fk_expenses_account already exists, skipping');
+    }
+
+    console.log('Adding payment_transactions.journal_entry_id column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE payment_transactions ADD COLUMN journal_entry_id INT NULL COMMENT 'Journal entry posted for this payment'`);
+      console.log('  Added payment_transactions.journal_entry_id');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  payment_transactions.journal_entry_id already exists, skipping');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

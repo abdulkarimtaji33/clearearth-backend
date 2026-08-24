@@ -8,6 +8,7 @@ const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
+const { daysOverdue, agingBucketByDueDate, emptyAgingBuckets, addToBucket } = require('../utils/aging');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -29,13 +30,6 @@ function daysOpenForPayable(po) {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   return Math.floor((today - refD) / 86400000);
-}
-
-function agingBucketFromDaysOpen(d) {
-  if (d <= 30) return 'current';
-  if (d <= 60) return '31_60';
-  if (d <= 90) return '61_90';
-  return 'over_90';
 }
 
 const listPayables = async (tenantId, filters = {}) => {
@@ -93,13 +87,16 @@ const listPayables = async (tenantId, filters = {}) => {
     subQuery: false,
   });
 
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
   const plain = rows.map((r) => {
     const o = r.get({ plain: true });
     o.po_total = poTotal(o);
     o.balance_due = balanceDue(o);
-    const dOpen = daysOpenForPayable(o);
-    o.days_open = dOpen;
-    o.aging_bucket = agingBucketFromDaysOpen(dOpen);
+    o.days_open = daysOpenForPayable(o);
+    // Aging bucket is due-date based (days overdue vs due_date), matching the Aging Summary on the receivables side
+    o.aging_bucket = agingBucketByDueDate(daysOverdue(o.due_date, today));
     o.party_label = o.supplier_id ? 'Vendor' : o.company_id ? 'Client' : '—';
     o.party_name = o.supplier?.company_name || o.company?.company_name || '—';
     return o;
@@ -150,7 +147,7 @@ const recordPayment = async (tenantId, poId, body, userId = null) => {
         paymentAccountId: body.paymentAccountId,
       });
 
-      await paymentTxService.createPaymentTransaction(tenantId, userId || 1, {
+      const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId || 1, {
         sourceType: 'payable',
         sourceId: poId,
         amount: delta,
@@ -163,7 +160,7 @@ const recordPayment = async (tenantId, poId, body, userId = null) => {
 
       try {
         const apId = await jeService.getSystemAccountId(tenantId, '2000');
-        await jeService.createJournalEntry(tenantId, 1, {
+        const entryId = await jeService.createJournalEntry(tenantId, 1, {
           entryDate: payDate,
           description: `PO Payment — PO #${poId}`,
           sourceType: 'po_payment',
@@ -174,6 +171,7 @@ const recordPayment = async (tenantId, poId, body, userId = null) => {
             { accountId: payAcct.accountId, debit: 0, credit: delta },
           ],
         }, t);
+        await paymentTx.update({ journal_entry_id: entryId }, { transaction: t });
       } catch (jeErr) {
         console.warn('[GL] po_payment journal entry skipped:', jeErr.message);
       }
@@ -200,23 +198,14 @@ const getAgingSummary = async (tenantId, filters = {}) => {
   const result = await listPayables(tenantId, { ...filters, limit: 5000, offset: 0 });
   const rows = result.payables;
 
-  const buckets = {
-    current: 0,
-    bucket_31_60: 0,
-    bucket_61_90: 0,
-    bucket_over_90: 0,
-  };
-
+  const buckets = emptyAgingBuckets();
   const byParty = {};
 
   for (const o of rows) {
     const bal = o.balance_due;
     if (bal <= 0.005) continue;
     const b = o.aging_bucket;
-    if (b === 'current') buckets.current += bal;
-    else if (b === '31_60') buckets.bucket_31_60 += bal;
-    else if (b === '61_90') buckets.bucket_61_90 += bal;
-    else buckets.bucket_over_90 += bal;
+    addToBucket(buckets, b, bal);
 
     const sid = o.supplier_id;
     const cid = o.company_id;
@@ -229,17 +218,11 @@ const getAgingSummary = async (tenantId, filters = {}) => {
         partyName: name,
         partyLabel: o.party_label,
         total: 0,
-        current: 0,
-        bucket_31_60: 0,
-        bucket_61_90: 0,
-        bucket_over_90: 0,
+        ...emptyAgingBuckets(),
       };
     }
     byParty[key].total += bal;
-    if (b === 'current') byParty[key].current += bal;
-    else if (b === '31_60') byParty[key].bucket_31_60 += bal;
-    else if (b === '61_90') byParty[key].bucket_61_90 += bal;
-    else byParty[key].bucket_over_90 += bal;
+    addToBucket(byParty[key], b, bal);
   }
 
   return {

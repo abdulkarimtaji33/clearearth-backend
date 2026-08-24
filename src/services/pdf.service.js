@@ -805,9 +805,9 @@ async function generateStatementOfAccountPdf(tenantId, companyId, options = {}) 
   const { company, currency, openingBalance, transactions, balanceDue, aging, dateFrom, dateTo } = statement;
 
   let rowsHtml = '';
-  if (Math.abs(openingBalance) > 0.005 || transactions.length === 0) {
-    rowsHtml += `<tr class="opening-row"><td>${formatDate(dateFrom)}</td><td colspan="4">***Opening Balance***</td><td class="text-right">${formatNum(openingBalance)}</td></tr>`;
-  }
+  // Always print the opening balance row — even at exactly zero — so the running balance
+  // column always starts from a stated figure instead of implicitly assuming zero.
+  rowsHtml += `<tr class="opening-row"><td>${formatDate(dateFrom)}</td><td colspan="4">***Opening Balance***</td><td class="text-right">${formatNum(openingBalance)}</td></tr>`;
   transactions.forEach((t) => {
     const details = String(t.details || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')
       + (t.dueDate ? ` - due on ${formatDate(t.dueDate)}` : '');
@@ -845,8 +845,10 @@ async function generateStatementOfAccountPdf(tenantId, companyId, options = {}) 
     aging1_30: formatNum(aging.bucket_1_30),
     aging31_60: formatNum(aging.bucket_31_60),
     aging61_90: formatNum(aging.bucket_61_90),
-    agingOver90: formatNum(aging.bucket_over_90),
-    agingTotal: formatNum(aging.current + aging.bucket_1_30 + aging.bucket_31_60 + aging.bucket_61_90 + aging.bucket_over_90),
+    // Invoices with no due date have nowhere else to go on this five-column layout — fold them
+    // into "Over 90" rather than silently dropping them from the printed total.
+    agingOver90: formatNum(aging.bucket_over_90 + aging.bucket_no_due_date),
+    agingTotal: formatNum(aging.current + aging.bucket_1_30 + aging.bucket_31_60 + aging.bucket_61_90 + aging.bucket_over_90 + aging.bucket_no_due_date),
   });
 
   return htmlToPdf(html);

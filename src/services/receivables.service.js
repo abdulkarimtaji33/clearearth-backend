@@ -8,6 +8,7 @@ const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
+const { daysOverdue, agingBucketByDueDate, emptyAgingBuckets, addToBucket } = require('../utils/aging');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -28,13 +29,6 @@ function daysOpen(invoiceDateStr) {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   return Math.floor((today - inv) / 86400000);
-}
-
-function agingBucketFromDaysOpen(d) {
-  if (d <= 30) return 'current';
-  if (d <= 60) return '31_60';
-  if (d <= 90) return '61_90';
-  return 'over_90';
 }
 
 const listReceivables = async (tenantId, filters = {}) => {
@@ -88,12 +82,15 @@ const listReceivables = async (tenantId, filters = {}) => {
     subQuery: false,
   });
 
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
   const plain = rows.map((r) => {
     const o = r.get({ plain: true });
     o.balance_due = balanceDue(o);
-    const dOpen = daysOpen(o.invoice_date);
-    o.days_open = dOpen;
-    o.aging_bucket = agingBucketFromDaysOpen(dOpen);
+    o.days_open = daysOpen(o.invoice_date);
+    // Aging bucket is due-date based (days overdue vs due_date), matching the Aging Summary and Statement of Account
+    o.aging_bucket = agingBucketByDueDate(daysOverdue(o.due_date, today));
     return o;
   });
 
@@ -161,7 +158,7 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
         paymentAccountId: body.paymentAccountId,
       });
 
-      await paymentTxService.createPaymentTransaction(tenantId, userId || row.created_by || 1, {
+      const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId || row.created_by || 1, {
         sourceType: 'receivable',
         sourceId: taxInvoiceId,
         amount: delta,
@@ -174,7 +171,7 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
 
       try {
         const arId = await jeService.getSystemAccountId(tenantId, '1100');
-        await jeService.createJournalEntry(tenantId, row.created_by || 1, {
+        const entryId = await jeService.createJournalEntry(tenantId, row.created_by || 1, {
           entryDate: payDate,
           description: `Payment Received — Invoice ${row.tax_invoice_number || taxInvoiceId}`,
           sourceType: 'payment_received',
@@ -185,6 +182,7 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
             { accountId: arId, debit: 0, credit: delta },
           ],
         }, t);
+        await paymentTx.update({ journal_entry_id: entryId }, { transaction: t });
       } catch (jeErr) {
         console.warn('[GL] payment_received journal entry skipped:', jeErr.message);
       }
@@ -204,23 +202,14 @@ const getAgingSummary = async (tenantId, filters = {}) => {
   const result = await listReceivables(tenantId, { ...filters, limit: 5000, offset: 0 });
   const rows = result.receivables;
 
-  const buckets = {
-    current: 0,
-    bucket_31_60: 0,
-    bucket_61_90: 0,
-    bucket_over_90: 0,
-  };
-
+  const buckets = emptyAgingBuckets();
   const byClient = {};
 
   for (const o of rows) {
     const bal = o.balance_due;
     if (bal <= 0.005) continue;
     const b = o.aging_bucket;
-    if (b === 'current') buckets.current += bal;
-    else if (b === '31_60') buckets.bucket_31_60 += bal;
-    else if (b === '61_90') buckets.bucket_61_90 += bal;
-    else buckets.bucket_over_90 += bal;
+    addToBucket(buckets, b, bal);
 
     const cid = o.proformaInvoice?.deal?.company?.id;
     const cname = o.proformaInvoice?.deal?.company?.company_name || '—';
@@ -230,17 +219,11 @@ const getAgingSummary = async (tenantId, filters = {}) => {
         companyId: cid || null,
         companyName: cname,
         total: 0,
-        current: 0,
-        bucket_31_60: 0,
-        bucket_61_90: 0,
-        bucket_over_90: 0,
+        ...emptyAgingBuckets(),
       };
     }
     byClient[key].total += bal;
-    if (b === 'current') byClient[key].current += bal;
-    else if (b === '31_60') byClient[key].bucket_31_60 += bal;
-    else if (b === '61_90') byClient[key].bucket_61_90 += bal;
-    else byClient[key].bucket_over_90 += bal;
+    addToBucket(byClient[key], b, bal);
   }
 
   return {
@@ -255,23 +238,21 @@ const listPayments = async (tenantId, taxInvoiceId) => {
   return paymentTxService.listPaymentTransactions(tenantId, 'receivable', taxInvoiceId);
 };
 
-function daysOverdue(dueDateStr, asOf) {
-  if (!dueDateStr) return 0;
-  const due = new Date(`${dueDateStr}T12:00:00`);
-  return Math.floor((asOf - due) / 86400000);
+/** Best-effort date for a payment row — falls back to when it was recorded if `paid_at` is missing (legacy rows). */
+function paymentEntryDate(p) {
+  if (p.paid_at) return p.paid_at;
+  const created = p.createdAt || p.created_at;
+  if (!created) return null;
+  return (created instanceof Date ? created : new Date(created)).toISOString().slice(0, 10);
 }
 
-function agingBucketByDueDate(d) {
-  if (d <= 0) return 'current';
-  if (d <= 30) return '1_30';
-  if (d <= 60) return '31_60';
-  if (d <= 90) return '61_90';
-  return 'over_90';
-}
+const DOC_TYPE_SORT_RANK = { Invoice: 0, 'Payment Received': 1 };
 
 /**
  * Customer-facing statement: opening balance + dated ledger of invoices/receipts + running
- * balance + 5-bucket aging (current / 1-30 / 31-60 / 61-90 / >90), all as of `dateTo`.
+ * balance + 5-bucket aging (current / 1-30 / 31-60 / 61-90 / >90 / no due date), all as of
+ * `dateTo`. Every row carries a `breakdown` object so the UI can show how the figure was
+ * computed (see docs/plan — statement of account correctness + drill-down).
  */
 const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } = {}) => {
   const company = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId } });
@@ -285,9 +266,11 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
         as: 'proformaInvoice',
         required: true,
         include: [
-          { model: db.Deal, as: 'deal', required: true, where: { company_id: companyId } },
+          { model: db.Deal, as: 'deal', required: true, where: { company_id: companyId }, attributes: ['id', 'deal_number', 'title'] },
+          { model: db.Quotation, as: 'quotation', required: false, attributes: ['id', 'quotation_date'] },
         ],
       },
+      { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
     ],
     order: [['invoice_date', 'ASC'], ['id', 'ASC']],
   });
@@ -296,6 +279,11 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
   const payments = invoiceIds.length
     ? await db.PaymentTransaction.findAll({
         where: { tenant_id: tenantId, source_type: 'receivable', source_id: { [Op.in]: invoiceIds } },
+        include: [
+          { model: db.ChartOfAccounts, as: 'paymentAccount', attributes: ['id', 'code', 'name'], required: false },
+          { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+          { model: db.JournalEntry, as: 'journalEntry', attributes: ['id', 'entry_number'], required: false },
+        ],
         order: [['paid_at', 'ASC'], ['id', 'ASC']],
       })
     : [];
@@ -303,8 +291,20 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
   const invoiceById = {};
   invoices.forEach((i) => { invoiceById[i.id] = i; });
 
+  // Payments grouped per invoice, in date order — used both for the ledger and for
+  // computing each invoice's balance as of an arbitrary date (see aging below).
+  const paymentsByInvoice = {};
+  payments.forEach((p) => {
+    (paymentsByInvoice[p.source_id] = paymentsByInvoice[p.source_id] || []).push(p);
+  });
+
+  const userName = (u) => (u ? [u.first_name, u.last_name].filter(Boolean).join(' ') : null);
+
   const entries = [];
   invoices.forEach((inv) => {
+    const proforma = inv.proformaInvoice;
+    const deal = proforma?.deal;
+    const quotation = proforma?.quotation;
     entries.push({
       date: inv.invoice_date,
       docType: 'Invoice',
@@ -312,29 +312,75 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
       dueDate: inv.due_date || null,
       amount: parseNum(inv.total),
       receipts: 0,
+      breakdown: {
+        sourceType: 'tax_invoice',
+        sourceId: inv.id,
+        invoiceNumber: inv.tax_invoice_number,
+        invoiceDate: inv.invoice_date,
+        dueDate: inv.due_date || null,
+        subtotal: parseNum(inv.subtotal),
+        vatPercentage: parseNum(inv.vat_percentage),
+        vatAmount: parseNum(inv.vat_amount),
+        total: parseNum(inv.total),
+        currency: inv.currency || 'AED',
+        preparedBy: userName(inv.createdByUser),
+        chain: {
+          dealId: deal?.id || null,
+          dealNumber: deal?.deal_number || null,
+          dealTitle: deal?.title || null,
+          quotationId: quotation?.id || null,
+          quotationDate: quotation?.quotation_date || null,
+          proformaInvoiceId: proforma?.id || null,
+          proformaInvoiceNumber: proforma?.proforma_number || null,
+        },
+      },
     });
   });
   payments.forEach((p) => {
     const inv = invoiceById[p.source_id];
     entries.push({
-      date: p.paid_at,
+      date: paymentEntryDate(p),
       docType: 'Payment Received',
       details: `${p.receipt_number || ''}${p.receipt_number ? '\n' : ''}${inv?.currency || 'AED'}${parseNum(p.amount).toFixed(2)} for payment of ${inv?.tax_invoice_number || ''}`.trim(),
       amount: 0,
       receipts: parseNum(p.amount),
+      breakdown: {
+        sourceType: 'payment',
+        paymentId: p.id,
+        invoiceId: inv?.id || null,
+        invoiceNumber: inv?.tax_invoice_number || null,
+        receiptNumber: p.receipt_number || null,
+        amount: parseNum(p.amount),
+        currency: inv?.currency || 'AED',
+        paymentMethod: p.payment_method || null,
+        referenceNo: p.reference_no || null,
+        receivedFrom: p.received_from || null,
+        paidAt: p.paid_at || null,
+        recordedAt: p.createdAt || p.created_at || null,
+        paymentAccount: p.paymentAccount ? { id: p.paymentAccount.id, code: p.paymentAccount.code, name: p.paymentAccount.name } : null,
+        recordedBy: userName(p.createdByUser),
+        journalEntryId: p.journalEntry?.id || null,
+        journalEntryNumber: p.journalEntry?.entry_number || null,
+      },
     });
   });
 
-  entries.sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`) || 0);
+  entries.sort((a, b) => {
+    const dateDiff = new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`);
+    if (dateDiff !== 0) return dateDiff;
+    return (DOC_TYPE_SORT_RANK[a.docType] ?? 9) - (DOC_TYPE_SORT_RANK[b.docType] ?? 9);
+  });
 
   const from = dateFrom || (entries[0]?.date ?? new Date().toISOString().slice(0, 10));
   const to = dateTo || new Date().toISOString().slice(0, 10);
 
   let openingBalance = 0;
+  const openingBalanceEntries = [];
   const inRange = [];
   entries.forEach((e) => {
     if (e.date < from) {
       openingBalance += e.amount - e.receipts;
+      openingBalanceEntries.push(e);
     } else if (e.date <= to) {
       inRange.push(e);
     }
@@ -342,24 +388,39 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
 
   let running = openingBalance;
   const transactions = inRange.map((e) => {
+    const balanceBefore = running;
     running += e.amount - e.receipts;
-    return { ...e, balance: running };
+    return { ...e, balanceBefore, balance: running };
   });
 
   // Balance due is the overall current outstanding balance (not limited to the date range)
-  const currentBalanceDue = entries.reduce((s, e) => s + (e.amount - e.receipts), 0);
+  const invoiceTotal = entries.reduce((s, e) => s + e.amount, 0);
+  const receiptTotal = entries.reduce((s, e) => s + e.receipts, 0);
+  const currentBalanceDue = invoiceTotal - receiptTotal;
 
+  // Aging is computed as of `to` — an invoice's balance only reflects payments recorded on or before that date,
+  // not today's payment state, so a statement run for a past period reflects that period's balances.
   const asOfDate = new Date(`${to}T12:00:00`);
-  const aging = { current: 0, bucket_1_30: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0 };
+  const aging = emptyAgingBuckets();
+  const agingDetail = { current: [], bucket_1_30: [], bucket_31_60: [], bucket_61_90: [], bucket_over_90: [], bucket_no_due_date: [] };
   invoices.forEach((inv) => {
-    const bal = balanceDue(inv.get ? inv.get({ plain: true }) : inv);
+    const total = parseNum(inv.total);
+    const paidAsOfTo = (paymentsByInvoice[inv.id] || [])
+      .filter((p) => (paymentEntryDate(p) || '9999-99-99') <= to)
+      .reduce((s, p) => s + parseNum(p.amount), 0);
+    const bal = Math.max(0, total - paidAsOfTo);
     if (bal <= 0.005) return;
-    const bucket = agingBucketByDueDate(daysOverdue(inv.due_date, asOfDate));
-    if (bucket === 'current') aging.current += bal;
-    else if (bucket === '1_30') aging.bucket_1_30 += bal;
-    else if (bucket === '31_60') aging.bucket_31_60 += bal;
-    else if (bucket === '61_90') aging.bucket_61_90 += bal;
-    else aging.bucket_over_90 += bal;
+    const dOverdue = daysOverdue(inv.due_date, asOfDate);
+    const bucket = agingBucketByDueDate(dOverdue);
+    addToBucket(aging, bucket, bal);
+    const field = { current: 'current', '1_30': 'bucket_1_30', '31_60': 'bucket_31_60', '61_90': 'bucket_61_90', over_90: 'bucket_over_90', no_due_date: 'bucket_no_due_date' }[bucket];
+    agingDetail[field].push({
+      invoiceId: inv.id,
+      invoiceNumber: inv.tax_invoice_number,
+      dueDate: inv.due_date || null,
+      daysOverdue: dOverdue,
+      balance: bal,
+    });
   });
 
   return {
@@ -367,9 +428,17 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
     dateFrom: from,
     dateTo: to,
     openingBalance,
+    openingBalanceEntries,
     transactions,
     balanceDue: currentBalanceDue,
+    balanceDueBreakdown: {
+      invoiceCount: entries.filter((e) => e.amount > 0).length,
+      invoiceTotal,
+      receiptCount: entries.filter((e) => e.receipts > 0).length,
+      receiptTotal,
+    },
     aging,
+    agingDetail,
     currency: invoices[0]?.currency || 'AED',
   };
 };

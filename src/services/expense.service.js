@@ -7,8 +7,7 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
-const { resolvePaymentAccount } = require('../utils/paymentAccount');
-const { EXPENSE_CATEGORY_TO_CODE } = require('./chartOfAccounts.service');
+const { resolvePaymentAccount, resolveExpenseAccount } = require('../utils/paymentAccount');
 const expenseCategoryService = require('./expenseCategory.service');
 
 const STATUSES = ['pending', 'approved', 'rejected'];
@@ -149,6 +148,7 @@ const createManualExpense = async (tenantId, userId, body) => {
     referenceId,
     paidAmount,
     paidAt,
+    expenseAccountId,
   } = body;
 
   const cat = await expenseCategoryService.resolveCategoryValue(tenantId, category);
@@ -165,6 +165,9 @@ const createManualExpense = async (tenantId, userId, body) => {
 
   const ps = deriveExpensePaymentStatus(amt, paid);
   const effectivePaid = ps === 'unpaid' ? null : (ps === 'paid' ? amt : paid);
+
+  // Validate the chosen expense account (if any) before opening the transaction
+  const expenseAccount = await resolveExpenseAccount(tenantId, { category: cat, expenseAccountId });
 
   const t = await db.sequelize.transaction();
   let row;
@@ -185,14 +188,13 @@ const createManualExpense = async (tenantId, userId, body) => {
         payment_status: ps,
         paid_amount: effectivePaid,
         paid_at: paidAt || (ps !== 'unpaid' ? expenseDate : null),
+        expense_account_id: expenseAccount.accountId,
       },
       { transaction: t }
     );
 
-    // GL: Dr expense account / Cr Accrued Expenses (2200) or Cash (1000) if paid immediately
+    // GL: Dr expense account (user-chosen or category default) / Cr Accrued Expenses (2200) or Cash (1000) if paid immediately
     try {
-      const expCode  = EXPENSE_CATEGORY_TO_CODE[cat] || '5100';
-      const expAccId = await jeService.getSystemAccountId(tenantId, expCode);
       const creditCode = ps === 'paid' ? '1000' : '2200';
       const creditId   = await jeService.getSystemAccountId(tenantId, creditCode);
       await jeService.createJournalEntry(tenantId, userId, {
@@ -202,7 +204,7 @@ const createManualExpense = async (tenantId, userId, body) => {
         sourceId: row.id,
         paidTo: row.paid_to || null,
         lines: [
-          { accountId: expAccId, debit: amt, credit: 0 },
+          { accountId: expenseAccount.accountId, debit: amt, credit: 0 },
           { accountId: creditId, debit: 0,   credit: amt },
         ],
       }, t);
@@ -262,7 +264,7 @@ const updateExpensePayment = async (tenantId, expenseId, body, userId = null) =>
         paymentAccountId: body.paymentAccountId,
       });
 
-      await paymentTxService.createPaymentTransaction(tenantId, userId || exp.created_by || 1, {
+      const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId || exp.created_by || 1, {
         sourceType: 'expense',
         sourceId: exp.id,
         amount: delta,
@@ -274,7 +276,7 @@ const updateExpensePayment = async (tenantId, expenseId, body, userId = null) =>
 
       try {
         const accruId = await jeService.getSystemAccountId(tenantId, '2200');
-        await jeService.createJournalEntry(tenantId, exp.created_by || 1, {
+        const entryId = await jeService.createJournalEntry(tenantId, exp.created_by || 1, {
           entryDate: paidAt || new Date().toISOString().slice(0, 10),
           description: `Expense Payment — ${exp.category}`,
           sourceType: 'expense_payment',
@@ -285,6 +287,7 @@ const updateExpensePayment = async (tenantId, expenseId, body, userId = null) =>
             { accountId: payAcct.accountId, debit: 0, credit: delta },
           ],
         }, t);
+        await paymentTx.update({ journal_entry_id: entryId }, { transaction: t });
       } catch (jeErr) {
         console.warn('[GL] expense_payment journal entry skipped:', jeErr.message);
       }
@@ -332,6 +335,7 @@ const listLedgerExpenses = async (tenantId, filters = {}) => {
 
   const include = [
     { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+    { model: db.ChartOfAccounts, as: 'expenseAccount', attributes: ['id', 'code', 'name'], required: false },
     {
       model: db.WorkOrderTaskExpense,
       as: 'taskExpense',

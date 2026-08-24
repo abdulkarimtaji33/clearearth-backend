@@ -751,6 +751,7 @@ CREATE TABLE `expenses` (
   `paid_amount` decimal(15,2) DEFAULT NULL,
   `paid_at` date DEFAULT NULL,
   `deleted_at` datetime DEFAULT NULL,
+  `expense_account_id` int(11) DEFAULT NULL COMMENT 'Chart of accounts row debited by this expense; falls back to the category map when null',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_exp_task_line` (`work_order_task_expense_id`),
   KEY `idx_exp_tenant` (`tenant_id`),
@@ -758,9 +759,11 @@ CREATE TABLE `expenses` (
   KEY `idx_exp_category` (`category`),
   KEY `fk_exp_user` (`created_by`),
   KEY `idx_exp_payment_status` (`payment_status`),
+  KEY `fk_expenses_account` (`expense_account_id`),
   CONSTRAINT `fk_exp_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`),
   CONSTRAINT `fk_exp_user` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
-  CONSTRAINT `fk_exp_wote` FOREIGN KEY (`work_order_task_expense_id`) REFERENCES `work_order_task_expenses` (`id`)
+  CONSTRAINT `fk_exp_wote` FOREIGN KEY (`work_order_task_expense_id`) REFERENCES `work_order_task_expenses` (`id`),
+  CONSTRAINT `fk_expenses_account` FOREIGN KEY (`expense_account_id`) REFERENCES `chart_of_accounts` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1198,6 +1201,7 @@ CREATE TABLE `payment_transactions` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `receipt_number` varchar(50) DEFAULT NULL COMMENT 'Customer-facing receipt number, assigned for receivable-side payments',
+  `journal_entry_id` int(11) DEFAULT NULL COMMENT 'Journal entry posted for this payment',
   PRIMARY KEY (`id`),
   KEY `idx_tenant` (`tenant_id`),
   KEY `idx_source` (`source_type`,`source_id`),

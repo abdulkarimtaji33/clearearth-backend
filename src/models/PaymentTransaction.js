@@ -27,6 +27,12 @@ module.exports = (sequelize, DataTypes) => {
       notes: { type: DataTypes.TEXT, allowNull: true },
       paid_at: { type: DataTypes.DATEONLY, allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
+      journal_entry_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'journal_entries', key: 'id' },
+        comment: 'Journal entry posted for this payment',
+      },
     },
     {
       tableName: 'payment_transactions',
@@ -45,6 +51,7 @@ module.exports = (sequelize, DataTypes) => {
     PaymentTransaction.belongsTo(models.Tenant, { foreignKey: 'tenant_id' });
     PaymentTransaction.belongsTo(models.ChartOfAccounts, { foreignKey: 'payment_account_id', as: 'paymentAccount' });
     PaymentTransaction.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
+    PaymentTransaction.belongsTo(models.JournalEntry, { foreignKey: 'journal_entry_id', as: 'journalEntry' });
   };
 
   return PaymentTransaction;

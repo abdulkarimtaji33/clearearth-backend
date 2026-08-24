@@ -8,6 +8,7 @@ router.use(authenticate);
 router.get('/aging-summary', authorize('accounting.read', 'deals.read'), receivablesController.agingSummary);
 router.get('/payments/:paymentId/receipt/pdf', authorize('accounting.read', 'deals.read'), receivablesController.getReceiptPdf);
 router.get('/companies/:companyId/statement/pdf', authorize('accounting.read', 'deals.read'), receivablesController.getStatementPdf);
+router.get('/companies/:companyId/statement', authorize('accounting.read', 'deals.read'), receivablesController.getStatement);
 router.get('/', authorize('accounting.read', 'deals.read'), receivablesController.list);
 router.get('/:id/payments', authorize('accounting.read', 'deals.read'), receivablesController.listPayments);
 router.post('/:id/payment', authorize('accounting.update'), receivablesController.recordPayment);

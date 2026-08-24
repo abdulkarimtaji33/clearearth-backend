@@ -20,11 +20,28 @@ async function getSystemAccountId(tenantId, code) {
   const cache = _accountCache.get(tenantId);
   if (cache.has(code)) return cache.get(code);
 
-  const account = await db.ChartOfAccounts.findOne({
+  let account = await db.ChartOfAccounts.findOne({
     where: { tenant_id: tenantId, code },
     attributes: ['id'],
   });
-  if (!account) throw new Error(`System account '${code}' not found for tenant ${tenantId}. Run COA seed first.`);
+
+  if (!account) {
+    // Tenant may never have had its Chart of Accounts seeded — self-heal instead of 500ing.
+    const { seedDefaultAccounts } = require('./chartOfAccounts.service');
+    const seedResult = await seedDefaultAccounts(tenantId).catch(() => null);
+    if (seedResult && seedResult.seeded) {
+      account = await db.ChartOfAccounts.findOne({
+        where: { tenant_id: tenantId, code },
+        attributes: ['id'],
+      });
+    }
+  }
+
+  if (!account) {
+    throw ApiError.badRequest(
+      `Account code '${code}' was not found in the Chart of Accounts for this tenant. Seed or add it under Accounts › Chart of Accounts.`
+    );
+  }
   cache.set(code, account.id);
   return account.id;
 }

@@ -100,7 +100,7 @@ const listAccounts = async (tenantId, filters = {}) => {
   const balMap = {};
   for (const b of balances) balMap[b.account_id] = b;
 
-  return accounts.map((a) => {
+  const plainAccounts = accounts.map((a) => {
     const plain = a.get({ plain: true });
     const bal = balMap[a.id];
     if (bal) {
@@ -114,8 +114,24 @@ const listAccounts = async (tenantId, filters = {}) => {
       plain.total_credit = 0;
       plain.balance = 0;
     }
+    plain.rollup_balance = plain.balance;
     return plain;
   });
+
+  // Roll each account's own balance up into every ancestor (parents show the total of their tree)
+  const byId = {};
+  plainAccounts.forEach((a) => { byId[a.id] = a; });
+  plainAccounts.forEach((a) => {
+    let parent = a.parent_id != null ? byId[a.parent_id] : null;
+    let depth = 0;
+    while (parent && depth < 20) {
+      if (parent.id !== a.id) parent.rollup_balance += a.balance;
+      parent = parent.parent_id != null ? byId[parent.parent_id] : null;
+      depth += 1;
+    }
+  });
+
+  return plainAccounts;
 };
 
 const getAccountById = async (tenantId, id) => {
@@ -124,11 +140,37 @@ const getAccountById = async (tenantId, id) => {
   return acc;
 };
 
+/**
+ * Validate a proposed parent for `accountId` (null when creating a new account):
+ * must exist for the tenant, share the account's `type`, and not be the account
+ * itself or one of its own descendants (which would create a cycle).
+ */
+async function validateParent(tenantId, parentId, type, accountId) {
+  if (parentId == null) return null;
+  const parent = await db.ChartOfAccounts.findOne({ where: { id: parentId, tenant_id: tenantId } });
+  if (!parent) throw ApiError.badRequest('Parent account not found');
+  if (parent.type !== type) throw ApiError.badRequest('Parent account must have the same type');
+  if (accountId != null) {
+    if (parent.id === accountId) throw ApiError.badRequest('An account cannot be its own parent');
+    // Walk up from the candidate parent — if we hit accountId, it's a descendant of the account being edited
+    let cur = parent;
+    let depth = 0;
+    while (cur && cur.parent_id != null && depth < 20) {
+      if (cur.parent_id === accountId) throw ApiError.badRequest('Cannot set a descendant account as the parent');
+      cur = await db.ChartOfAccounts.findOne({ where: { id: cur.parent_id, tenant_id: tenantId } });
+      depth += 1;
+    }
+  }
+  return parent;
+}
+
 const createAccount = async (tenantId, userId, body) => {
   const { code, name, type, subType, normalBalance, isGroup = false, parentId, description, sortOrder } = body;
   if (!code || !name || !type || !normalBalance) throw ApiError.badRequest('code, name, type, normalBalance are required');
   const dup = await db.ChartOfAccounts.findOne({ where: { tenant_id: tenantId, code } });
   if (dup) throw ApiError.conflict(`Account code '${code}' already exists`);
+
+  const parent = await validateParent(tenantId, parentId || null, type, null);
 
   const acc = await db.ChartOfAccounts.create({
     tenant_id: tenantId,
@@ -144,13 +186,22 @@ const createAccount = async (tenantId, userId, body) => {
     description: description || null,
     sort_order: sortOrder || 0,
   });
+
+  // A user-created account gaining its first child auto-promotes the parent to a group.
+  // Never do this to system accounts — they must stay individually postable (e.g. the
+  // default Cash account '1000' is the fallback payment destination).
+  if (parent && !parent.is_group && !parent.is_system) {
+    parent.is_group = true;
+    await parent.save();
+  }
+
   clearAccountCache(tenantId);
   return acc;
 };
 
 const updateAccount = async (tenantId, id, body) => {
   const acc = await getAccountById(tenantId, id);
-  const { name, subType, description, sortOrder, isActive, parentId } = body;
+  const { name, subType, description, sortOrder, isActive, parentId, isGroup } = body;
 
   if (acc.is_system) {
     // System accounts: only allow name, description, sort changes
@@ -159,12 +210,24 @@ const updateAccount = async (tenantId, id, body) => {
     if (body.normalBalance && body.normalBalance !== acc.normal_balance) throw ApiError.badRequest('Cannot change normal balance of a system account');
   }
 
+  if (parentId !== undefined) {
+    const nextParentId = parentId || null;
+    if (nextParentId !== acc.parent_id) {
+      const parent = await validateParent(tenantId, nextParentId, acc.type, acc.id);
+      acc.parent_id = nextParentId;
+      if (parent && !parent.is_group && !parent.is_system) {
+        parent.is_group = true;
+        await parent.save();
+      }
+    }
+  }
+
   if (name !== undefined) acc.name = name;
   if (subType !== undefined) acc.sub_type = subType;
   if (description !== undefined) acc.description = description;
   if (sortOrder !== undefined) acc.sort_order = sortOrder;
   if (isActive !== undefined) acc.is_active = isActive;
-  if (parentId !== undefined) acc.parent_id = parentId || null;
+  if (isGroup !== undefined && !acc.is_system) acc.is_group = !!isGroup;
 
   await acc.save();
   clearAccountCache(tenantId);
@@ -177,6 +240,9 @@ const deleteAccount = async (tenantId, id) => {
 
   const usage = await db.JournalEntryLine.count({ where: { account_id: id } });
   if (usage > 0) throw ApiError.badRequest('Cannot delete account — it has journal entry lines. Disable it instead.');
+
+  const childCount = await db.ChartOfAccounts.count({ where: { tenant_id: tenantId, parent_id: id } });
+  if (childCount > 0) throw ApiError.badRequest('Cannot delete account — it has sub-accounts. Disable or reassign them first.');
 
   acc.is_active = false;
   await acc.save();
