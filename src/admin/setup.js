@@ -40,6 +40,21 @@ function buildResourceOptions(modelName, model) {
     };
   });
 
+  // User.password: without `type: 'password'`, AdminJS renders it as a plain text
+  // input pre-filled with the stored bcrypt hash on every edit — which both displays
+  // the hash and, if the form is submitted untouched (e.g. editing an unrelated field),
+  // re-hashes the hash itself via the before-hook below and locks the user out. The
+  // `password` type renders masked and empty instead, so it's only sent (and hashed)
+  // when a super admin actually types a new one — this is how "change password" works
+  // from the panel.
+  if (modelName === 'User' && properties.password) {
+    properties.password = {
+      ...properties.password,
+      type: 'password',
+      props: { placeholder: 'Leave blank to keep the current password' },
+    };
+  }
+
   // Error logs: read-mostly monitoring view for super admins (newest first).
   if (modelName === 'ErrorLog') {
     const listFields = new Set([
