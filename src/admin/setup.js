@@ -53,6 +53,27 @@ function buildResourceOptions(modelName, model) {
       type: 'password',
       props: { placeholder: 'Leave blank to keep the current password' },
     };
+    // Hash the password before it's written, whenever one is actually submitted (the
+    // 'password' type above keeps the field empty unless a super admin types a new
+    // value, so an untouched edit never sends this key at all). This MUST be part of
+    // the options object passed into `new AdminJS(...)` below — mutating
+    // `adminJs.options.resources[i].options.actions` *after* construction has no
+    // effect, because AdminJS has already consumed the resource config into its own
+    // internal registry by then, so the hook silently never runs and the raw
+    // plaintext gets saved straight to the password column.
+    const hashPasswordBeforeSave = async request => {
+      if (request.payload?.password) {
+        request.payload.password = await bcrypt.hash(request.payload.password, 10);
+      }
+      return request;
+    };
+    return {
+      properties,
+      actions: {
+        new: { before: hashPasswordBeforeSave },
+        edit: { before: hashPasswordBeforeSave },
+      },
+    };
   }
 
   // Error logs: read-mostly monitoring view for super admins (newest first).
@@ -231,10 +252,8 @@ async function mountAdminPanel(app) {
 
   const excluded = new Set(['sequelize', 'Sequelize']);
   const modelNames = Object.keys(db).filter(name => !excluded.has(name));
-  const proxiedModels = {};
   const resources = modelNames.map(name => {
     const resource = withoutParanoid(db[name]);
-    proxiedModels[name] = resource;
     return { resource, options: buildResourceOptions(name, db[name]) };
   });
 
@@ -271,26 +290,6 @@ async function mountAdminPanel(app) {
       },
     },
   });
-
-  // Keep password hashes valid if a super admin edits a User's password field.
-  const userResource = adminJs.options.resources.find(r => r.resource === proxiedModels.User);
-  if (userResource) {
-    ['new', 'edit'].forEach(actionName => {
-      const action = userResource.options.actions?.[actionName] || {};
-      userResource.options.actions = {
-        ...userResource.options.actions,
-        [actionName]: {
-          ...action,
-          before: async request => {
-            if (request.payload?.password) {
-              request.payload.password = await bcrypt.hash(request.payload.password, 10);
-            }
-            return request;
-          },
-        },
-      };
-    });
-  }
 
   const authenticate = async (email, password) => {
     const user = await db.User.unscoped().findOne({
