@@ -81,20 +81,9 @@ const approve = asyncHandler(async (req, res) => {
 const requestApproval = asyncHandler(async (req, res) => {
   assertCanModifyQuotationsAndOrders(req.user?.role?.name);
   const scope = getSalesScope(req);
-  const quotation = await quotationService.requestApproval(req.tenant.id, req.params.id, scope, req.user);
+  const quotation = await quotationService.requestApproval(req.tenant.id, req.params.id, scope, req.user, req.body.requestedPickupDate);
   const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Approval requested');
-});
-
-const approveWithPin = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
-  const quotation = await quotationService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, scope, {
-    userId: req.user.id,
-    roleName: req.user.role?.name,
-  });
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
-  return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Quotation approved');
 });
 
 const getPdf = asyncHandler(async (req, res) => {
@@ -132,6 +121,5 @@ module.exports = {
   remove,
   approve,
   requestApproval,
-  approveWithPin,
   getPdf,
 };

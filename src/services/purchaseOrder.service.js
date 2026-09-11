@@ -5,7 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
-const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
+const { isManagerRole } = require('../utils/leadApproval');
 const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
@@ -569,7 +569,7 @@ const _approveClientQuotation = async (po, { approvedByUserId }) => {
 
 const approve = async (tenantId, poId, actor = {}, scope = {}) => {
   if (!isManagerRole(actor.roleName)) {
-    throw ApiError.forbidden('Only a manager can approve purchase quotations. Use the approval PIN or request manager approval.');
+    throw ApiError.forbidden('Only a manager can approve purchase quotations. Request manager approval instead.');
   }
 
   const po = await getById(tenantId, poId, scope);
@@ -603,7 +603,7 @@ const approve = async (tenantId, poId, actor = {}, scope = {}) => {
   return getById(tenantId, poId);
 };
 
-const requestApproval = async (tenantId, poId, requestedByUser = null, scope = {}) => {
+const requestApproval = async (tenantId, poId, requestedByUser = null, scope = {}, requestedPickupDate = null) => {
   const po = await getById(tenantId, poId, scope);
   if (!_isClientQuotation(po)) {
     throw ApiError.badRequest('Only client purchase quotations can be submitted for approval');
@@ -624,46 +624,10 @@ const requestApproval = async (tenantId, poId, requestedByUser = null, scope = {
   await po.update({
     status: PO_STATUS.PENDING_APPROVAL,
     approval_requested_at: new Date(),
+    requested_pickup_date: requestedPickupDate || null,
   });
 
   await notificationService.notifyPurchaseOrderApprovalRequested(tenantId, po, requestedByUser);
-
-  return getById(tenantId, poId);
-};
-
-const approveWithPin = async (tenantId, poId, pin, actor = {}, scope = {}) => {
-  const po = await getById(tenantId, poId, scope);
-
-  const pinValid = await verifyLeadApprovalPin(tenantId, pin);
-  if (!pinValid) {
-    throw ApiError.forbidden('Invalid approval PIN');
-  }
-
-  const prevStatus = po.status;
-  await _approveClientQuotation(po, { approvedByUserId: actor.userId });
-
-  if (prevStatus !== PO_STATUS.APPROVED) {
-    try {
-      const fullPo = await getById(tenantId, poId);
-      const poTotal = (fullPo.items || []).reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
-      if (poTotal > 0.005) {
-        const cosId = await jeService.getSystemAccountId(tenantId, '5000');
-        const apId = await jeService.getSystemAccountId(tenantId, '2000');
-        await jeService.createJournalEntry(tenantId, 1, {
-          entryDate: fullPo.po_date || new Date().toISOString().slice(0, 10),
-          description: `PO Approved — PO #${poId}`,
-          sourceType: 'purchase_order_approved',
-          sourceId: poId,
-          lines: [
-            { accountId: cosId, debit: poTotal, credit: 0 },
-            { accountId: apId, debit: 0, credit: poTotal },
-          ],
-        });
-      }
-    } catch (jeErr) {
-      console.warn('[GL] purchase_order_approved (approveWithPin) journal entry skipped:', jeErr.message);
-    }
-  }
 
   return getById(tenantId, poId);
 };
@@ -677,5 +641,4 @@ module.exports = {
   ensurePurchaseBillForWorkOrder,
   approve,
   requestApproval,
-  approveWithPin,
 };

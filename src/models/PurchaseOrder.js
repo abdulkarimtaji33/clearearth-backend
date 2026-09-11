@@ -24,6 +24,11 @@ module.exports = (sequelize, DataTypes) => {
       expected_delivery: { type: DataTypes.STRING(255) },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },
+      requested_pickup_date: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        comment: 'Pickup date sales requested when submitting this purchase quotation for approval',
+      },
       approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       approved_at: { type: DataTypes.DATE, allowNull: true },
       created_by: {

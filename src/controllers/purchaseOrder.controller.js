@@ -76,18 +76,8 @@ const approve = asyncHandler(async (req, res) => {
 const requestApproval = asyncHandler(async (req, res) => {
   assertCanModifyQuotationsAndOrders(req.user?.role?.name);
   const scope = getSalesScope(req);
-  const po = await purchaseOrderService.requestApproval(req.tenant.id, req.params.id, req.user, scope);
+  const po = await purchaseOrderService.requestApproval(req.tenant.id, req.params.id, req.user, scope, req.body.requestedPickupDate);
   return ApiResponse.success(res, po, 'Approval requested');
-});
-
-const approveWithPin = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
-  const scope = getSalesScope(req);
-  const po = await purchaseOrderService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, {
-    userId: req.user.id,
-    roleName: req.user.role?.name,
-  }, scope);
-  return ApiResponse.success(res, po, 'Purchase quotation approved');
 });
 
 const remove = asyncHandler(async (req, res) => {
@@ -137,5 +127,4 @@ module.exports = {
   getPdf,
   approve,
   requestApproval,
-  approveWithPin,
 };

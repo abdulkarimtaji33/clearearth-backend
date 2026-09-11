@@ -7,7 +7,7 @@ const notificationService = require('./notification.service');
 const { nextReferenceNumber } = require('../utils/referenceNumber');
 const SERVICE_QUOTATION_SEED = 654; // old ERP's last service quotation was QT/SERV/654/1
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
-const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
+const { isManagerRole } = require('../utils/leadApproval');
 const { Op } = db.Sequelize;
 
 const QUOTATION_STATUS = {
@@ -176,7 +176,7 @@ const _approveQuotation = async (quotation, { approvedByUserId }) => {
 
 const approve = async (tenantId, quotationId, scope = {}, actor = {}) => {
   if (!isManagerRole(actor.roleName)) {
-    throw ApiError.forbidden('Only a manager can approve quotations. Use the approval PIN or request manager approval.');
+    throw ApiError.forbidden('Only a manager can approve quotations. Request manager approval instead.');
   }
 
   const where = { id: quotationId, tenant_id: tenantId };
@@ -189,7 +189,7 @@ const approve = async (tenantId, quotationId, scope = {}, actor = {}) => {
   return await getById(tenantId, quotationId);
 };
 
-const requestApproval = async (tenantId, quotationId, scope = {}, requestedByUser = null) => {
+const requestApproval = async (tenantId, quotationId, scope = {}, requestedByUser = null, requestedPickupDate = null) => {
   const where = { id: quotationId, tenant_id: tenantId };
   if (scope.scopeUserId) where.prepared_by = scope.scopeUserId;
   const quotation = await db.Quotation.findOne({
@@ -216,25 +216,10 @@ const requestApproval = async (tenantId, quotationId, scope = {}, requestedByUse
   await quotation.update({
     status: QUOTATION_STATUS.PENDING_APPROVAL,
     approval_requested_at: new Date(),
+    requested_pickup_date: requestedPickupDate || null,
   });
 
   await notificationService.notifyQuotationApprovalRequested(tenantId, quotation, requestedByUser);
-
-  return await getById(tenantId, quotationId);
-};
-
-const approveWithPin = async (tenantId, quotationId, pin, scope = {}, actor = {}) => {
-  const where = { id: quotationId, tenant_id: tenantId };
-  if (scope.scopeUserId) where.prepared_by = scope.scopeUserId;
-  const quotation = await db.Quotation.findOne({ where });
-  if (!quotation) throw ApiError.notFound('Quotation not found');
-
-  const pinValid = await verifyLeadApprovalPin(tenantId, pin);
-  if (!pinValid) {
-    throw ApiError.forbidden('Invalid approval PIN');
-  }
-
-  await _approveQuotation(quotation, { approvedByUserId: actor.userId });
 
   return await getById(tenantId, quotationId);
 };
@@ -252,6 +237,5 @@ module.exports = {
   remove,
   approve,
   requestApproval,
-  approveWithPin,
 };
 

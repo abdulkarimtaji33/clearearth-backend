@@ -20,6 +20,11 @@ module.exports = (sequelize, DataTypes) => {
         comment: 'Continues the old ERP\'s quotation numbering sequence (last was 654)',
       },
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },
+      requested_pickup_date: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        comment: 'Pickup date sales requested when submitting this quotation for approval',
+      },
       approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       approved_at: { type: DataTypes.DATE, allowNull: true },
       remarks: { type: DataTypes.TEXT },

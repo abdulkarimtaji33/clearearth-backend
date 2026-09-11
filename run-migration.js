@@ -2388,6 +2388,54 @@ async function runMigration() {
       console.log('  idx_payment_transactions_receipt_number already exists, skipping');
     }
 
+    // Same gap as receipt_number above: these three columns are in the model/schema.sql
+    // and live on the dev/production servers, but no ALTER step was ever added here, so
+    // an environment migrated from an older schema.sql never gets them.
+    console.log('Adding deal_inspection_reports.cargo_packing_type column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deal_inspection_reports ADD COLUMN cargo_packing_type VARCHAR(100) NULL`);
+      console.log('  Added deal_inspection_reports.cargo_packing_type');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  deal_inspection_reports.cargo_packing_type already exists, skipping');
+    }
+
+    console.log('Adding deal_inspection_requests.lumpsum_price column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deal_inspection_requests ADD COLUMN lumpsum_price DECIMAL(15,2) NULL`);
+      console.log('  Added deal_inspection_requests.lumpsum_price');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  deal_inspection_requests.lumpsum_price already exists, skipping');
+    }
+
+    console.log('Adding deals.service_payment_status column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deals ADD COLUMN service_payment_status VARCHAR(30) NULL`);
+      console.log('  Added deals.service_payment_status');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  deals.service_payment_status already exists, skipping');
+    }
+
+    console.log('Adding quotations.requested_pickup_date column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE quotations ADD COLUMN requested_pickup_date DATE NULL COMMENT 'Pickup date sales requested when submitting this quotation for approval'`);
+      console.log('  Added quotations.requested_pickup_date');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  quotations.requested_pickup_date already exists, skipping');
+    }
+
+    console.log('Adding purchase_orders.requested_pickup_date column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE purchase_orders ADD COLUMN requested_pickup_date DATE NULL COMMENT 'Pickup date sales requested when submitting this purchase quotation for approval'`);
+      console.log('  Added purchase_orders.requested_pickup_date');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  purchase_orders.requested_pickup_date already exists, skipping');
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

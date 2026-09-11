@@ -334,7 +334,10 @@ async function getInspectionOverview(tenantId, userId) {
 async function getOperationsOverview(tenantId) {
   const today = new Date().toISOString().slice(0, 10);
 
-  const [woInProgress, overdueTasks, pendingExpenses, draftGrns, unassignedPickups, overdueTaskRows, driverActivity] = await Promise.all([
+  const [
+    woInProgress, overdueTasks, pendingExpenses, draftGrns, unassignedPickups, overdueTaskRows, driverActivity,
+    recentServiceOrderRows, recentPurchaseOrderRows,
+  ] = await Promise.all([
     db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'in_progress' } }),
     db.WorkOrderTask.count({
       where: { status: { [Op.ne]: 'completed' }, end_date: { [Op.lt]: today } },
@@ -369,6 +372,25 @@ async function getOperationsOverview(tenantId) {
         { model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'title'] },
         { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
       ],
+      limit: 10,
+    }).catch(() => []),
+    db.Quotation.findAll({
+      where: { tenant_id: tenantId, status: 'approved' },
+      include: [
+        { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+        { model: db.WorkOrder, as: 'workOrder', attributes: ['id', 'status'], required: false },
+      ],
+      order: [['approved_at', 'DESC']],
+      limit: 10,
+    }).catch(() => []),
+    db.PurchaseOrder.findAll({
+      where: { tenant_id: tenantId, status: 'approved', company_id: { [Op.ne]: null }, document_type: 'quotation' },
+      include: [
+        { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+        { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+        { model: db.WorkOrder, as: 'sourceWorkOrder', attributes: ['id', 'status'], required: false },
+      ],
+      order: [['approved_at', 'DESC']],
       limit: 10,
     }).catch(() => []),
   ]);
@@ -410,6 +432,31 @@ async function getOperationsOverview(tenantId) {
           : 'Unknown',
         status: plain.status,
         startDate: plain.start_date,
+      };
+    }),
+    recentServiceOrders: recentServiceOrderRows.map((q) => {
+      const plain = q.get({ plain: true });
+      return {
+        id: plain.id,
+        dealId: plain.deal?.id || plain.deal_id,
+        dealTitle: plain.deal?.title || plain.deal?.deal_number || `Deal #${plain.deal_id}`,
+        approvedAt: plain.approved_at,
+        requestedPickupDate: plain.requested_pickup_date,
+        workOrderId: plain.workOrder?.id || null,
+        workOrderStatus: plain.workOrder?.status || null,
+      };
+    }),
+    recentPurchaseOrders: recentPurchaseOrderRows.map((po) => {
+      const plain = po.get({ plain: true });
+      return {
+        id: plain.id,
+        dealId: plain.deal?.id || plain.deal_id,
+        dealTitle: plain.deal?.title || plain.deal?.deal_number || (plain.deal_id ? `Deal #${plain.deal_id}` : null),
+        companyName: plain.company?.company_name || null,
+        approvedAt: plain.approved_at,
+        requestedPickupDate: plain.requested_pickup_date,
+        workOrderId: plain.sourceWorkOrder?.id || null,
+        workOrderStatus: plain.sourceWorkOrder?.status || null,
       };
     }),
   };
