@@ -58,6 +58,7 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
     paymentMethod,
     paidTo,
     notes,
+    expenseAccountId,
   } = body;
 
   if (!expenseDate) {
@@ -82,6 +83,10 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
     throw ApiError.conflict('Ledger entry already exists for this line');
   }
 
+  // Debit the expense head the approver selects (e.g. Fuel Expense, Vehicle Maintenance)
+  // instead of always posting to the Cost of Services roll-up account.
+  const expenseAccount = await resolveExpenseAccount(tenantId, { category: WO_EXPENSE_CATEGORY, expenseAccountId });
+
   await db.sequelize.transaction(async (t) => {
     const exp = await db.Expense.create(
       {
@@ -99,6 +104,7 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
         payment_status: 'unpaid',
         paid_amount: null,
         paid_at: null,
+        expense_account_id: expenseAccount.accountId,
       },
       { transaction: t }
     );
@@ -112,10 +118,9 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
       { transaction: t }
     );
 
-    // GL: Dr Cost of Services (5000) / Cr Accrued Expenses (2200)
+    // GL: Dr selected expense account (defaults to Cost of Services) / Cr Accrued Expenses (2200)
     try {
-      const cosId    = await jeService.getSystemAccountId(tenantId, '5000');
-      const accruId  = await jeService.getSystemAccountId(tenantId, '2200');
+      const accruId = await jeService.getSystemAccountId(tenantId, '2200');
       await jeService.createJournalEntry(tenantId, userId, {
         entryDate: expenseDate,
         description: `Work Order Expense Approved — WO #${workOrderId}`,
@@ -123,8 +128,8 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
         sourceId: exp.id,
         paidTo: exp.paid_to || null,
         lines: [
-          { accountId: cosId,   debit: amt, credit: 0 },
-          { accountId: accruId, debit: 0,   credit: amt },
+          { accountId: expenseAccount.accountId, debit: amt, credit: 0 },
+          { accountId: accruId,                  debit: 0,   credit: amt },
         ],
       }, t);
     } catch (jeErr) {

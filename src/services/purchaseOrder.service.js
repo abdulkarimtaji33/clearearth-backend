@@ -313,12 +313,12 @@ const create = async (tenantId, data, scope = {}) => {
       }
     }
 
-    // GL: Dr Cost of Services (5000) / Cr AP (2000) if created directly as 'approved'
+    // GL: Vendor bill entry — Dr Accrued Expenses (2200) / Cr Accounts Payable (2000) if created directly as 'approved'
     if (resolvedStatus === 'approved') {
       try {
         const poTotal = items.reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
         if (poTotal > 0.005) {
-          const cosId = await jeService.getSystemAccountId(tenantId, '5000');
+          const accruedId = await jeService.getSystemAccountId(tenantId, '2200');
           const apId  = await jeService.getSystemAccountId(tenantId, '2000');
           await jeService.createJournalEntry(tenantId, 1, {
             entryDate: poDate || new Date().toISOString().slice(0, 10),
@@ -326,8 +326,8 @@ const create = async (tenantId, data, scope = {}) => {
             sourceType: 'purchase_order_approved',
             sourceId: newPo.id,
             lines: [
-              { accountId: cosId, debit: poTotal, credit: 0 },
-              { accountId: apId,  debit: 0,       credit: poTotal },
+              { accountId: accruedId, debit: poTotal, credit: 0 },
+              { accountId: apId,      debit: 0,       credit: poTotal },
             ],
           }, t);
         }
@@ -445,7 +445,7 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
       }
     }
 
-    // GL: Dr Cost of Services (5000) / Cr Accounts Payable (2000) — only when status transitions to 'approved'
+    // GL: Vendor bill entry — Dr Accrued Expenses (2200) / Cr Accounts Payable (2000) — only when status transitions to 'approved'
     const becomingApproved = prevStatus !== PO_STATUS.APPROVED && nextStatus === PO_STATUS.APPROVED;
 
     if (becomingApproved) {
@@ -455,7 +455,7 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
         const poTotal = updatedItems.reduce((s, it) => s + (parseFloat(it.total || it.line_total || 0)), 0);
 
         if (poTotal > 0.005) {
-          const cosId = await jeService.getSystemAccountId(tenantId, '5000');
+          const accruedId = await jeService.getSystemAccountId(tenantId, '2200');
           const apId  = await jeService.getSystemAccountId(tenantId, '2000');
           await jeService.createJournalEntry(tenantId, 1, {
             entryDate: poDate || po.po_date || new Date().toISOString().slice(0, 10),
@@ -463,8 +463,8 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
             sourceType: 'purchase_order_approved',
             sourceId: po.id,
             lines: [
-              { accountId: cosId, debit: poTotal, credit: 0 },
-              { accountId: apId,  debit: 0,       credit: poTotal },
+              { accountId: accruedId, debit: poTotal, credit: 0 },
+              { accountId: apId,      debit: 0,       credit: poTotal },
             ],
           }, t);
         }
@@ -582,7 +582,7 @@ const approve = async (tenantId, poId, actor = {}, scope = {}) => {
       const fullPo = await getById(tenantId, poId);
       const poTotal = (fullPo.items || []).reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
       if (poTotal > 0.005) {
-        const cosId = await jeService.getSystemAccountId(tenantId, '5000');
+        const accruedId = await jeService.getSystemAccountId(tenantId, '2200');
         const apId = await jeService.getSystemAccountId(tenantId, '2000');
         await jeService.createJournalEntry(tenantId, 1, {
           entryDate: fullPo.po_date || new Date().toISOString().slice(0, 10),
@@ -590,7 +590,7 @@ const approve = async (tenantId, poId, actor = {}, scope = {}) => {
           sourceType: 'purchase_order_approved',
           sourceId: poId,
           lines: [
-            { accountId: cosId, debit: poTotal, credit: 0 },
+            { accountId: accruedId, debit: poTotal, credit: 0 },
             { accountId: apId, debit: 0, credit: poTotal },
           ],
         });

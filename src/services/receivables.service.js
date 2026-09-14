@@ -198,6 +198,143 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
   return taxInvoiceService.getById(tenantId, taxInvoiceId, {});
 };
 
+/**
+ * Accounts Receivable → Receive Payment: record one customer receipt and allocate it across
+ * multiple outstanding invoices in a single transaction. Supports partial receipts (allocate
+ * less than the full balance on an invoice) and multi-invoice settlement. Each invoice gets its
+ * own PaymentTransaction row (for per-invoice drill-down/receipts), but the GL impact is posted
+ * as a single combined journal entry (Dr payment account / Cr Accounts Receivable) for the total.
+ */
+const receivePayment = async (tenantId, body, userId = null) => {
+  const { companyId, paymentDate, paymentMethod, paymentAccountId, referenceNo, receivedFrom, allocations } = body;
+
+  if (!companyId) throw ApiError.badRequest('companyId is required');
+  if (!Array.isArray(allocations) || allocations.length === 0) {
+    throw ApiError.badRequest('At least one invoice allocation is required');
+  }
+
+  const invoiceIds = [...new Set(allocations.map((a) => parseInt(a.taxInvoiceId, 10)).filter(Number.isFinite))];
+  if (invoiceIds.length === 0) throw ApiError.badRequest('No valid invoices in allocation');
+
+  const rows = await db.TaxInvoice.findAll({
+    where: { id: { [Op.in]: invoiceIds }, tenant_id: tenantId },
+    include: [
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoice',
+        required: true,
+        include: [
+          {
+            model: db.Deal,
+            as: 'deal',
+            required: true,
+            where: { company_id: companyId },
+            include: [{ model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false }],
+          },
+        ],
+      },
+    ],
+  });
+  if (rows.length !== invoiceIds.length) {
+    throw ApiError.badRequest('One or more invoices were not found for this customer');
+  }
+
+  const rowById = {};
+  rows.forEach((r) => { rowById[r.id] = r; });
+
+  const applied = [];
+  let totalAmount = 0;
+  for (const a of allocations) {
+    const invId = parseInt(a.taxInvoiceId, 10);
+    const amt = parseFloat(a.amount);
+    if (!Number.isFinite(amt) || amt <= 0) continue;
+    const row = rowById[invId];
+    if (!row) throw ApiError.badRequest(`Invoice ${invId} not found`);
+    const total = parseNum(row.total);
+    const cur = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
+    const bal = Math.max(0, total - cur);
+    if (amt - bal > 0.01) {
+      throw ApiError.badRequest(`Allocation for invoice ${row.tax_invoice_number} (AED ${amt}) exceeds its balance due (AED ${bal.toFixed(2)})`);
+    }
+    applied.push({ row, amt, total, cur });
+    totalAmount += amt;
+  }
+  if (applied.length === 0) throw ApiError.badRequest('No valid allocation amounts provided');
+
+  const payDate = paymentDate || new Date().toISOString().slice(0, 10);
+  const payAcct = await resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId });
+  const clientName = receivedFrom || rows[0]?.proformaInvoice?.deal?.company?.company_name || null;
+
+  const t = await db.sequelize.transaction();
+  try {
+    const updatedInvoices = [];
+    for (const { row, amt, total, cur } of applied) {
+      const next = Math.min(total, cur + amt);
+      let ps = 'unpaid';
+      if (next >= total - 0.01) ps = 'paid';
+      else if (next > 0) ps = 'partial';
+
+      await row.update(
+        {
+          paid_amount: next,
+          payment_status: ps,
+          payment_method: paymentMethod !== undefined ? paymentMethod || null : row.payment_method,
+          reference_no: referenceNo !== undefined ? referenceNo || null : row.reference_no,
+        },
+        { transaction: t }
+      );
+
+      const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId || row.created_by || 1, {
+        sourceType: 'receivable',
+        sourceId: row.id,
+        amount: amt,
+        paymentMethod,
+        paymentAccountId: payAcct.accountId,
+        referenceNo,
+        receivedFrom: clientName,
+        paidAt: payDate,
+      }, t);
+
+      updatedInvoices.push({
+        invoiceId: row.id,
+        invoiceNumber: row.tax_invoice_number,
+        amountApplied: amt,
+        paymentTransactionId: paymentTx.id,
+      });
+    }
+
+    // GL: Dr payment account / Cr Accounts Receivable (1100) — one combined entry for the receipt
+    if (totalAmount > 0.005) {
+      try {
+        const arId = await jeService.getSystemAccountId(tenantId, '1100');
+        const entryId = await jeService.createJournalEntry(tenantId, userId || 1, {
+          entryDate: payDate,
+          description: `Payment Received — ${updatedInvoices.length} invoice(s)`,
+          sourceType: 'payment_received',
+          sourceId: updatedInvoices[0].invoiceId,
+          receivedFrom: clientName,
+          lines: [
+            { accountId: payAcct.accountId, debit: totalAmount, credit: 0 },
+            { accountId: arId, debit: 0, credit: totalAmount },
+          ],
+        }, t);
+        await db.PaymentTransaction.update(
+          { journal_entry_id: entryId },
+          { where: { id: { [Op.in]: updatedInvoices.map((u) => u.paymentTransactionId) } }, transaction: t }
+        );
+      } catch (jeErr) {
+        console.warn('[GL] payment_received (multi-invoice) journal entry skipped:', jeErr.message);
+      }
+    }
+
+    await t.commit();
+    return { companyId, totalAmount, invoices: updatedInvoices };
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
+};
+
 const getAgingSummary = async (tenantId, filters = {}) => {
   const result = await listReceivables(tenantId, { ...filters, limit: 5000, offset: 0 });
   const rows = result.receivables;
@@ -446,6 +583,7 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
 module.exports = {
   listReceivables,
   recordPayment,
+  receivePayment,
   listPayments,
   getAgingSummary,
   getStatementOfAccount,

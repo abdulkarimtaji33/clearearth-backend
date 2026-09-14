@@ -34,6 +34,11 @@ const recordPayment = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, row, 'Payment recorded');
 });
 
+const receivePayment = asyncHandler(async (req, res) => {
+  const result = await receivablesService.receivePayment(req.tenant.id, req.body, req.user?.id);
+  return ApiResponse.success(res, result, 'Payment received and allocated');
+});
+
 const listPayments = asyncHandler(async (req, res) => {
   const rows = await receivablesService.listPayments(req.tenant.id, req.params.id);
   return ApiResponse.success(res, rows);
@@ -75,4 +80,4 @@ const getStatementPdf = asyncHandler(async (req, res) => {
   sendPdf(res, pdfBuffer, `statement-of-account-${req.params.companyId}.pdf`);
 });
 
-module.exports = { list, recordPayment, listPayments, agingSummary, getReceiptPdf, getStatement, getStatementPdf };
+module.exports = { list, recordPayment, receivePayment, listPayments, agingSummary, getReceiptPdf, getStatement, getStatementPdf };
