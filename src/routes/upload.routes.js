@@ -9,6 +9,7 @@ router.post('/deal-image', authenticate, uploadSingle('file'), uploadController.
 router.post('/company-document', authenticate, uploadSingle('file'), uploadController.uploadCompanyDocument);
 router.post('/wds-attachment', authenticate, uploadSingle('file'), uploadController.uploadWdsAttachment);
 router.post('/tenant-logo', authenticate, uploadSingle('file'), uploadController.uploadTenantLogo);
+router.post('/user-avatar', authenticate, uploadSingle('file'), uploadController.uploadUserAvatar);
 // Per-user signature — any authenticated user manages their own.
 router.post('/my-signature', authenticate, uploadSingle('file'), uploadController.uploadMySignature);
 router.delete('/my-signature', authenticate, uploadController.deleteMySignature);

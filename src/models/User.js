@@ -66,6 +66,10 @@ module.exports = (sequelize, DataTypes) => {
       avatar: {
         type: DataTypes.STRING(255),
       },
+      designation: {
+        type: DataTypes.STRING(100),
+        comment: 'Optional job title/designation shown on documents',
+      },
       signature: {
         type: DataTypes.STRING(255),
         comment: "Relative upload path to this user's signature image, printed beside the stamp on documents they prepare",

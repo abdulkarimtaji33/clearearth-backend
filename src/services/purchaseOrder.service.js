@@ -545,7 +545,7 @@ const ensurePurchaseBillForWorkOrder = async (tenantId, workOrderId) => {
   return vendorBill || clientBill || null;
 };
 
-const _approveClientQuotation = async (po, { approvedByUserId }) => {
+const _approveClientQuotation = async (po, { approvedByUserId, requestedPickupDate }) => {
   if (!_isClientQuotation(po)) {
     throw ApiError.badRequest('Only client purchase quotations use the approval workflow');
   }
@@ -559,15 +559,99 @@ const _approveClientQuotation = async (po, { approvedByUserId }) => {
     throw ApiError.badRequest('Purchase quotation cannot be approved in its current status');
   }
 
+  const pickupDate = requestedPickupDate || po.requested_pickup_date || null;
+
   await po.update({
     status: PO_STATUS.APPROVED,
     approved_by: approvedByUserId || null,
     approved_at: new Date(),
     approval_requested_at: null,
+    requested_pickup_date: pickupDate,
+    pickup_date_status: pickupDate ? 'pending' : null,
+    confirmed_pickup_date: null,
+    pickup_reschedule_note: null,
   });
 };
 
-const approve = async (tenantId, poId, actor = {}, scope = {}) => {
+/** Approved client purchase quotations convert straight into their work order — no separate manual step. */
+const _autoCreateWorkOrder = async (tenantId, po, userId) => {
+  const existing = await db.WorkOrder.findOne({ where: { tenant_id: tenantId, purchase_order_id: po.id } });
+  if (existing) return existing;
+  const workOrderService = require('./workOrder.service');
+  try {
+    return await workOrderService.create(tenantId, { purchaseOrderId: po.id, dealId: po.deal_id }, { userId });
+  } catch (err) {
+    console.warn('[purchaseOrder.approve] auto work order creation skipped:', err.message);
+    return null;
+  }
+};
+
+/** Operations confirms the sales-requested pickup date. */
+const confirmPickupDate = async (tenantId, poId, actor = {}) => {
+  const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
+  if (!po) throw ApiError.notFound('Purchase order not found');
+  if (po.status !== PO_STATUS.APPROVED) {
+    throw ApiError.badRequest('Only approved purchase orders have a pickup date to confirm');
+  }
+  if (!po.requested_pickup_date) {
+    throw ApiError.badRequest('No pickup date has been requested for this purchase order');
+  }
+
+  await po.update({
+    pickup_date_status: 'confirmed',
+    confirmed_pickup_date: po.requested_pickup_date,
+    pickup_reschedule_note: null,
+  });
+
+  const confirmedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyPickupDateConfirmed(tenantId, 'purchase_order', po, po.created_by, confirmedByUser);
+
+  return getById(tenantId, poId);
+};
+
+/** Operations requests a different pickup date instead of confirming. */
+const requestPickupReschedule = async (tenantId, poId, actor = {}, note = null) => {
+  const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
+  if (!po) throw ApiError.notFound('Purchase order not found');
+  if (po.status !== PO_STATUS.APPROVED) {
+    throw ApiError.badRequest('Only approved purchase orders have a pickup date to reschedule');
+  }
+  if (!po.requested_pickup_date) {
+    throw ApiError.badRequest('No pickup date has been requested for this purchase order');
+  }
+
+  await po.update({
+    pickup_date_status: 'reschedule_requested',
+    pickup_reschedule_note: note || null,
+  });
+
+  const requestedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyPickupRescheduleRequested(tenantId, 'purchase_order', po, po.created_by, requestedByUser, note);
+
+  return getById(tenantId, poId);
+};
+
+/** Sales submits a new pickup date after operations requested a reschedule. */
+const reschedulePickupDate = async (tenantId, poId, scope = {}, actor = {}, newPickupDate) => {
+  if (!newPickupDate) throw ApiError.badRequest('New pickup date is required');
+  const po = await getById(tenantId, poId, scope);
+  if (po.pickup_date_status !== 'reschedule_requested') {
+    throw ApiError.badRequest('Operations has not requested a reschedule for this purchase order');
+  }
+
+  await po.update({
+    requested_pickup_date: newPickupDate,
+    pickup_date_status: 'pending',
+    pickup_reschedule_note: null,
+  });
+
+  const rescheduledByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyPickupDateRescheduled(tenantId, 'purchase_order', po, rescheduledByUser);
+
+  return getById(tenantId, poId);
+};
+
+const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDate = null) => {
   if (!isManagerRole(actor.roleName)) {
     throw ApiError.forbidden('Only a manager can approve purchase quotations. Request manager approval instead.');
   }
@@ -575,7 +659,11 @@ const approve = async (tenantId, poId, actor = {}, scope = {}) => {
   const po = await getById(tenantId, poId, scope);
 
   const prevStatus = po.status;
-  await _approveClientQuotation(po, { approvedByUserId: actor.userId });
+  await _approveClientQuotation(po, { approvedByUserId: actor.userId, requestedPickupDate });
+  await _autoCreateWorkOrder(tenantId, po, actor.userId);
+
+  const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyPurchaseOrderApproved(tenantId, po, approvedByUser);
 
   if (prevStatus !== PO_STATUS.APPROVED) {
     try {
@@ -641,4 +729,7 @@ module.exports = {
   ensurePurchaseBillForWorkOrder,
   approve,
   requestApproval,
+  confirmPickupDate,
+  requestPickupReschedule,
+  reschedulePickupDate,
 };

@@ -20,6 +20,8 @@ const createUserValidation = [
   body('roleId').isInt().withMessage('Valid role ID is required'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
+  body('designation').optional({ values: 'falsy' }).isString(),
+  body('avatar').optional({ values: 'falsy' }).isString(),
   validate,
 ];
 
@@ -31,6 +33,8 @@ const updateUserValidation = [
   body('roleId').optional().isInt(),
   body('status').optional().isIn(['active', 'inactive', 'suspended', 'pending']),
   body('phone').optional({ values: 'falsy' }).custom(phoneValidator({ label: 'Phone number' })),
+  body('designation').optional({ values: 'falsy' }).isString(),
+  body('avatar').optional({ values: 'falsy' }).isString(),
   validate,
 ];
 

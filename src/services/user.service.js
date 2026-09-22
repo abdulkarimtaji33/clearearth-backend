@@ -69,9 +69,22 @@ const getDrivers = async (tenantId) => {
   return users;
 };
 
-const getAssignees = async (tenantId) => {
+const getAssignees = async (tenantId, roleNames) => {
+  const where = { tenant_id: tenantId, status: 'active' };
+  if (Array.isArray(roleNames) && roleNames.length > 0) {
+    const roles = await db.Role.findAll({
+      where: {
+        [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+        name: { [Op.in]: roleNames },
+      },
+      attributes: ['id'],
+    });
+    const roleIds = roles.map((r) => r.id);
+    if (roleIds.length === 0) return [];
+    where.role_id = { [Op.in]: roleIds };
+  }
   const users = await db.User.findAll({
-    where: { tenant_id: tenantId, status: 'active' },
+    where,
     attributes: ['id', 'first_name', 'last_name', 'email'],
     include: [{ model: db.Role, as: 'role', attributes: ['id', 'name', 'display_name'] }],
     order: [['first_name', 'ASC']],
@@ -90,7 +103,7 @@ const getById = async (tenantId, userId) => {
 };
 
 const create = async (tenantId, data) => {
-  const { email, password, roleId, firstName, lastName, phone } = data;
+  const { email, password, roleId, firstName, lastName, phone, designation, avatar } = data;
 
   const existingUser = await db.User.findOne({
     where: { tenant_id: tenantId, email },
@@ -109,6 +122,8 @@ const create = async (tenantId, data) => {
     first_name: firstName,
     last_name: lastName,
     phone,
+    designation: designation || null,
+    avatar: avatar || null,
     status: 'active',
   });
 
@@ -123,6 +138,8 @@ const update = async (tenantId, userId, data) => {
     last_name: data.lastName ?? user.last_name,
     phone: data.phone ?? user.phone,
     status: data.status ?? user.status,
+    designation: data.designation !== undefined ? (data.designation || null) : user.designation,
+    avatar: data.avatar !== undefined ? (data.avatar || null) : user.avatar,
   };
   if (data.roleId !== undefined) {
     const roleExists = await db.Role.findOne({

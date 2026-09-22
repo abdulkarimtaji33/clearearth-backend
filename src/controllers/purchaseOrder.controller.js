@@ -69,8 +69,33 @@ const approve = asyncHandler(async (req, res) => {
   const po = await purchaseOrderService.approve(req.tenant.id, req.params.id, {
     userId: req.user.id,
     roleName: req.user.role?.name,
-  }, scope);
+  }, scope, req.body.requestedPickupDate || null);
   return ApiResponse.success(res, po, 'Purchase quotation approved');
+});
+
+const confirmPickupDate = asyncHandler(async (req, res) => {
+  const po = await purchaseOrderService.confirmPickupDate(req.tenant.id, req.params.id, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, po, 'Pickup date confirmed');
+});
+
+const requestPickupReschedule = asyncHandler(async (req, res) => {
+  const po = await purchaseOrderService.requestPickupReschedule(req.tenant.id, req.params.id, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  }, req.body.note || null);
+  return ApiResponse.success(res, po, 'Reschedule requested');
+});
+
+const reschedulePickupDate = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const po = await purchaseOrderService.reschedulePickupDate(req.tenant.id, req.params.id, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  }, req.body.pickupDate);
+  return ApiResponse.success(res, po, 'Pickup date rescheduled');
 });
 
 const requestApproval = asyncHandler(async (req, res) => {
@@ -127,4 +152,7 @@ module.exports = {
   getPdf,
   approve,
   requestApproval,
+  confirmPickupDate,
+  requestPickupReschedule,
+  reschedulePickupDate,
 };

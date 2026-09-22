@@ -155,7 +155,7 @@ const update = async (tenantId, quotationId, data, scope = {}, actor = null) => 
   throw ApiError.badRequest('Quotations cannot be edited after creation');
 };
 
-const _approveQuotation = async (quotation, { approvedByUserId }) => {
+const _approveQuotation = async (quotation, { approvedByUserId, requestedPickupDate }) => {
   if (quotation.status === QUOTATION_STATUS.APPROVED) {
     throw ApiError.badRequest('Quotation is already approved');
   }
@@ -166,25 +166,119 @@ const _approveQuotation = async (quotation, { approvedByUserId }) => {
     throw ApiError.badRequest('Quotation cannot be approved in its current status');
   }
 
+  const pickupDate = requestedPickupDate || quotation.requested_pickup_date || null;
+
   await quotation.update({
     status: QUOTATION_STATUS.APPROVED,
     approved_by: approvedByUserId || null,
     approved_at: new Date(),
     approval_requested_at: null,
+    requested_pickup_date: pickupDate,
+    pickup_date_status: pickupDate ? 'pending' : null,
+    confirmed_pickup_date: null,
+    pickup_reschedule_note: null,
   });
 };
 
-const approve = async (tenantId, quotationId, scope = {}, actor = {}) => {
+/** Approved service quotations convert straight into their work order — no separate manual step. */
+const _autoCreateWorkOrder = async (tenantId, quotation, userId) => {
+  const existing = await db.WorkOrder.findOne({ where: { tenant_id: tenantId, quotation_id: quotation.id } });
+  if (existing) return existing;
+  const workOrderService = require('./workOrder.service');
+  try {
+    return await workOrderService.create(tenantId, { quotationId: quotation.id, dealId: quotation.deal_id }, { userId });
+  } catch (err) {
+    console.warn('[quotation.approve] auto work order creation skipped:', err.message);
+    return null;
+  }
+};
+
+const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedPickupDate = null) => {
   if (!isManagerRole(actor.roleName)) {
     throw ApiError.forbidden('Only a manager can approve quotations. Request manager approval instead.');
   }
 
   const where = { id: quotationId, tenant_id: tenantId };
   if (scope.scopeUserId) where.prepared_by = scope.scopeUserId;
-  const quotation = await db.Quotation.findOne({ where });
+  const quotation = await db.Quotation.findOne({
+    where,
+    include: [{ model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false }],
+  });
   if (!quotation) throw ApiError.notFound('Quotation not found');
 
-  await _approveQuotation(quotation, { approvedByUserId: actor.userId });
+  await _approveQuotation(quotation, { approvedByUserId: actor.userId, requestedPickupDate });
+  await _autoCreateWorkOrder(tenantId, quotation, actor.userId);
+
+  const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyQuotationApproved(tenantId, quotation, approvedByUser);
+
+  return await getById(tenantId, quotationId);
+};
+
+/** Operations confirms the sales-requested pickup date. */
+const confirmPickupDate = async (tenantId, quotationId, actor = {}) => {
+  const quotation = await db.Quotation.findOne({ where: { id: quotationId, tenant_id: tenantId } });
+  if (!quotation) throw ApiError.notFound('Quotation not found');
+  if (quotation.status !== QUOTATION_STATUS.APPROVED) {
+    throw ApiError.badRequest('Only approved quotations have a pickup date to confirm');
+  }
+  if (!quotation.requested_pickup_date) {
+    throw ApiError.badRequest('No pickup date has been requested for this quotation');
+  }
+
+  await quotation.update({
+    pickup_date_status: 'confirmed',
+    confirmed_pickup_date: quotation.requested_pickup_date,
+    pickup_reschedule_note: null,
+  });
+
+  const confirmedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyPickupDateConfirmed(tenantId, 'quotation', quotation, quotation.prepared_by, confirmedByUser);
+
+  return await getById(tenantId, quotationId);
+};
+
+/** Operations requests a different pickup date instead of confirming. */
+const requestPickupReschedule = async (tenantId, quotationId, actor = {}, note = null) => {
+  const quotation = await db.Quotation.findOne({ where: { id: quotationId, tenant_id: tenantId } });
+  if (!quotation) throw ApiError.notFound('Quotation not found');
+  if (quotation.status !== QUOTATION_STATUS.APPROVED) {
+    throw ApiError.badRequest('Only approved quotations have a pickup date to reschedule');
+  }
+  if (!quotation.requested_pickup_date) {
+    throw ApiError.badRequest('No pickup date has been requested for this quotation');
+  }
+
+  await quotation.update({
+    pickup_date_status: 'reschedule_requested',
+    pickup_reschedule_note: note || null,
+  });
+
+  const requestedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyPickupRescheduleRequested(tenantId, 'quotation', quotation, quotation.prepared_by, requestedByUser, note);
+
+  return await getById(tenantId, quotationId);
+};
+
+/** Sales submits a new pickup date after operations requested a reschedule. */
+const reschedulePickupDate = async (tenantId, quotationId, scope = {}, actor = {}, newPickupDate) => {
+  if (!newPickupDate) throw ApiError.badRequest('New pickup date is required');
+  const where = { id: quotationId, tenant_id: tenantId };
+  if (scope.scopeUserId) where.prepared_by = scope.scopeUserId;
+  const quotation = await db.Quotation.findOne({ where });
+  if (!quotation) throw ApiError.notFound('Quotation not found');
+  if (quotation.pickup_date_status !== 'reschedule_requested') {
+    throw ApiError.badRequest('Operations has not requested a reschedule for this quotation');
+  }
+
+  await quotation.update({
+    requested_pickup_date: newPickupDate,
+    pickup_date_status: 'pending',
+    pickup_reschedule_note: null,
+  });
+
+  const rescheduledByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
+  await notificationService.notifyPickupDateRescheduled(tenantId, 'quotation', quotation, rescheduledByUser);
 
   return await getById(tenantId, quotationId);
 };
@@ -237,5 +331,8 @@ module.exports = {
   remove,
   approve,
   requestApproval,
+  confirmPickupDate,
+  requestPickupReschedule,
+  reschedulePickupDate,
 };
 

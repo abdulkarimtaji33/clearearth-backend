@@ -28,6 +28,13 @@ module.exports = (sequelize, DataTypes) => {
       approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       approved_at: { type: DataTypes.DATE, allowNull: true },
       remarks: { type: DataTypes.TEXT },
+      pickup_date_status: {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        comment: 'none | pending | confirmed | reschedule_requested',
+      },
+      confirmed_pickup_date: { type: DataTypes.DATEONLY, allowNull: true },
+      pickup_reschedule_note: { type: DataTypes.TEXT, allowNull: true },
     },
     {
       tableName: 'quotations',

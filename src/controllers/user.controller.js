@@ -37,7 +37,10 @@ const getDrivers = asyncHandler(async (req, res) => {
 });
 
 const getAssignees = asyncHandler(async (req, res) => {
-  const users = await userService.getAssignees(req.tenant.id);
+  const roleNames = req.query.roles
+    ? String(req.query.roles).split(',').map((r) => r.trim()).filter(Boolean)
+    : null;
+  const users = await userService.getAssignees(req.tenant.id, roleNames);
   return ApiResponse.success(res, users);
 });
 

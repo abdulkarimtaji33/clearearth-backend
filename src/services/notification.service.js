@@ -270,6 +270,100 @@ const getAccountsUserIds = async (tenantId) => {
   return users.map(u => u.id);
 };
 
+const getOperationsManagerUserIds = async (tenantId) => {
+  const roles = await db.Role.findAll({
+    where: { name: 'operations_manager', [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
+    attributes: ['id'],
+  });
+  const roleIds = roles.map(r => r.id);
+  if (roleIds.length === 0) return [];
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
+    attributes: ['id'],
+  });
+  return users.map(u => u.id);
+};
+
+const notifyQuotationApproved = async (tenantId, quotation, approvedByUser) => {
+  const recipientIds = await getOperationsManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+  const dealTitle = quotation.deal?.title || quotation.deal?.deal_number || `Deal #${quotation.deal_id}`;
+  const userName = approvedByUser
+    ? [approvedByUser.first_name, approvedByUser.last_name].filter(Boolean).join(' ')
+    : 'A manager';
+  const pickupNote = quotation.requested_pickup_date ? ` Requested pickup date: ${quotation.requested_pickup_date}.` : '';
+  await createForUsers(tenantId, recipientIds, {
+    type: 'quotation_approved',
+    title: 'Service order approved',
+    message: `${userName} approved service quotation #${quotation.id} (${dealTitle}).${pickupNote}`,
+    entityType: 'quotation',
+    entityId: quotation.id,
+  });
+};
+
+const notifyPurchaseOrderApproved = async (tenantId, po, approvedByUser) => {
+  const recipientIds = await getOperationsManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+  const companyName = po.company?.company_name || 'Unknown client';
+  const userName = approvedByUser
+    ? [approvedByUser.first_name, approvedByUser.last_name].filter(Boolean).join(' ')
+    : 'A manager';
+  const pickupNote = po.requested_pickup_date ? ` Requested pickup date: ${po.requested_pickup_date}.` : '';
+  await createForUsers(tenantId, recipientIds, {
+    type: 'purchase_order_approved',
+    title: 'Purchase order approved',
+    message: `${userName} approved purchase order #${po.id} (${companyName}).${pickupNote}`,
+    entityType: 'purchase_order',
+    entityId: po.id,
+  });
+};
+
+const notifyPickupDateConfirmed = async (tenantId, entityType, entity, preparedByUserId, confirmedByUser) => {
+  if (!preparedByUserId) return;
+  const userName = confirmedByUser
+    ? [confirmedByUser.first_name, confirmedByUser.last_name].filter(Boolean).join(' ')
+    : 'Operations';
+  const label = entityType === 'quotation' ? `service quotation #${entity.id}` : `purchase order #${entity.id}`;
+  await createForUsers(tenantId, [preparedByUserId], {
+    type: 'pickup_date_confirmed',
+    title: 'Pickup date confirmed',
+    message: `${userName} confirmed the requested pickup date (${entity.requested_pickup_date}) for ${label}.`,
+    entityType,
+    entityId: entity.id,
+  });
+};
+
+const notifyPickupRescheduleRequested = async (tenantId, entityType, entity, preparedByUserId, requestedByUser, note) => {
+  if (!preparedByUserId) return;
+  const userName = requestedByUser
+    ? [requestedByUser.first_name, requestedByUser.last_name].filter(Boolean).join(' ')
+    : 'Operations';
+  const label = entityType === 'quotation' ? `service quotation #${entity.id}` : `purchase order #${entity.id}`;
+  await createForUsers(tenantId, [preparedByUserId], {
+    type: 'pickup_reschedule_requested',
+    title: 'Pickup date reschedule requested',
+    message: `${userName} requested a new pickup date for ${label}${note ? `: ${note}` : '.'}`,
+    entityType,
+    entityId: entity.id,
+  });
+};
+
+const notifyPickupDateRescheduled = async (tenantId, entityType, entity, rescheduledByUser) => {
+  const recipientIds = await getOperationsManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+  const userName = rescheduledByUser
+    ? [rescheduledByUser.first_name, rescheduledByUser.last_name].filter(Boolean).join(' ')
+    : 'Sales';
+  const label = entityType === 'quotation' ? `service quotation #${entity.id}` : `purchase order #${entity.id}`;
+  await createForUsers(tenantId, recipientIds, {
+    type: 'pickup_date_rescheduled',
+    title: 'Pickup date rescheduled',
+    message: `${userName} proposed a new pickup date (${entity.requested_pickup_date}) for ${label}. Please confirm.`,
+    entityType,
+    entityId: entity.id,
+  });
+};
+
 const notifyExpenseSubmitted = async (tenantId, workOrderId, taskName, submittedByUser) => {
   const recipientIds = await getAccountsUserIds(tenantId);
   if (recipientIds.length === 0) return;
@@ -298,4 +392,10 @@ module.exports = {
   notifyQuotationApprovalRequested,
   notifyPurchaseOrderApprovalRequested,
   notifyExpenseSubmitted,
+  getOperationsManagerUserIds,
+  notifyQuotationApproved,
+  notifyPurchaseOrderApproved,
+  notifyPickupDateConfirmed,
+  notifyPickupRescheduleRequested,
+  notifyPickupDateRescheduled,
 };

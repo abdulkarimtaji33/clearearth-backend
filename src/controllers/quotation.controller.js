@@ -73,9 +73,34 @@ const approve = asyncHandler(async (req, res) => {
   const quotation = await quotationService.approve(req.tenant.id, req.params.id, scope, {
     userId: req.user.id,
     roleName: req.user.role?.name,
-  });
+  }, req.body.requestedPickupDate || null);
   const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Quotation approved');
+});
+
+const confirmPickupDate = asyncHandler(async (req, res) => {
+  const quotation = await quotationService.confirmPickupDate(req.tenant.id, req.params.id, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  });
+  return ApiResponse.success(res, quotation, 'Pickup date confirmed');
+});
+
+const requestPickupReschedule = asyncHandler(async (req, res) => {
+  const quotation = await quotationService.requestPickupReschedule(req.tenant.id, req.params.id, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  }, req.body.note || null);
+  return ApiResponse.success(res, quotation, 'Reschedule requested');
+});
+
+const reschedulePickupDate = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const quotation = await quotationService.reschedulePickupDate(req.tenant.id, req.params.id, scope, {
+    userId: req.user.id,
+    roleName: req.user.role?.name,
+  }, req.body.pickupDate);
+  return ApiResponse.success(res, quotation, 'Pickup date rescheduled');
 });
 
 const requestApproval = asyncHandler(async (req, res) => {
@@ -121,5 +146,8 @@ module.exports = {
   remove,
   approve,
   requestApproval,
+  confirmPickupDate,
+  requestPickupReschedule,
+  reschedulePickupDate,
   getPdf,
 };

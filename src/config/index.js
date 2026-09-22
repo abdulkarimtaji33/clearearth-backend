@@ -66,7 +66,7 @@ module.exports = {
   // Pagination
   pagination: {
     defaultPageSize: parseInt(process.env.DEFAULT_PAGE_SIZE) || 20,
-    maxPageSize: parseInt(process.env.MAX_PAGE_SIZE) || 100,
+    maxPageSize: parseInt(process.env.MAX_PAGE_SIZE) || 1000,
   },
 
   // Locale & Currency
