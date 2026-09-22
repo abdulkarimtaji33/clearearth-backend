@@ -2436,6 +2436,40 @@ async function runMigration() {
       console.log('  purchase_orders.requested_pickup_date already exists, skipping');
     }
 
+    console.log('Adding users.designation column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE users ADD COLUMN designation VARCHAR(100) NULL COMMENT 'Optional job title/designation shown on documents'`);
+      console.log('  Added users.designation');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  users.designation already exists, skipping');
+    }
+
+    console.log('Adding pickup-date workflow columns to quotations and purchase_orders...');
+    for (const table of ['quotations', 'purchase_orders']) {
+      try {
+        await db.sequelize.query(`ALTER TABLE ${table} ADD COLUMN pickup_date_status VARCHAR(30) NULL COMMENT 'none | pending | confirmed | reschedule_requested'`);
+        console.log(`  Added ${table}.pickup_date_status`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+        console.log(`  ${table}.pickup_date_status already exists, skipping`);
+      }
+      try {
+        await db.sequelize.query(`ALTER TABLE ${table} ADD COLUMN confirmed_pickup_date DATE NULL`);
+        console.log(`  Added ${table}.confirmed_pickup_date`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+        console.log(`  ${table}.confirmed_pickup_date already exists, skipping`);
+      }
+      try {
+        await db.sequelize.query(`ALTER TABLE ${table} ADD COLUMN pickup_reschedule_note TEXT NULL`);
+        console.log(`  Added ${table}.pickup_reschedule_note`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+        console.log(`  ${table}.pickup_reschedule_note already exists, skipping`);
+      }
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
