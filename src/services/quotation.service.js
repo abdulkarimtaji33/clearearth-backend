@@ -194,7 +194,7 @@ const _autoCreateWorkOrder = async (tenantId, quotation, userId) => {
 };
 
 const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedPickupDate = null) => {
-  if (!isManagerRole(actor.roleName)) {
+  if (!isManagerRole(actor.roleName) && actor.roleName !== 'sales') {
     throw ApiError.forbidden('Only a manager can approve quotations. Request manager approval instead.');
   }
 

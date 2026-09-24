@@ -652,7 +652,7 @@ const reschedulePickupDate = async (tenantId, poId, scope = {}, actor = {}, newP
 };
 
 const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDate = null) => {
-  if (!isManagerRole(actor.roleName)) {
+  if (!isManagerRole(actor.roleName) && actor.roleName !== 'sales') {
     throw ApiError.forbidden('Only a manager can approve purchase quotations. Request manager approval instead.');
   }
 
