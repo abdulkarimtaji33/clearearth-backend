@@ -336,7 +336,7 @@ async function getOperationsOverview(tenantId) {
 
   const [
     woInProgress, overdueTasks, pendingExpenses, draftGrns, unassignedPickups, overdueTaskRows, driverActivity,
-    recentServiceOrderRows, recentPurchaseOrderRows,
+    recentServiceOrderRows, recentPurchaseOrderRows, todayTaskRows,
   ] = await Promise.all([
     db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'in_progress' } }),
     db.WorkOrderTask.count({
@@ -392,6 +392,19 @@ async function getOperationsOverview(tenantId) {
       ],
       order: [['approved_at', 'DESC']],
       limit: 10,
+    }).catch(() => []),
+    db.WorkOrderTask.findAll({
+      where: {
+        status: { [Op.ne]: 'completed' },
+        start_date: { [Op.lte]: today },
+        [Op.or]: [{ end_date: { [Op.gte]: today } }, { end_date: null }],
+      },
+      include: [
+        { model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'title', 'status'] },
+        { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
+      ],
+      order: [['start_date', 'ASC']],
+      limit: 20,
     }).catch(() => []),
   ]);
 
@@ -459,6 +472,27 @@ async function getOperationsOverview(tenantId) {
         workOrderStatus: plain.sourceWorkOrder?.status || null,
       };
     }),
+    todayWorkOrders: (() => {
+      const seen = new Map();
+      todayTaskRows.forEach((t) => {
+        const plain = t.get({ plain: true });
+        const woId = plain.work_order_id;
+        if (!woId || seen.has(woId)) return;
+        seen.set(woId, {
+          workOrderId: woId,
+          workOrderTitle: plain.workOrder?.title || `WO #${woId}`,
+          workOrderStatus: plain.workOrder?.status || null,
+          typeOfWork: plain.type_of_work,
+          assignedTo: plain.assignedUser
+            ? `${plain.assignedUser.first_name} ${plain.assignedUser.last_name}`
+            : 'Unassigned',
+          startDate: plain.start_date,
+          endDate: plain.end_date,
+          status: plain.status,
+        });
+      });
+      return Array.from(seen.values());
+    })(),
   };
 }
 
