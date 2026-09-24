@@ -180,19 +180,6 @@ const _approveQuotation = async (quotation, { approvedByUserId, requestedPickupD
   });
 };
 
-/** Approved service quotations convert straight into their work order — no separate manual step. */
-const _autoCreateWorkOrder = async (tenantId, quotation, userId) => {
-  const existing = await db.WorkOrder.findOne({ where: { tenant_id: tenantId, quotation_id: quotation.id } });
-  if (existing) return existing;
-  const workOrderService = require('./workOrder.service');
-  try {
-    return await workOrderService.create(tenantId, { quotationId: quotation.id, dealId: quotation.deal_id }, { userId });
-  } catch (err) {
-    console.warn('[quotation.approve] auto work order creation skipped:', err.message);
-    return null;
-  }
-};
-
 const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedPickupDate = null) => {
   if (!isManagerRole(actor.roleName) && actor.roleName !== 'sales') {
     throw ApiError.forbidden('Only a manager can approve quotations. Request manager approval instead.');
@@ -207,7 +194,6 @@ const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedP
   if (!quotation) throw ApiError.notFound('Quotation not found');
 
   await _approveQuotation(quotation, { approvedByUserId: actor.userId, requestedPickupDate });
-  await _autoCreateWorkOrder(tenantId, quotation, actor.userId);
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
   await notificationService.notifyQuotationApproved(tenantId, quotation, approvedByUser);

@@ -573,19 +573,6 @@ const _approveClientQuotation = async (po, { approvedByUserId, requestedPickupDa
   });
 };
 
-/** Approved client purchase quotations convert straight into their work order — no separate manual step. */
-const _autoCreateWorkOrder = async (tenantId, po, userId) => {
-  const existing = await db.WorkOrder.findOne({ where: { tenant_id: tenantId, purchase_order_id: po.id } });
-  if (existing) return existing;
-  const workOrderService = require('./workOrder.service');
-  try {
-    return await workOrderService.create(tenantId, { purchaseOrderId: po.id, dealId: po.deal_id }, { userId });
-  } catch (err) {
-    console.warn('[purchaseOrder.approve] auto work order creation skipped:', err.message);
-    return null;
-  }
-};
-
 /** Operations confirms the sales-requested pickup date. */
 const confirmPickupDate = async (tenantId, poId, actor = {}) => {
   const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId } });
@@ -660,7 +647,6 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
 
   const prevStatus = po.status;
   await _approveClientQuotation(po, { approvedByUserId: actor.userId, requestedPickupDate });
-  await _autoCreateWorkOrder(tenantId, po, actor.userId);
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
   await notificationService.notifyPurchaseOrderApproved(tenantId, po, approvedByUser);
