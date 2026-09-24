@@ -461,6 +461,19 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
     }
 
     await transaction.commit();
+
+    if (data.inspectionRequired && data.inspectionDetails) {
+      try {
+        const request = await db.DealInspectionRequest.findOne({
+          where: { deal_id: deal.id },
+          include: [{ model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], include: [{ model: db.Company, as: 'company', attributes: ['company_name'], required: false }] }],
+        });
+        if (request) await notificationService.notifyInspectionRequestCreated(tenantId, request, actor);
+      } catch (err) {
+        console.warn('[Notification] inspection request created skipped:', err.message);
+      }
+    }
+
     return await getById(tenantId, deal.id);
   } catch (error) {
     if (!transaction.finished) {
@@ -577,9 +590,11 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
     }
 
     // Handle inspection request
+    let newInspectionRequestCreated = false;
     if (data.inspectionRequired && data.inspectionDetails) {
       const insp = data.inspectionDetails;
       const existingInsp = await db.DealInspectionRequest.findOne({ where: { deal_id: dealId }, transaction });
+      newInspectionRequestCreated = !existingInsp;
       const inspPayload = {
         material_type_id: insp.materialTypeId || null,
         location: insp.location || null,
@@ -668,6 +683,18 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         await notificationService.notifyDealStatusChange(tenantId, deal, previousStatus, newStatus, actor);
       } catch (err) {
         console.warn('[Notification] deal status change skipped:', err.message);
+      }
+    }
+
+    if (newInspectionRequestCreated) {
+      try {
+        const request = await db.DealInspectionRequest.findOne({
+          where: { deal_id: dealId },
+          include: [{ model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], include: [{ model: db.Company, as: 'company', attributes: ['company_name'], required: false }] }],
+        });
+        if (request) await notificationService.notifyInspectionRequestCreated(tenantId, request, actor);
+      } catch (err) {
+        console.warn('[Notification] inspection request created skipped:', err.message);
       }
     }
 
@@ -774,15 +801,27 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}, actor = 
     notes: data.notes || null,
   };
 
+  const isNewReport = !existing;
   if (existing) {
     await existing.update(payload);
   } else {
     await db.DealInspectionReport.create(payload);
   }
 
-  const inspectionRequest = await db.DealInspectionRequest.findOne({ where: { deal_id: dealId } });
+  const inspectionRequest = await db.DealInspectionRequest.findOne({
+    where: { deal_id: dealId },
+    include: [{ model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], include: [{ model: db.Company, as: 'company', attributes: ['company_name'], required: false }] }],
+  });
   if (inspectionRequest && inspectionRequest.status !== 'report_submitted') {
     await inspectionRequest.update({ status: 'report_submitted' });
+  }
+
+  if (isNewReport && inspectionRequest) {
+    try {
+      await notificationService.notifyInspectionReportSubmitted(tenantId, inspectionRequest, actor);
+    } catch (err) {
+      console.warn('[Notification] inspection report submitted skipped:', err.message);
+    }
   }
 
   return await getById(tenantId, dealId);

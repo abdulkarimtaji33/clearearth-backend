@@ -87,6 +87,26 @@ const getSalesManagerUserIds = async (tenantId) => {
   return users.map(u => u.id);
 };
 
+const INSPECTION_TEAM_ROLES = ['inspection_team', 'inspection'];
+
+const getInspectionTeamUserIds = async (tenantId) => {
+  const roles = await db.Role.findAll({
+    where: {
+      name: { [Op.in]: INSPECTION_TEAM_ROLES },
+      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
+    },
+    attributes: ['id'],
+  });
+  const roleIds = roles.map(r => r.id);
+  if (roleIds.length === 0) return [];
+
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
+    attributes: ['id'],
+  });
+  return users.map(u => u.id);
+};
+
 const getManagerAndAdminUserIds = async (tenantId) => {
   const roles = await db.Role.findAll({
     where: {
@@ -154,6 +174,45 @@ const notifyInspectionRejected = async (tenantId, request, reason, rejectedByUse
     type: 'inspection_rejected',
     title: 'Inspection request rejected',
     message: `Your inspection request for deal "${deal?.title || ''}" (${companyName}) was rejected by ${userName}. Reason: ${reason}`,
+    entityType: 'inspection_request',
+    entityId: request.id,
+  });
+};
+
+const notifyInspectionRequestCreated = async (tenantId, request, createdByUser) => {
+  const recipientIds = await getInspectionTeamUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+
+  const deal = request.deal;
+  const companyName = deal?.company?.company_name || deal?.supplier?.company_name || '';
+  const userName = createdByUser
+    ? [createdByUser.first_name, createdByUser.last_name].filter(Boolean).join(' ')
+    : 'A user';
+  const dealLabel = deal?.deal_number ? `Deal ${deal.deal_number}` : (deal?.id ? `Deal #${deal.id}` : 'a deal');
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'inspection_request_created',
+    title: 'New inspection request',
+    message: `${userName} requested an inspection for ${dealLabel}${companyName ? ` (${companyName})` : ''}.`,
+    entityType: 'inspection_request',
+    entityId: request.id,
+  });
+};
+
+const notifyInspectionReportSubmitted = async (tenantId, request, submittedByUser) => {
+  if (!request.requested_by) return;
+
+  const deal = request.deal;
+  const companyName = deal?.company?.company_name || deal?.supplier?.company_name || '';
+  const userName = submittedByUser
+    ? [submittedByUser.first_name, submittedByUser.last_name].filter(Boolean).join(' ')
+    : 'Inspection team';
+  const dealLabel = deal?.deal_number ? `Deal ${deal.deal_number}` : (deal?.id ? `Deal #${deal.id}` : 'a deal');
+
+  await createForUsers(tenantId, [request.requested_by], {
+    type: 'inspection_report_submitted',
+    title: 'Inspection report submitted',
+    message: `${userName} submitted the inspection report for ${dealLabel}${companyName ? ` (${companyName})` : ''}.`,
     entityType: 'inspection_request',
     entityId: request.id,
   });
@@ -383,6 +442,8 @@ module.exports = {
   getForUser,
   markRead,
   markAllRead,
+  notifyInspectionRequestCreated,
+  notifyInspectionReportSubmitted,
   createForUsers,
   notifyDealStatusChange,
   notifyInspectionRejected,

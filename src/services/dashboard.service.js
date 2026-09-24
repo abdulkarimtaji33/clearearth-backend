@@ -336,7 +336,7 @@ async function getOperationsOverview(tenantId) {
 
   const [
     woInProgress, overdueTasks, pendingExpenses, draftGrns, unassignedPickups, overdueTaskRows, driverActivity,
-    recentServiceOrderRows, recentPurchaseOrderRows, todayTaskRows,
+    recentServiceOrderRows, recentPurchaseOrderRows, todayTaskRows, todayCreatedWorkOrders,
   ] = await Promise.all([
     db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'in_progress' } }),
     db.WorkOrderTask.count({
@@ -404,6 +404,16 @@ async function getOperationsOverview(tenantId) {
         { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name'], required: false },
       ],
       order: [['start_date', 'ASC']],
+      limit: 20,
+    }).catch(() => []),
+    db.WorkOrder.findAll({
+      where: {
+        tenant_id: tenantId,
+        status: { [Op.ne]: 'cancelled' },
+        created_at: { [Op.gte]: `${today} 00:00:00`, [Op.lt]: `${today} 23:59:59` },
+      },
+      attributes: ['id', 'title', 'status'],
+      order: [['created_at', 'DESC']],
       limit: 20,
     }).catch(() => []),
   ]);
@@ -489,6 +499,19 @@ async function getOperationsOverview(tenantId) {
           startDate: plain.start_date,
           endDate: plain.end_date,
           status: plain.status,
+        });
+      });
+      todayCreatedWorkOrders.forEach((wo) => {
+        if (seen.has(wo.id)) return;
+        seen.set(wo.id, {
+          workOrderId: wo.id,
+          workOrderTitle: wo.title || `WO #${wo.id}`,
+          workOrderStatus: wo.status || null,
+          typeOfWork: 'New work order',
+          assignedTo: 'Unassigned',
+          startDate: null,
+          endDate: null,
+          status: wo.status,
         });
       });
       return Array.from(seen.values());
