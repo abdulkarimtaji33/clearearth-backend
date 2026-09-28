@@ -45,6 +45,17 @@ const set = async (tenantId, actorUserId, employeeId, body) => {
       is_active: true,
       created_by: actorUserId || null,
     }, { transaction: t });
+
+    await db.EmployeeHistory.create({
+      tenant_id: tenantId,
+      employee_id: employeeId,
+      event_type: 'salary_change',
+      field_name: 'basic_salary',
+      old_value: prior ? String(prior.basic_salary) : null,
+      new_value: String(basic),
+      effective_date: effectiveFrom,
+      recorded_by: actorUserId || null,
+    }, { transaction: t });
   });
 
   return row;

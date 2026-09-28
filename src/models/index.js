@@ -109,6 +109,20 @@ const Commission = require('./Commission')(sequelize, DataTypes);
 // Inspection Request Location Sharing
 const DealInspectionLocationToken = require('./DealInspectionLocationToken')(sequelize, DataTypes);
 
+// Expanded Employee Record (HRM)
+const WorkLocation = require('./WorkLocation')(sequelize, DataTypes);
+const EmployeeEmergencyContact = require('./EmployeeEmergencyContact')(sequelize, DataTypes);
+const EmployeeDependent = require('./EmployeeDependent')(sequelize, DataTypes);
+const EmployeeQualification = require('./EmployeeQualification')(sequelize, DataTypes);
+const EmployeeSkill = require('./EmployeeSkill')(sequelize, DataTypes);
+const EmployeeCertification = require('./EmployeeCertification')(sequelize, DataTypes);
+const EmployeePreviousEmployment = require('./EmployeePreviousEmployment')(sequelize, DataTypes);
+const DocumentType = require('./DocumentType')(sequelize, DataTypes);
+const EmployeeDocument = require('./EmployeeDocument')(sequelize, DataTypes);
+const EmployeeNote = require('./EmployeeNote')(sequelize, DataTypes);
+const EmployeeHistory = require('./EmployeeHistory')(sequelize, DataTypes);
+const ProfileChangeRequest = require('./ProfileChangeRequest')(sequelize, DataTypes);
+
 // Create db object with all models
 const db = {
   sequelize,
@@ -192,6 +206,18 @@ const db = {
   CommissionSetting,
   Commission,
   DealInspectionLocationToken,
+  WorkLocation,
+  EmployeeEmergencyContact,
+  EmployeeDependent,
+  EmployeeQualification,
+  EmployeeSkill,
+  EmployeeCertification,
+  EmployeePreviousEmployment,
+  DocumentType,
+  EmployeeDocument,
+  EmployeeNote,
+  EmployeeHistory,
+  ProfileChangeRequest,
 };
 
 // Define Associations

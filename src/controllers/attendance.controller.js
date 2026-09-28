@@ -6,12 +6,14 @@ const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 
 const checkIn = asyncHandler(async (req, res) => {
-  const record = await attendanceService.checkIn(req.tenant.id, req.user.id);
+  const { lat, lng } = req.body || {};
+  const record = await attendanceService.checkIn(req.tenant.id, req.user.id, { lat, lng, ip: req.ip });
   return ApiResponse.success(res, record, 'Checked in successfully');
 });
 
 const checkOut = asyncHandler(async (req, res) => {
-  const record = await attendanceService.checkOut(req.tenant.id, req.user.id);
+  const { lat, lng } = req.body || {};
+  const record = await attendanceService.checkOut(req.tenant.id, req.user.id, { lat, lng, ip: req.ip });
   return ApiResponse.success(res, record, 'Checked out successfully');
 });
 

@@ -34,6 +34,40 @@ module.exports = (sequelize, DataTypes) => {
       notes: { type: DataTypes.TEXT, allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       deleted_at: { type: DataTypes.DATE, allowNull: true },
+
+      // -- Expanded profile fields (all nullable) --------------------------
+      profile_photo: { type: DataTypes.STRING(500), allowNull: true },
+      middle_name: { type: DataTypes.STRING(100), allowNull: true },
+      preferred_name: { type: DataTypes.STRING(100), allowNull: true },
+      legal_full_name: { type: DataTypes.STRING(255), allowNull: true },
+      marital_status: { type: DataTypes.ENUM('single', 'married', 'divorced', 'widowed'), allowNull: true },
+      religion: { type: DataTypes.STRING(50), allowNull: true },
+      blood_group: { type: DataTypes.STRING(10), allowNull: true },
+      personal_email: { type: DataTypes.STRING(150), allowNull: true },
+      work_email: { type: DataTypes.STRING(150), allowNull: true },
+      personal_phone: { type: DataTypes.STRING(20), allowNull: true },
+      work_phone: { type: DataTypes.STRING(20), allowNull: true },
+      current_address_line1: { type: DataTypes.STRING(255), allowNull: true },
+      current_address_city: { type: DataTypes.STRING(100), allowNull: true },
+      current_address_emirate: { type: DataTypes.STRING(100), allowNull: true },
+      current_address_country: { type: DataTypes.STRING(100), allowNull: true },
+      current_address_postal: { type: DataTypes.STRING(20), allowNull: true },
+      permanent_address_line1: { type: DataTypes.STRING(255), allowNull: true },
+      permanent_address_city: { type: DataTypes.STRING(100), allowNull: true },
+      permanent_address_emirate: { type: DataTypes.STRING(100), allowNull: true },
+      permanent_address_country: { type: DataTypes.STRING(100), allowNull: true },
+      permanent_address_postal: { type: DataTypes.STRING(20), allowNull: true },
+      work_location_id: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'work_locations', key: 'id' } },
+      probation_start: { type: DataTypes.DATEONLY, allowNull: true },
+      probation_end: { type: DataTypes.DATEONLY, allowNull: true },
+      confirmation_date: { type: DataTypes.DATEONLY, allowNull: true },
+      labour_card_no: { type: DataTypes.STRING(50), allowNull: true },
+      mol_person_id: { type: DataTypes.STRING(50), allowNull: true },
+      wps_person_code: { type: DataTypes.STRING(50), allowNull: true },
+      tax_id: { type: DataTypes.STRING(50), allowNull: true },
+      payment_method_detail: { type: DataTypes.STRING(50), allowNull: true },
+      routing_code: { type: DataTypes.STRING(50), allowNull: true },
+      salary_visible_to_employee: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: true },
     },
     {
       tableName: 'employees',
@@ -58,11 +92,22 @@ module.exports = (sequelize, DataTypes) => {
     Employee.belongsTo(models.Employee, { foreignKey: 'manager_id', as: 'manager' });
     Employee.hasMany(models.Employee, { foreignKey: 'manager_id', as: 'directReports' });
     Employee.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
+    Employee.belongsTo(models.WorkLocation, { foreignKey: 'work_location_id', as: 'workLocation' });
     Employee.hasMany(models.EmployeeSalaryStructure, { foreignKey: 'employee_id', as: 'salaryStructures' });
     Employee.hasMany(models.AttendanceRecord, { foreignKey: 'employee_id', as: 'attendanceRecords' });
     Employee.hasMany(models.LeaveBalance, { foreignKey: 'employee_id', as: 'leaveBalances' });
     Employee.hasMany(models.LeaveRequest, { foreignKey: 'employee_id', as: 'leaveRequests' });
     Employee.hasMany(models.Payslip, { foreignKey: 'employee_id', as: 'payslips' });
+    Employee.hasMany(models.EmployeeEmergencyContact, { foreignKey: 'employee_id', as: 'emergencyContacts' });
+    Employee.hasMany(models.EmployeeDependent, { foreignKey: 'employee_id', as: 'dependents' });
+    Employee.hasMany(models.EmployeeQualification, { foreignKey: 'employee_id', as: 'qualifications' });
+    Employee.hasMany(models.EmployeeSkill, { foreignKey: 'employee_id', as: 'skills' });
+    Employee.hasMany(models.EmployeeCertification, { foreignKey: 'employee_id', as: 'certifications' });
+    Employee.hasMany(models.EmployeePreviousEmployment, { foreignKey: 'employee_id', as: 'previousEmployment' });
+    Employee.hasMany(models.EmployeeDocument, { foreignKey: 'employee_id', as: 'documents' });
+    Employee.hasMany(models.EmployeeNote, { foreignKey: 'employee_id', as: 'employeeNotes' });
+    Employee.hasMany(models.EmployeeHistory, { foreignKey: 'employee_id', as: 'history' });
+    Employee.hasMany(models.ProfileChangeRequest, { foreignKey: 'employee_id', as: 'changeRequests' });
   };
 
   return Employee;

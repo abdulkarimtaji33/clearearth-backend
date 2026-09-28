@@ -21,6 +21,12 @@ module.exports = (sequelize, DataTypes) => {
       work_hours: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
       notes: { type: DataTypes.STRING(255), allowNull: true },
       entered_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
+      check_in_lat: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+      check_in_lng: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+      check_out_lat: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+      check_out_lng: { type: DataTypes.DECIMAL(10, 7), allowNull: true },
+      check_in_ip: { type: DataTypes.STRING(45), allowNull: true },
+      check_out_ip: { type: DataTypes.STRING(45), allowNull: true },
     },
     {
       tableName: 'attendance_records',

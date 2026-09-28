@@ -50,10 +50,11 @@ function todayStr() {
   return tenantToday();
 }
 
-const checkIn = async (tenantId, actorUserId) => {
+const checkIn = async (tenantId, actorUserId, extra = {}) => {
   const employee = await employeeService.requireEmployeeForUser(tenantId, actorUserId);
   const date = todayStr();
   const now = tenantNow();
+  const { lat, lng, ip } = extra;
 
   let record = await db.AttendanceRecord.findOne({ where: { tenant_id: tenantId, employee_id: employee.id, attendance_date: date } });
   if (record && record.check_in_time) throw ApiError.conflict('Already checked in today');
@@ -61,22 +62,28 @@ const checkIn = async (tenantId, actorUserId) => {
   const isLate = now.hours() > LATE_THRESHOLD_HOUR || (now.hours() === LATE_THRESHOLD_HOUR && now.minutes() > LATE_THRESHOLD_MINUTE);
   const status = isLate ? 'late' : 'present';
   const nowDate = now.toDate();
+  const locationFields = {
+    check_in_lat: lat !== undefined && lat !== null && lat !== '' ? lat : null,
+    check_in_lng: lng !== undefined && lng !== null && lng !== '' ? lng : null,
+    check_in_ip: ip || null,
+  };
 
   if (record) {
-    await record.update({ check_in_time: nowDate, check_in_source: 'self', status });
+    await record.update({ check_in_time: nowDate, check_in_source: 'self', status, ...locationFields });
   } else {
     record = await db.AttendanceRecord.create({
       tenant_id: tenantId, employee_id: employee.id, attendance_date: date,
-      check_in_time: nowDate, check_in_source: 'self', status,
+      check_in_time: nowDate, check_in_source: 'self', status, ...locationFields,
     });
   }
   return record;
 };
 
-const checkOut = async (tenantId, actorUserId) => {
+const checkOut = async (tenantId, actorUserId, extra = {}) => {
   const employee = await employeeService.requireEmployeeForUser(tenantId, actorUserId);
   const date = todayStr();
   const now = tenantNow();
+  const { lat, lng, ip } = extra;
 
   const record = await db.AttendanceRecord.findOne({ where: { tenant_id: tenantId, employee_id: employee.id, attendance_date: date } });
   if (!record || !record.check_in_time) throw ApiError.badRequest('You have not checked in today');
@@ -87,6 +94,9 @@ const checkOut = async (tenantId, actorUserId) => {
     check_out_time: now.toDate(),
     check_out_source: 'self',
     work_hours: Math.max(0, Math.round(workHours * 100) / 100),
+    check_out_lat: lat !== undefined && lat !== null && lat !== '' ? lat : null,
+    check_out_lng: lng !== undefined && lng !== null && lng !== '' ? lng : null,
+    check_out_ip: ip || null,
   });
   return record;
 };

@@ -5,6 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const userService = require('./user.service');
+const { tenantToday } = require('../utils/helpers');
 // NOTE: leave.service is required lazily (inside create()) to avoid a require-time
 // cycle: employee.service -> leave.service -> attendance.service -> employee.service.
 
@@ -181,13 +182,33 @@ const list = async (tenantId, filters = {}) => {
   return { employees: rows, total };
 };
 
-const update = async (tenantId, id, body) => {
+// department_id/designation_id/manager_id/employment_status changes are auto-logged to
+// employee_history whenever #update actually changes them (see below).
+const TRACKED_HISTORY_FIELDS = {
+  department_id: 'department_change',
+  designation_id: 'designation_change',
+  manager_id: 'manager_change',
+  employment_status: 'status_change',
+};
+
+const update = async (tenantId, id, body, actorUserId = null) => {
   const employee = await getById(tenantId, id);
+  const oldTrackedValues = {};
+  for (const col of Object.keys(TRACKED_HISTORY_FIELDS)) oldTrackedValues[col] = employee[col];
+
   const fields = [
     'firstName', 'lastName', 'email', 'phone', 'departmentId', 'designationId', 'managerId',
     'employmentType', 'dateOfJoining', 'employmentStatus', 'gender', 'dateOfBirth', 'nationality',
     'nationalId', 'passportNumber', 'address', 'emergencyContactName', 'emergencyContactPhone',
     'bankName', 'bankAccountNumber', 'bankIban', 'notes',
+    // Expanded profile fields
+    'profilePhoto', 'middleName', 'preferredName', 'legalFullName', 'maritalStatus', 'religion', 'bloodGroup',
+    'personalEmail', 'workEmail', 'personalPhone', 'workPhone',
+    'currentAddressLine1', 'currentAddressCity', 'currentAddressEmirate', 'currentAddressCountry', 'currentAddressPostal',
+    'permanentAddressLine1', 'permanentAddressCity', 'permanentAddressEmirate', 'permanentAddressCountry', 'permanentAddressPostal',
+    'workLocationId', 'probationStart', 'probationEnd', 'confirmationDate',
+    'labourCardNo', 'molPersonId', 'wpsPersonCode', 'taxId', 'paymentMethodDetail', 'routingCode',
+    'salaryVisibleToEmployee',
   ];
   const map = {
     firstName: 'first_name', lastName: 'last_name', email: 'email', phone: 'phone',
@@ -197,9 +218,21 @@ const update = async (tenantId, id, body) => {
     passportNumber: 'passport_number', address: 'address', emergencyContactName: 'emergency_contact_name',
     emergencyContactPhone: 'emergency_contact_phone', bankName: 'bank_name', bankAccountNumber: 'bank_account_number',
     bankIban: 'bank_iban', notes: 'notes',
+    profilePhoto: 'profile_photo', middleName: 'middle_name', preferredName: 'preferred_name', legalFullName: 'legal_full_name',
+    maritalStatus: 'marital_status', religion: 'religion', bloodGroup: 'blood_group',
+    personalEmail: 'personal_email', workEmail: 'work_email', personalPhone: 'personal_phone', workPhone: 'work_phone',
+    currentAddressLine1: 'current_address_line1', currentAddressCity: 'current_address_city',
+    currentAddressEmirate: 'current_address_emirate', currentAddressCountry: 'current_address_country', currentAddressPostal: 'current_address_postal',
+    permanentAddressLine1: 'permanent_address_line1', permanentAddressCity: 'permanent_address_city',
+    permanentAddressEmirate: 'permanent_address_emirate', permanentAddressCountry: 'permanent_address_country', permanentAddressPostal: 'permanent_address_postal',
+    workLocationId: 'work_location_id', probationStart: 'probation_start', probationEnd: 'probation_end', confirmationDate: 'confirmation_date',
+    labourCardNo: 'labour_card_no', molPersonId: 'mol_person_id', wpsPersonCode: 'wps_person_code', taxId: 'tax_id',
+    paymentMethodDetail: 'payment_method_detail', routingCode: 'routing_code', salaryVisibleToEmployee: 'salary_visible_to_employee',
   };
   for (const f of fields) {
-    if (body[f] !== undefined) employee[map[f]] = body[f] || null;
+    if (body[f] !== undefined) {
+      employee[map[f]] = (body[f] === '' || body[f] === undefined) ? null : body[f];
+    }
   }
 
   if (body.userId !== undefined) {
@@ -233,7 +266,24 @@ const update = async (tenantId, id, body) => {
     }
   }
 
-  await employee.save();
+  await db.sequelize.transaction(async (t) => {
+    await employee.save({ transaction: t });
+    for (const [col, eventType] of Object.entries(TRACKED_HISTORY_FIELDS)) {
+      const newVal = employee[col];
+      if (oldTrackedValues[col] !== newVal) {
+        await db.EmployeeHistory.create({
+          tenant_id: tenantId,
+          employee_id: employee.id,
+          event_type: eventType,
+          field_name: col,
+          old_value: oldTrackedValues[col] !== null && oldTrackedValues[col] !== undefined ? String(oldTrackedValues[col]) : null,
+          new_value: newVal !== null && newVal !== undefined ? String(newVal) : null,
+          effective_date: tenantToday(),
+          recorded_by: actorUserId || null,
+        }, { transaction: t });
+      }
+    }
+  });
   return getById(tenantId, id);
 };
 
@@ -257,4 +307,161 @@ const offboard = async (tenantId, actorUserId, employeeId, exitDate) => {
   return getById(tenantId, employeeId);
 };
 
-module.exports = { create, getById, getByUserId, requireEmployeeForUser, list, update, offboard, nextEmployeeCode };
+// -- GET /hr/employees/me enrichment -----------------------------------------
+
+const getMeEnriched = async (tenantId, userId) => {
+  const own = await requireEmployeeForUser(tenantId, userId);
+  const employee = await db.Employee.findOne({
+    where: { id: own.id, tenant_id: tenantId },
+    include: [
+      { model: db.Department, as: 'department', attributes: ['id', 'name'], required: false },
+      { model: db.Designation, as: 'designation', attributes: ['id', 'value', 'display_name'], required: false },
+      { model: db.Employee, as: 'manager', attributes: ['id', 'first_name', 'last_name', 'employee_code'], required: false },
+      { model: db.WorkLocation, as: 'workLocation', attributes: ['id', 'name'], required: false },
+    ],
+  });
+
+  const [documentCount, pendingChangeRequestCount] = await Promise.all([
+    db.EmployeeDocument.count({ where: { tenant_id: tenantId, employee_id: employee.id } }),
+    db.ProfileChangeRequest.count({ where: { tenant_id: tenantId, employee_id: employee.id, status: 'pending' } }),
+  ]);
+
+  const result = employee.toJSON();
+  result.hasDocuments = documentCount > 0;
+  result.documentCount = documentCount;
+  result.hasContract = false; // contract table not built yet (future phase)
+  result.pendingChangeRequestCount = pendingChangeRequestCount;
+
+  // Salary is only included when salary_visible_to_employee is true; otherwise the
+  // salary fields are omitted entirely (not just nulled) and a flag is returned instead.
+  if (employee.salary_visible_to_employee) {
+    const salaryStructureService = require('./salaryStructure.service');
+    const active = await salaryStructureService.getActive(tenantId, employee.id);
+    result.salaryVisible = true;
+    result.activeSalaryStructure = active || null;
+  } else {
+    result.salaryVisible = false;
+  }
+
+  return result;
+};
+
+/** GET /hr/employees/me/salary-history — respects the same salary_visible_to_employee flag */
+const getMySalaryHistory = async (tenantId, userId) => {
+  const employee = await requireEmployeeForUser(tenantId, userId);
+  if (!employee.salary_visible_to_employee) {
+    return { salaryVisible: false, history: [] };
+  }
+  const salaryStructureService = require('./salaryStructure.service');
+  const history = await salaryStructureService.history(tenantId, employee.id);
+  return { salaryVisible: true, history };
+};
+
+// -- Profile change requests --------------------------------------------------
+// Higher-risk fields (identity, personal contact info, addresses, bank details) go
+// through an HR-approval workflow rather than being directly self-editable, unlike
+// the child-record entities (emergency contacts, dependents, etc.) which are lower
+// risk personal data and are directly self-editable with no approval step.
+const CHANGE_REQUEST_FIELD_MAP = {
+  firstName: 'first_name', lastName: 'last_name', preferredName: 'preferred_name', legalFullName: 'legal_full_name',
+  personalEmail: 'personal_email', personalPhone: 'personal_phone',
+  currentAddressLine1: 'current_address_line1', currentAddressCity: 'current_address_city',
+  currentAddressEmirate: 'current_address_emirate', currentAddressCountry: 'current_address_country', currentAddressPostal: 'current_address_postal',
+  permanentAddressLine1: 'permanent_address_line1', permanentAddressCity: 'permanent_address_city',
+  permanentAddressEmirate: 'permanent_address_emirate', permanentAddressCountry: 'permanent_address_country', permanentAddressPostal: 'permanent_address_postal',
+  bankName: 'bank_name', bankAccountNumber: 'bank_account_number', bankIban: 'bank_iban',
+};
+
+const createChangeRequest = async (tenantId, userId, body) => {
+  const employee = await requireEmployeeForUser(tenantId, userId);
+  const { fieldGroup, changes } = body;
+  if (!changes || typeof changes !== 'object' || !Object.keys(changes).length) {
+    throw ApiError.badRequest('changes is required');
+  }
+  const built = {};
+  for (const key of Object.keys(changes)) {
+    const col = CHANGE_REQUEST_FIELD_MAP[key];
+    if (!col) throw ApiError.badRequest(`Field not allowed for change request: ${key}`);
+    built[key] = { old: employee[col] !== undefined ? employee[col] : null, new: changes[key] };
+  }
+  return db.ProfileChangeRequest.create({
+    tenant_id: tenantId, employee_id: employee.id, field_group: fieldGroup || null, changes: built, status: 'pending',
+  });
+};
+
+const listMyChangeRequests = async (tenantId, userId) => {
+  const employee = await requireEmployeeForUser(tenantId, userId);
+  return db.ProfileChangeRequest.findAll({
+    where: { tenant_id: tenantId, employee_id: employee.id },
+    order: [['created_at', 'DESC']],
+  });
+};
+
+const listPendingChangeRequests = async (tenantId) => {
+  return db.ProfileChangeRequest.findAll({
+    where: { tenant_id: tenantId, status: 'pending' },
+    include: [{ model: db.Employee, as: 'employee', attributes: ['id', 'first_name', 'last_name', 'employee_code'] }],
+    order: [['created_at', 'ASC']],
+  });
+};
+
+const approveChangeRequest = async (tenantId, actorUserId, id) => {
+  const changeRequest = await db.ProfileChangeRequest.findOne({ where: { id, tenant_id: tenantId } });
+  if (!changeRequest) throw ApiError.notFound('Change request not found');
+  if (changeRequest.status !== 'pending') throw ApiError.conflict('This request has already been reviewed');
+
+  await db.sequelize.transaction(async (t) => {
+    const employee = await db.Employee.findOne({
+      where: { id: changeRequest.employee_id, tenant_id: tenantId }, transaction: t, lock: t.LOCK.UPDATE,
+    });
+    if (!employee) throw ApiError.notFound('Employee not found');
+
+    const changes = changeRequest.changes || {};
+    for (const key of Object.keys(changes)) {
+      const col = CHANGE_REQUEST_FIELD_MAP[key];
+      if (!col) continue;
+      const newVal = changes[key]?.new;
+      const oldVal = employee[col];
+      employee[col] = newVal === '' ? null : newVal;
+      await db.EmployeeHistory.create({
+        tenant_id: tenantId,
+        employee_id: employee.id,
+        event_type: 'other',
+        field_name: col,
+        old_value: oldVal !== null && oldVal !== undefined ? String(oldVal) : null,
+        new_value: newVal !== null && newVal !== undefined ? String(newVal) : null,
+        effective_date: tenantToday(),
+        reason: 'Profile change request approved',
+        recorded_by: actorUserId,
+      }, { transaction: t });
+    }
+    await employee.save({ transaction: t });
+    await changeRequest.update({ status: 'approved', reviewed_by: actorUserId, reviewed_at: new Date() }, { transaction: t });
+  });
+
+  return db.ProfileChangeRequest.findOne({ where: { id, tenant_id: tenantId } });
+};
+
+const rejectChangeRequest = async (tenantId, actorUserId, id, rejectionReason) => {
+  const changeRequest = await db.ProfileChangeRequest.findOne({ where: { id, tenant_id: tenantId } });
+  if (!changeRequest) throw ApiError.notFound('Change request not found');
+  if (changeRequest.status !== 'pending') throw ApiError.conflict('This request has already been reviewed');
+  await changeRequest.update({
+    status: 'rejected', reviewed_by: actorUserId, reviewed_at: new Date(), rejection_reason: rejectionReason || null,
+  });
+  return changeRequest;
+};
+
+/** GET /hr/employees/me/history and GET /hr/employees/:employeeId/history */
+const getHistory = async (tenantId, employeeId) => {
+  return db.EmployeeHistory.findAll({
+    where: { tenant_id: tenantId, employee_id: employeeId },
+    order: [['created_at', 'DESC']],
+  });
+};
+
+module.exports = {
+  create, getById, getByUserId, requireEmployeeForUser, list, update, offboard, nextEmployeeCode,
+  getMeEnriched, getMySalaryHistory, getHistory,
+  createChangeRequest, listMyChangeRequests, listPendingChangeRequests, approveChangeRequest, rejectChangeRequest,
+};
