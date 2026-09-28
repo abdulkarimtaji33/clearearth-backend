@@ -11,6 +11,21 @@ const {
 
 router.use(authenticate);
 
+// -- Document types lookup (system-wide + tenant-specific) ------------------
+router.get('/document-types', async (req, res, next) => {
+  try {
+    const db = require('../models');
+    const rows = await db.DocumentType.findAll({
+      where: {
+        is_active: true,
+        [db.Sequelize.Op.or]: [{ tenant_id: null }, { tenant_id: req.tenant.id }],
+      },
+      order: [['name', 'ASC']],
+    });
+    res.json({ success: true, message: 'Success', data: rows });
+  } catch (e) { next(e); }
+});
+
 // -- Child-record entity controllers (HR side + self-service mirror) --------
 const entities = {
   'emergency-contacts': childRecordsService.emergencyContacts,
