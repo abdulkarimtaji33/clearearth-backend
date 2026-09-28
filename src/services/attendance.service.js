@@ -258,7 +258,7 @@ const createRegularization = async (tenantId, actorUserId, body) => {
   const { attendanceDate, requestedCheckIn, requestedCheckOut, reason } = body;
   if (!attendanceDate || !reason) throw ApiError.badRequest('attendanceDate and reason are required');
 
-  return db.AttendanceRegularizationRequest.create({
+  const request = await db.AttendanceRegularizationRequest.create({
     tenant_id: tenantId,
     employee_id: employee.id,
     attendance_date: attendanceDate,
@@ -267,6 +267,15 @@ const createRegularization = async (tenantId, actorUserId, body) => {
     reason,
     status: 'pending',
   });
+
+  try {
+    const notificationService = require('./notification.service');
+    await notificationService.notifyRegularizationRequested(tenantId, employee, request);
+  } catch (e) {
+    console.warn('[Notification] regularization requested notification skipped:', e.message);
+  }
+
+  return request;
 };
 
 const listRegularizations = async (tenantId, actorUser, filters = {}) => {
@@ -305,6 +314,14 @@ const reviewRegularization = async (tenantId, actorUserId, id, decision, reviewN
       status: 'present',
       notes: 'Regularized',
     });
+  }
+
+  try {
+    const notificationService = require('./notification.service');
+    const employee = await db.Employee.findOne({ where: { id: req.employee_id, tenant_id: tenantId } });
+    await notificationService.notifyRegularizationReviewed(tenantId, employee, req, decision);
+  } catch (e) {
+    console.warn('[Notification] regularization reviewed notification skipped:', e.message);
   }
 
   return req;

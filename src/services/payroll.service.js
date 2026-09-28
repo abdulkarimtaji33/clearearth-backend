@@ -175,7 +175,7 @@ const approve = async (tenantId, actorUserId, payrollRunId) => {
 
   const payslips = await db.Payslip.findAll({
     where: { tenant_id: tenantId, payroll_run_id: payrollRunId },
-    include: [{ model: db.Employee, as: 'employee', attributes: ['id', 'employee_code'] }],
+    include: [{ model: db.Employee, as: 'employee', attributes: ['id', 'employee_code', 'user_id'] }],
   });
 
   await db.sequelize.transaction(async (t) => {
@@ -223,6 +223,13 @@ const approve = async (tenantId, actorUserId, payrollRunId) => {
 
     await run.update({ status: 'approved', approved_by: actorUserId, approved_at: new Date() }, { transaction: t });
   });
+
+  try {
+    const notificationService = require('./notification.service');
+    await notificationService.notifyPayslipsPublished(tenantId, run, payslips);
+  } catch (e) {
+    console.warn('[Notification] payslip published notification skipped:', e.message);
+  }
 
   return getRunDetail(tenantId, payrollRunId);
 };

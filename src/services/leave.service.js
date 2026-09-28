@@ -77,10 +77,19 @@ const createRequest = async (tenantId, actorUserId, body) => {
     if (available < daysCount) throw ApiError.badRequest(`Insufficient leave balance: ${available} day(s) available, ${daysCount} requested`);
   }
 
-  return db.LeaveRequest.create({
+  const request = await db.LeaveRequest.create({
     tenant_id: tenantId, employee_id: employee.id, leave_type_id: leaveTypeId,
     start_date: startDate, end_date: endDate, days_count: daysCount, reason: reason || null, status: 'pending',
   });
+
+  try {
+    const notificationService = require('./notification.service');
+    await notificationService.notifyLeaveRequested(tenantId, employee, leaveType, request);
+  } catch (e) {
+    console.warn('[Notification] leave requested notification skipped:', e.message);
+  }
+
+  return request;
 };
 
 const approve = async (tenantId, actorUser, requestId) => {
@@ -127,17 +136,34 @@ const approve = async (tenantId, actorUser, requestId) => {
     cur.add(1, 'day');
   }
 
+  try {
+    const notificationService = require('./notification.service');
+    const employee = await db.Employee.findOne({ where: { id: request.employee_id, tenant_id: tenantId } });
+    await notificationService.notifyLeaveApproved(tenantId, employee, request.leaveType, request);
+  } catch (e) {
+    console.warn('[Notification] leave approved notification skipped:', e.message);
+  }
+
   return request;
 };
 
 const reject = async (tenantId, actorUser, requestId, rejectionReason) => {
-  const request = await db.LeaveRequest.findOne({ where: { id: requestId, tenant_id: tenantId } });
+  const request = await db.LeaveRequest.findOne({ where: { id: requestId, tenant_id: tenantId }, include: [{ model: db.LeaveType, as: 'leaveType' }] });
   if (!request) throw ApiError.notFound('Leave request not found');
   if (request.status !== 'pending') throw ApiError.conflict('Only pending requests can be rejected');
 
   await assertCanActOnEmployee(tenantId, actorUser, request.employee_id);
 
   await request.update({ status: 'rejected', rejection_reason: rejectionReason || null, approved_by: actorUser.id, approved_at: new Date() });
+
+  try {
+    const notificationService = require('./notification.service');
+    const employee = await db.Employee.findOne({ where: { id: request.employee_id, tenant_id: tenantId } });
+    await notificationService.notifyLeaveRejected(tenantId, employee, request.leaveType, request, rejectionReason);
+  } catch (e) {
+    console.warn('[Notification] leave rejected notification skipped:', e.message);
+  }
+
   return request;
 };
 

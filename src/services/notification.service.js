@@ -329,6 +329,39 @@ const getAccountsUserIds = async (tenantId) => {
   return users.map(u => u.id);
 };
 
+/** All active users in this tenant whose role holds the given permission name */
+const getUserIdsWithPermission = async (tenantId, permissionName) => {
+  const roles = await db.Role.findAll({
+    where: { [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
+    include: [{ model: db.Permission, as: 'permissions', where: { name: permissionName }, attributes: [] }],
+    attributes: ['id'],
+  });
+  const roleIds = roles.map(r => r.id);
+  if (roleIds.length === 0) return [];
+
+  const users = await db.User.findAll({
+    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
+    attributes: ['id'],
+  });
+  return users.map(u => u.id);
+};
+
+/**
+ * HRM approval routing: the employee's manager (via manager_id -> that manager
+ * employee's user_id) when set, else every active user holding `permissionName`
+ * (e.g. hr.leave.approve / hr.attendance.manage / hr.employees.manage).
+ */
+const getManagerOrPermissionHolderUserIds = async (tenantId, employee, permissionName) => {
+  if (employee?.manager_id) {
+    const manager = await db.Employee.findOne({
+      where: { id: employee.manager_id, tenant_id: tenantId },
+      attributes: ['user_id'],
+    });
+    if (manager?.user_id) return [manager.user_id];
+  }
+  return getUserIdsWithPermission(tenantId, permissionName);
+};
+
 const getOperationsManagerUserIds = async (tenantId) => {
   const roles = await db.Role.findAll({
     where: { name: 'operations_manager', [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
@@ -438,6 +471,117 @@ const notifyExpenseSubmitted = async (tenantId, workOrderId, taskName, submitted
   });
 };
 
+// -- HRM notifications --------------------------------------------------------
+
+const employeeFullName = (employee) => [employee?.first_name, employee?.last_name].filter(Boolean).join(' ') || 'An employee';
+
+const notifyLeaveRequested = async (tenantId, employee, leaveType, leaveRequest) => {
+  const recipientIds = await getManagerOrPermissionHolderUserIds(tenantId, employee, 'hr.leave.approve');
+  if (recipientIds.length === 0) return;
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'leave_requested',
+    title: 'New leave request',
+    message: `${employeeFullName(employee)} requested ${leaveType?.name || 'leave'} from ${leaveRequest.start_date} to ${leaveRequest.end_date}.`,
+    entityType: 'leave_request',
+    entityId: leaveRequest.id,
+  });
+};
+
+const notifyLeaveApproved = async (tenantId, employee, leaveType, leaveRequest) => {
+  if (!employee?.user_id) return;
+
+  await createForUsers(tenantId, [employee.user_id], {
+    type: 'leave_approved',
+    title: 'Leave request approved',
+    message: `Your ${leaveType?.name || 'leave'} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} has been approved.`,
+    entityType: 'leave_request',
+    entityId: leaveRequest.id,
+  });
+};
+
+const notifyLeaveRejected = async (tenantId, employee, leaveType, leaveRequest, reason) => {
+  if (!employee?.user_id) return;
+
+  await createForUsers(tenantId, [employee.user_id], {
+    type: 'leave_rejected',
+    title: 'Leave request rejected',
+    message: `Your ${leaveType?.name || 'leave'} request from ${leaveRequest.start_date} to ${leaveRequest.end_date} was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+    entityType: 'leave_request',
+    entityId: leaveRequest.id,
+  });
+};
+
+const notifyRegularizationRequested = async (tenantId, employee, regularization) => {
+  const recipientIds = await getManagerOrPermissionHolderUserIds(tenantId, employee, 'hr.attendance.manage');
+  if (recipientIds.length === 0) return;
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'regularization_requested',
+    title: 'New attendance regularization request',
+    message: `${employeeFullName(employee)} requested attendance regularization for ${regularization.attendance_date}.`,
+    entityType: 'attendance_regularization',
+    entityId: regularization.id,
+  });
+};
+
+const notifyRegularizationReviewed = async (tenantId, employee, regularization, decision) => {
+  if (!employee?.user_id) return;
+  const approved = decision === 'approved';
+
+  await createForUsers(tenantId, [employee.user_id], {
+    type: approved ? 'regularization_approved' : 'regularization_rejected',
+    title: approved ? 'Regularization request approved' : 'Regularization request rejected',
+    message: `Your attendance regularization request for ${regularization.attendance_date} was ${decision}.${regularization.review_notes ? ` Notes: ${regularization.review_notes}` : ''}`,
+    entityType: 'attendance_regularization',
+    entityId: regularization.id,
+  });
+};
+
+const notifyProfileChangeRequested = async (tenantId, employee, changeRequest) => {
+  const recipientIds = await getUserIdsWithPermission(tenantId, 'hr.employees.manage');
+  if (recipientIds.length === 0) return;
+
+  await createForUsers(tenantId, recipientIds, {
+    type: 'profile_change_requested',
+    title: 'New profile change request',
+    message: `${employeeFullName(employee)} submitted a profile change request.`,
+    entityType: 'profile_change_request',
+    entityId: changeRequest.id,
+  });
+};
+
+const notifyProfileChangeReviewed = async (tenantId, employee, changeRequest, decision, reason) => {
+  if (!employee?.user_id) return;
+  const approved = decision === 'approved';
+
+  await createForUsers(tenantId, [employee.user_id], {
+    type: approved ? 'profile_change_approved' : 'profile_change_rejected',
+    title: approved ? 'Profile change request approved' : 'Profile change request rejected',
+    message: `Your profile change request was ${decision}.${!approved && reason ? ` Reason: ${reason}` : ''}`,
+    entityType: 'profile_change_request',
+    entityId: changeRequest.id,
+  });
+};
+
+/** One notification per payslip (net pay is per-employee, so a single bulk message won't fit). */
+const notifyPayslipsPublished = async (tenantId, run, payslips) => {
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const periodLabel = `${monthNames[run.period_month - 1]} ${run.period_year}`;
+
+  for (const payslip of payslips) {
+    const userId = payslip.employee?.user_id;
+    if (!userId) continue; // some employees have no login
+    await createForUsers(tenantId, [userId], {
+      type: 'payslip_published',
+      title: 'Payslip published',
+      message: `Your payslip for ${periodLabel} is ready. Net pay: ${payslip.net_salary}.`,
+      entityType: 'payslip',
+      entityId: payslip.id,
+    });
+  }
+};
+
 module.exports = {
   getForUser,
   markRead,
@@ -459,4 +603,14 @@ module.exports = {
   notifyPickupDateConfirmed,
   notifyPickupRescheduleRequested,
   notifyPickupDateRescheduled,
+  getUserIdsWithPermission,
+  getManagerOrPermissionHolderUserIds,
+  notifyLeaveRequested,
+  notifyLeaveApproved,
+  notifyLeaveRejected,
+  notifyRegularizationRequested,
+  notifyRegularizationReviewed,
+  notifyProfileChangeRequested,
+  notifyProfileChangeReviewed,
+  notifyPayslipsPublished,
 };

@@ -384,9 +384,18 @@ const createChangeRequest = async (tenantId, userId, body) => {
     if (!col) throw ApiError.badRequest(`Field not allowed for change request: ${key}`);
     built[key] = { old: employee[col] !== undefined ? employee[col] : null, new: changes[key] };
   }
-  return db.ProfileChangeRequest.create({
+  const changeRequest = await db.ProfileChangeRequest.create({
     tenant_id: tenantId, employee_id: employee.id, field_group: fieldGroup || null, changes: built, status: 'pending',
   });
+
+  try {
+    const notificationService = require('./notification.service');
+    await notificationService.notifyProfileChangeRequested(tenantId, employee, changeRequest);
+  } catch (e) {
+    console.warn('[Notification] profile change requested notification skipped:', e.message);
+  }
+
+  return changeRequest;
 };
 
 const listMyChangeRequests = async (tenantId, userId) => {
@@ -439,7 +448,17 @@ const approveChangeRequest = async (tenantId, actorUserId, id) => {
     await changeRequest.update({ status: 'approved', reviewed_by: actorUserId, reviewed_at: new Date() }, { transaction: t });
   });
 
-  return db.ProfileChangeRequest.findOne({ where: { id, tenant_id: tenantId } });
+  const updated = await db.ProfileChangeRequest.findOne({ where: { id, tenant_id: tenantId } });
+
+  try {
+    const notificationService = require('./notification.service');
+    const employee = await db.Employee.findOne({ where: { id: updated.employee_id, tenant_id: tenantId } });
+    await notificationService.notifyProfileChangeReviewed(tenantId, employee, updated, 'approved');
+  } catch (e) {
+    console.warn('[Notification] profile change approved notification skipped:', e.message);
+  }
+
+  return updated;
 };
 
 const rejectChangeRequest = async (tenantId, actorUserId, id, rejectionReason) => {
@@ -449,6 +468,15 @@ const rejectChangeRequest = async (tenantId, actorUserId, id, rejectionReason) =
   await changeRequest.update({
     status: 'rejected', reviewed_by: actorUserId, reviewed_at: new Date(), rejection_reason: rejectionReason || null,
   });
+
+  try {
+    const notificationService = require('./notification.service');
+    const employee = await db.Employee.findOne({ where: { id: changeRequest.employee_id, tenant_id: tenantId } });
+    await notificationService.notifyProfileChangeReviewed(tenantId, employee, changeRequest, 'rejected', rejectionReason);
+  } catch (e) {
+    console.warn('[Notification] profile change rejected notification skipped:', e.message);
+  }
+
   return changeRequest;
 };
 
