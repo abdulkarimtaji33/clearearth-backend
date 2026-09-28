@@ -28,6 +28,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      department_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'departments', key: 'id' },
+      },
+      level: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
     },
     {
       tableName: 'designations',
@@ -36,6 +45,11 @@ module.exports = (sequelize, DataTypes) => {
       paranoid: false,
     }
   );
+
+  Designation.associate = models => {
+    Designation.belongsTo(models.Department, { foreignKey: 'department_id', as: 'department' });
+    Designation.hasMany(models.Employee, { foreignKey: 'designation_id', as: 'employees' });
+  };
 
   return Designation;
 };

@@ -140,6 +140,11 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'user_id',
       as: 'auditLogs',
     });
+
+    User.belongsTo(models.Employee, {
+      foreignKey: 'employee_id',
+      as: 'employee',
+    });
   };
 
   return User;

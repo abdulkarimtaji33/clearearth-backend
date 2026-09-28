@@ -946,6 +946,85 @@ async function generateGrnPdf(grnId, tenantId) {
   return htmlToPdf(html);
 }
 
+/**
+ * Payslip PDF (HRM) — simple employee/period/breakdown document reusing the same
+ * company-header rendering approach (logo data URI, htmlToPdf) as the other document
+ * types in this file. Additive only — does not touch any existing function above.
+ */
+async function generatePayslipPdf(payslipId, tenantId) {
+  const payslip = await db.Payslip.findOne({
+    where: { id: payslipId, tenant_id: tenantId },
+    include: [
+      { model: db.Employee, as: 'employee' },
+      { model: db.PayrollRun, as: 'payrollRun' },
+    ],
+  });
+  if (!payslip) throw new Error('Payslip not found');
+
+  const tenant = await db.Tenant.findByPk(tenantId);
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const periodLabel = `${monthNames[(payslip.payrollRun.period_month || 1) - 1]} ${payslip.payrollRun.period_year}`;
+
+  let logoHtml = '';
+  try {
+    logoHtml = `<img src="${getLogoDataUri()}" style="height:48px;" />`;
+  } catch (e) {
+    logoHtml = '';
+  }
+
+  const html = `
+  <html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 0; padding: 0; }
+      .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1a7a4c; padding-bottom: 12px; margin-bottom: 16px; }
+      .title { font-size: 18px; font-weight: bold; color: #1a7a4c; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      td, th { padding: 6px 8px; border: 1px solid #ddd; font-size: 12px; }
+      th { background: #f2f6f4; text-align: left; }
+      .totals-row td { font-weight: bold; background: #f8faf9; }
+      .meta { margin-bottom: 16px; }
+      .meta div { margin-bottom: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div>${logoHtml}</div>
+      <div class="title">Payslip — ${escapeHtml(periodLabel)}</div>
+    </div>
+    <div class="meta">
+      <div><strong>Employee:</strong> ${escapeHtml(payslip.employee.first_name)} ${escapeHtml(payslip.employee.last_name)} (${escapeHtml(payslip.employee.employee_code)})</div>
+      <div><strong>Pay Period:</strong> ${escapeHtml(periodLabel)} (${formatDate(payslip.payrollRun.period_start)} – ${formatDate(payslip.payrollRun.period_end)})</div>
+      <div><strong>Payment Status:</strong> ${escapeHtml(payslip.payment_status)}</div>
+    </div>
+    <table>
+      <tr><th>Earnings</th><th style="text-align:right;">Amount (AED)</th></tr>
+      <tr><td>Basic Salary</td><td style="text-align:right;">${formatNum(payslip.basic_salary)}</td></tr>
+      <tr><td>Housing Allowance</td><td style="text-align:right;">${formatNum(payslip.housing_allowance)}</td></tr>
+      <tr><td>Transport Allowance</td><td style="text-align:right;">${formatNum(payslip.transport_allowance)}</td></tr>
+      <tr><td>Other Allowance</td><td style="text-align:right;">${formatNum(payslip.other_allowance)}</td></tr>
+      <tr><td>Commission</td><td style="text-align:right;">${formatNum(payslip.commission_amount)}</td></tr>
+      <tr class="totals-row"><td>Gross Salary</td><td style="text-align:right;">${formatNum(payslip.gross_salary)}</td></tr>
+    </table>
+    <table>
+      <tr><th>Deductions</th><th style="text-align:right;">Amount (AED)</th></tr>
+      <tr><td>Absent Days</td><td style="text-align:right;">${payslip.absent_days}</td></tr>
+      <tr><td>Unpaid Leave Days</td><td style="text-align:right;">${payslip.unpaid_leave_days}</td></tr>
+      <tr><td>Proration Deduction</td><td style="text-align:right;">${formatNum(payslip.proration_deduction)}</td></tr>
+      <tr><td>Other Deductions</td><td style="text-align:right;">${formatNum(payslip.other_deductions)}</td></tr>
+      <tr class="totals-row"><td>Total Deductions</td><td style="text-align:right;">${formatNum(payslip.total_deductions)}</td></tr>
+    </table>
+    <table>
+      <tr class="totals-row"><td>Net Salary</td><td style="text-align:right;">AED ${formatNum(payslip.net_salary)}</td></tr>
+    </table>
+    <p style="margin-top:24px;font-size:10px;color:#888;">Generated on ${formatDate(new Date())}</p>
+  </body>
+  </html>`;
+
+  return htmlToPdf(html);
+}
+
 module.exports = {
   generateQuotationPdf,
   generatePurchaseOrderPdf,
@@ -954,4 +1033,5 @@ module.exports = {
   generateReceivableReceiptPdf,
   generateStatementOfAccountPdf,
   generateGrnPdf,
+  generatePayslipPdf,
 };
