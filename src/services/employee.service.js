@@ -40,30 +40,46 @@ const create = async (tenantId, actorUserId, body) => {
     employmentType, dateOfJoining, gender, dateOfBirth, nationality, nationalId,
     passportNumber, address, emergencyContactName, emergencyContactPhone,
     bankName, bankAccountNumber, bankIban, notes,
-    createLoginAccount, roleId,
+    createLoginAccount, roleId, existingUserId,
   } = body;
 
   if (!firstName || !lastName) throw ApiError.badRequest('firstName and lastName are required');
   if (!dateOfJoining) throw ApiError.badRequest('dateOfJoining is required');
+  if (createLoginAccount === true && existingUserId) {
+    throw ApiError.badRequest('createLoginAccount and existingUserId are mutually exclusive');
+  }
+
+  // If we're creating a brand-new login, do that FIRST and outside the employee
+  // transaction: user.service#create auto-provisions a bare-bones employee record
+  // for every new user (Fix 1). We reuse that auto-created employee below and fill
+  // in the HR details, rather than creating a second, duplicate employee row for
+  // the same user.
+  let autoProvisionedEmployeeId = null;
+  let userId = null;
+  if (createLoginAccount === true) {
+    if (!email || !roleId) throw ApiError.badRequest('email and roleId are required to create a login account');
+    const tempPassword = Math.random().toString(36).slice(-10) + 'Aa1!';
+    const user = await userService.create(tenantId, {
+      email, password: tempPassword, roleId, firstName, lastName, phone,
+    });
+    userId = user.id;
+    autoProvisionedEmployeeId = user.employee_id || null;
+  }
 
   let employee;
   await db.sequelize.transaction(async (t) => {
-    const employeeCode = await nextEmployeeCode(tenantId, t);
-
-    let userId = null;
-    if (createLoginAccount === true) {
-      if (!email || !roleId) throw ApiError.badRequest('email and roleId are required to create a login account');
-      const tempPassword = Math.random().toString(36).slice(-10) + 'Aa1!';
-      const user = await userService.create(tenantId, {
-        email, password: tempPassword, roleId, firstName, lastName, phone,
+    if (!createLoginAccount && existingUserId) {
+      const existingUser = await db.User.findOne({
+        where: { id: existingUserId, tenant_id: tenantId },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
       });
-      userId = user.id;
+      if (!existingUser) throw ApiError.badRequest('User not found');
+      if (existingUser.employee_id) throw ApiError.conflict('This user is already linked to an employee record');
+      userId = existingUser.id;
     }
 
-    employee = await db.Employee.create({
-      tenant_id: tenantId,
-      user_id: userId,
-      employee_code: employeeCode,
+    const employeeData = {
       first_name: firstName,
       last_name: lastName,
       email: email || null,
@@ -87,10 +103,25 @@ const create = async (tenantId, actorUserId, body) => {
       bank_iban: bankIban || null,
       notes: notes || null,
       created_by: actorUserId || null,
-    }, { transaction: t });
+    };
 
-    if (userId) {
-      await db.User.update({ employee_id: employee.id }, { where: { id: userId }, transaction: t });
+    if (autoProvisionedEmployeeId) {
+      // Fill in the full HR details on the employee record that user.service#create
+      // already auto-provisioned for this new login.
+      employee = await db.Employee.findOne({ where: { id: autoProvisionedEmployeeId, tenant_id: tenantId }, transaction: t });
+      await employee.update(employeeData, { transaction: t });
+    } else {
+      const employeeCode = await nextEmployeeCode(tenantId, t);
+      employee = await db.Employee.create({
+        tenant_id: tenantId,
+        user_id: userId,
+        employee_code: employeeCode,
+        ...employeeData,
+      }, { transaction: t });
+
+      if (userId) {
+        await db.User.update({ employee_id: employee.id }, { where: { id: userId }, transaction: t });
+      }
     }
   });
 
@@ -170,6 +201,38 @@ const update = async (tenantId, id, body) => {
   for (const f of fields) {
     if (body[f] !== undefined) employee[map[f]] = body[f] || null;
   }
+
+  if (body.userId !== undefined) {
+    if (body.userId === null) {
+      if (employee.user_id) {
+        await db.sequelize.transaction(async (t) => {
+          await db.User.update({ employee_id: null }, { where: { id: employee.user_id }, transaction: t });
+          employee.user_id = null;
+          await employee.save({ transaction: t });
+        });
+      }
+      return getById(tenantId, id);
+    }
+
+    if (body.userId !== employee.user_id) {
+      await db.sequelize.transaction(async (t) => {
+        const targetUser = await db.User.findOne({
+          where: { id: body.userId, tenant_id: tenantId },
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (!targetUser) throw ApiError.badRequest('User not found');
+        if (targetUser.employee_id && targetUser.employee_id !== employee.id) {
+          throw ApiError.conflict('This user is already linked to another employee record');
+        }
+        employee.user_id = targetUser.id;
+        await employee.save({ transaction: t });
+        await db.User.update({ employee_id: employee.id }, { where: { id: targetUser.id }, transaction: t });
+      });
+      return getById(tenantId, id);
+    }
+  }
+
   await employee.save();
   return getById(tenantId, id);
 };
@@ -194,4 +257,4 @@ const offboard = async (tenantId, actorUserId, employeeId, exitDate) => {
   return getById(tenantId, employeeId);
 };
 
-module.exports = { create, getById, getByUserId, requireEmployeeForUser, list, update, offboard };
+module.exports = { create, getById, getByUserId, requireEmployeeForUser, list, update, offboard, nextEmployeeCode };

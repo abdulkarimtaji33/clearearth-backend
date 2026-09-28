@@ -2602,6 +2602,38 @@ async function runMigration() {
       console.warn('  Chart of accounts backfill:', e.message);
     }
 
+    console.log('Seeding UAE public holiday calendar (fixed-date holidays only) for existing tenants...');
+    try {
+      // Fixed-date UAE public holidays only. Islamic-calendar holidays (Eid al-Fitr,
+      // Eid al-Adha, Islamic New Year, Prophet's Birthday) shift every year and require
+      // an authoritative lookup for the correct Gregorian dates — guessing them would be
+      // worse than leaving them out. HR should add those manually via the Holiday
+      // Calendar UI once the moving dates for the year are confirmed.
+      const currentYear = new Date().getFullYear();
+      const FIXED_HOLIDAYS = (year) => ([
+        [`${year}-01-01`, "New Year's Day"],
+        [`${year}-12-01`, 'Commemoration Day'],
+        [`${year}-12-02`, 'UAE National Day'],
+        [`${year}-12-03`, 'UAE National Day (Day 2)'],
+      ]);
+
+      const [holidayTenants] = await db.sequelize.query(`SELECT id FROM tenants`);
+      for (const t of holidayTenants || []) {
+        for (const year of [currentYear, currentYear + 1]) {
+          for (const [holidayDate, name] of FIXED_HOLIDAYS(year)) {
+            await db.sequelize.query(
+              `INSERT IGNORE INTO holidays (tenant_id, name, holiday_date, is_recurring, created_at, updated_at)
+               VALUES (?, ?, ?, 1, NOW(), NOW())`,
+              { replacements: [t.id, name, holidayDate] }
+            ).catch((e) => console.warn(`  tenant ${t.id}: holiday ${holidayDate} insert skipped:`, e.message));
+          }
+        }
+      }
+      console.log('  Holiday calendar backfill complete (fixed-date holidays for current + next year)');
+    } catch (e) {
+      console.warn('  Holiday calendar backfill:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

@@ -496,6 +496,36 @@ module.exports = {
         );
       }
     }
+
+    // ---------------------------------------------------------------------
+    // Seed fixed-date UAE public holidays per tenant (current + next year).
+    // Islamic-calendar holidays (Eid al-Fitr, Eid al-Adha, Islamic New Year,
+    // Prophet's Birthday) shift every year and require an authoritative lookup
+    // for the correct Gregorian dates — not guessed here. HR should add those
+    // manually via the Holiday Calendar UI.
+    // ---------------------------------------------------------------------
+    const holidayCurrentYear = new Date().getFullYear();
+    const fixedHolidaysFor = (year) => ([
+      [`${year}-01-01`, "New Year's Day"],
+      [`${year}-12-01`, 'Commemoration Day'],
+      [`${year}-12-02`, 'UAE National Day'],
+      [`${year}-12-03`, 'UAE National Day (Day 2)'],
+    ]);
+    for (const tenant of tenantRows || []) {
+      for (const year of [holidayCurrentYear, holidayCurrentYear + 1]) {
+        for (const [holidayDate, name] of fixedHolidaysFor(year)) {
+          try {
+            await q(
+              `INSERT IGNORE INTO holidays (tenant_id, name, holiday_date, is_recurring, created_at, updated_at)
+               VALUES (?, ?, ?, 1, NOW(), NOW())`,
+              { replacements: [tenant.id, name, holidayDate] }
+            );
+          } catch (e) {
+            if (!isDuplicateSchemaError(e)) throw e;
+          }
+        }
+      }
+    }
   },
 
   async down() {

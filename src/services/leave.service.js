@@ -28,14 +28,16 @@ async function assertCanActOnEmployee(tenantId, actorUser, targetEmployeeId) {
 }
 
 function countLeaveDays(startDate, endDate, holidayDatesSet) {
+  const moment = require('moment-timezone');
+  const config = require('../config');
   let count = 0;
-  const cur = new Date(startDate);
-  const end = new Date(endDate);
-  while (cur <= end) {
-    const dow = cur.getDay();
-    const dateStr = cur.toISOString().slice(0, 10);
+  const cur = moment.tz(startDate, config.locale.timezone);
+  const end = moment.tz(endDate, config.locale.timezone);
+  while (cur.isSameOrBefore(end, 'day')) {
+    const dow = cur.day();
+    const dateStr = cur.format('YYYY-MM-DD');
     if (!WEEKEND_DAYS.includes(dow) && !holidayDatesSet.has(dateStr)) count += 1;
-    cur.setDate(cur.getDate() + 1);
+    cur.add(1, 'day');
   }
   return count;
 }
@@ -108,11 +110,13 @@ const approve = async (tenantId, actorUser, requestId) => {
   // Mark each covered working day as on_leave in attendance (best effort)
   const holidays = await db.Holiday.findAll({ where: { tenant_id: tenantId, holiday_date: { [Op.between]: [request.start_date, request.end_date] } } });
   const holidaySet = new Set(holidays.map((h) => h.holiday_date));
-  const cur = new Date(request.start_date);
-  const end = new Date(request.end_date);
-  while (cur <= end) {
-    const dow = cur.getDay();
-    const dateStr = cur.toISOString().slice(0, 10);
+  const moment = require('moment-timezone');
+  const config = require('../config');
+  const cur = moment.tz(request.start_date, config.locale.timezone);
+  const end = moment.tz(request.end_date, config.locale.timezone);
+  while (cur.isSameOrBefore(end, 'day')) {
+    const dow = cur.day();
+    const dateStr = cur.format('YYYY-MM-DD');
     if (!WEEKEND_DAYS.includes(dow) && !holidaySet.has(dateStr)) {
       try {
         await attendanceService.setStatusForDate(tenantId, request.employee_id, dateStr, 'on_leave');
@@ -120,7 +124,7 @@ const approve = async (tenantId, actorUser, requestId) => {
         console.warn('[HR] attendance on_leave sync skipped:', e.message);
       }
     }
-    cur.setDate(cur.getDate() + 1);
+    cur.add(1, 'day');
   }
 
   return request;
@@ -167,6 +171,12 @@ const list = async (tenantId, actorUser, filters = {}) => {
     const employee = await employeeService.requireEmployeeForUser(tenantId, actorUser.id);
     where.employee_id = employee.id;
   } else if (employeeId) {
+    // A scoped approver (sales_manager/operations_manager) may only filter by an
+    // employeeId that is actually their direct report — otherwise this would leak
+    // any employee's leave data to any manager who knows/guesses their employee id.
+    if (isScopedApprover(actorUser)) {
+      await assertCanActOnEmployee(tenantId, actorUser, employeeId);
+    }
     where.employee_id = employeeId;
   } else if (isScopedApprover(actorUser)) {
     const approverEmployee = await employeeService.getByUserId(tenantId, actorUser.id);
@@ -241,5 +251,5 @@ const deleteHoliday = async (tenantId, id) => {
 module.exports = {
   initializeBalancesForEmployee, createRequest, approve, reject, cancel, list, getBalances,
   listLeaveTypes, createLeaveType, updateLeaveType, listHolidays, createHoliday, deleteHoliday,
-  isScopedApprover,
+  isScopedApprover, assertCanActOnEmployee,
 };

@@ -128,6 +128,35 @@ const formatDate = (date, format = 'DD/MM/YYYY') => {
 };
 
 /**
+ * Current date (YYYY-MM-DD) in the tenant/business timezone (config.locale.timezone,
+ * e.g. Asia/Dubai). Use this instead of `new Date().toISOString().slice(0,10)` for any
+ * "today" calendar-day attribution (attendance, leave), since the server may not run
+ * in the business timezone.
+ */
+const tenantToday = () => {
+  const moment = require('moment-timezone');
+  return moment().tz(config.locale.timezone).format('YYYY-MM-DD');
+};
+
+/**
+ * Current moment.js instant, in the tenant/business timezone. Use `.hours()`/`.minutes()`
+ * etc on the returned moment instead of `new Date().getHours()` for any time-of-day logic
+ * (e.g. lateness cutoffs).
+ */
+const tenantNow = () => {
+  const moment = require('moment-timezone');
+  return moment().tz(config.locale.timezone);
+};
+
+/**
+ * Format an arbitrary date/datetime value as YYYY-MM-DD in the tenant/business timezone.
+ */
+const tenantDateString = (date) => {
+  const moment = require('moment-timezone');
+  return moment(date).tz(config.locale.timezone).format('YYYY-MM-DD');
+};
+
+/**
  * Sanitize object by removing null/undefined values
  */
 const sanitizeObject = obj => {
@@ -241,4 +270,7 @@ module.exports = {
   maskPhone,
   calculateAge,
   sleep,
+  tenantToday,
+  tenantNow,
+  tenantDateString,
 };

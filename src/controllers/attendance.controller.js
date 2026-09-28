@@ -29,13 +29,13 @@ const listAttendance = asyncHandler(async (req, res) => {
   const { employeeId, dateFrom, dateTo, status, page, pageSize } = req.query;
   const { getPaginationParams } = require('../utils/helpers');
   const pagination = getPaginationParams(page, pageSize);
-  const result = await attendanceService.listAttendance(req.tenant.id, { ...pagination, employeeId, dateFrom, dateTo, status });
+  const result = await attendanceService.listAttendance(req.tenant.id, req.user, { ...pagination, employeeId, dateFrom, dateTo, status });
   return ApiResponse.paginated(res, result.records, { page: pagination.page, pageSize: pagination.pageSize, totalItems: result.total });
 });
 
 const getMonthlySheet = asyncHandler(async (req, res) => {
   const { year, month } = req.query;
-  const sheet = await attendanceService.getMonthlySheet(req.tenant.id, req.params.employeeId, Number(year), Number(month));
+  const sheet = await attendanceService.getMonthlySheet(req.tenant.id, req.user, req.params.employeeId, Number(year), Number(month));
   return ApiResponse.success(res, sheet);
 });
 
@@ -45,7 +45,7 @@ const getMyMonthlySheet = asyncHandler(async (req, res) => {
   const { year, month } = req.query;
   const now = new Date();
   const sheet = await attendanceService.getMonthlySheet(
-    req.tenant.id, employee.id, Number(year) || now.getFullYear(), Number(month) || now.getMonth() + 1
+    req.tenant.id, req.user, employee.id, Number(year) || now.getFullYear(), Number(month) || now.getMonth() + 1
   );
   return ApiResponse.success(res, sheet);
 });
@@ -57,7 +57,7 @@ const createRegularization = asyncHandler(async (req, res) => {
 
 const listRegularizations = asyncHandler(async (req, res) => {
   const { status, employeeId } = req.query;
-  const rows = await attendanceService.listRegularizations(req.tenant.id, { status, employeeId });
+  const rows = await attendanceService.listRegularizations(req.tenant.id, req.user, { status, employeeId });
   return ApiResponse.success(res, rows);
 });
 

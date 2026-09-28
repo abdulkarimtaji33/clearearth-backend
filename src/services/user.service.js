@@ -8,7 +8,7 @@ const { Op } = db.Sequelize;
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, roleId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, status, roleId, dateFrom, dateTo, unlinked } = filters;
 
   const where = { tenant_id: tenantId };
 
@@ -22,6 +22,9 @@ const getAll = async (tenantId, filters) => {
 
   if (status) where.status = status;
   if (roleId) where.role_id = roleId;
+  // unlinked=true: only users with no employee record yet — used by the HR "link existing
+  // user" flow so it doesn't offer users who are already linked to an employee.
+  if (unlinked === true || unlinked === 'true') where.employee_id = null;
   applyCreatedAtFilter(where, dateFrom, dateTo);
 
   const { count, rows } = await db.User.findAndCountAll({
@@ -113,21 +116,57 @@ const create = async (tenantId, data) => {
 
   const hashedPassword = await hashPassword(password);
 
-  const user = await db.User.create({
-    tenant_id: tenantId,
-    role_id: roleId,
-    username: email.split('@')[0],
-    email,
-    password: hashedPassword,
-    first_name: firstName,
-    last_name: lastName,
-    phone,
-    designation: designation || null,
-    avatar: avatar || null,
-    status: 'active',
+  // NOTE: employee.service is required lazily to avoid a require-time cycle:
+  // employee.service -> user.service (and employee.service -> leave.service -> ... -> employee.service).
+  const { nextEmployeeCode } = require('./employee.service');
+
+  let userId;
+  let employeeId;
+  await db.sequelize.transaction(async (t) => {
+    const user = await db.User.create({
+      tenant_id: tenantId,
+      role_id: roleId,
+      username: email.split('@')[0],
+      email,
+      password: hashedPassword,
+      first_name: firstName,
+      last_name: lastName,
+      phone,
+      designation: designation || null,
+      avatar: avatar || null,
+      status: 'active',
+    }, { transaction: t });
+    userId = user.id;
+
+    // Auto-provision a matching employee record so basic HR self-service
+    // (check-in/out, leave, payslips) works immediately for every user,
+    // without a separate manual HR step.
+    const employeeCode = await nextEmployeeCode(tenantId, t);
+    const employee = await db.Employee.create({
+      tenant_id: tenantId,
+      user_id: user.id,
+      employee_code: employeeCode,
+      first_name: firstName,
+      last_name: lastName,
+      email: email || null,
+      phone: phone || null,
+      date_of_joining: new Date().toISOString().slice(0, 10),
+      employment_status: 'active',
+    }, { transaction: t });
+    employeeId = employee.id;
+
+    await user.update({ employee_id: employee.id }, { transaction: t });
   });
 
-  return await getById(tenantId, user.id);
+  // Initialize this year's leave balances (best-effort, non-blocking), same pattern as employee.service#create
+  try {
+    const leaveService = require('./leave.service');
+    await leaveService.initializeBalancesForEmployee(tenantId, employeeId, new Date().getFullYear());
+  } catch (e) {
+    console.warn('[HR] leave balance initialization skipped:', e.message);
+  }
+
+  return await getById(tenantId, userId);
 };
 
 const update = async (tenantId, userId, data, actor = null) => {

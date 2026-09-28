@@ -7,7 +7,7 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, roleId, dateFrom, dateTo } = req.query;
+  const { page, pageSize, search, status, roleId, dateFrom, dateTo, unlinked } = req.query;
   const pagination = getPaginationParams(page, pageSize);
 
   const result = await userService.getAll(req.tenant.id, {
@@ -17,6 +17,7 @@ const getAll = asyncHandler(async (req, res) => {
     roleId,
     dateFrom,
     dateTo,
+    unlinked,
   });
 
   return ApiResponse.paginated(res, result.users, {

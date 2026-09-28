@@ -86,6 +86,7 @@ const process = async (tenantId, actorUserId, payrollRunId) => {
     let totalGross = 0;
     let totalDeductions = 0;
     let totalNet = 0;
+    let payslipCount = 0;
 
     for (const employee of employees) {
       const salary = await salaryStructureService.getActive(tenantId, employee.id, run.period_end);
@@ -94,7 +95,8 @@ const process = async (tenantId, actorUserId, payrollRunId) => {
         continue;
       }
 
-      const sheet = await attendanceService.getMonthlySheet(tenantId, employee.id, run.period_year, run.period_month);
+      // Internal system call (not a user-initiated read) — pass null actorUser to bypass manager-scoping.
+      const sheet = await attendanceService.getMonthlySheet(tenantId, null, employee.id, run.period_year, run.period_month);
 
       const absentDays = sheet.days.filter((d) => d.status === 'absent').length;
 
@@ -146,6 +148,11 @@ const process = async (tenantId, actorUserId, payrollRunId) => {
       totalGross += grossSalary;
       totalDeductions += totalDeduction;
       totalNet += netSalary;
+      payslipCount += 1;
+    }
+
+    if (payslipCount === 0) {
+      throw ApiError.badRequest('No eligible employees found for this payroll period — check that employees have an active status and a salary structure');
     }
 
     await run.update({
