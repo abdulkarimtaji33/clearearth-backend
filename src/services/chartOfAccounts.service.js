@@ -16,6 +16,7 @@ const DEFAULT_ACCOUNTS = [
   { code: '2100', name: 'VAT Payable (Output Tax)',      type: 'liability', sub_type: 'current_liability', normal_balance: 'credit', sort_order: 120 },
   { code: '2200', name: 'Accrued Expenses',              type: 'liability', sub_type: 'current_liability', normal_balance: 'credit', sort_order: 130 },
   { code: '2300', name: 'Unearned Revenue',              type: 'liability', sub_type: 'current_liability', normal_balance: 'credit', sort_order: 140 },
+  { code: '2410', name: 'Commission Payable',            type: 'liability', sub_type: 'current_liability', normal_balance: 'credit', sort_order: 145 },
   { code: '2500', name: 'Loans Payable',                 type: 'liability', sub_type: 'long_term_liability', normal_balance: 'credit', sort_order: 150 },
   // EQUITY
   { code: '3000', name: "Owner's Capital / Share Capital", type: 'equity', sub_type: 'equity',           normal_balance: 'credit', sort_order: 210 },
@@ -32,6 +33,7 @@ const DEFAULT_ACCOUNTS = [
   { code: '5400', name: 'Fuel & Transport',              type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 450 },
   { code: '5500', name: 'Utilities',                     type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 460 },
   { code: '5600', name: 'Finance Charges',               type: 'expense',   sub_type: 'finance_cost',     normal_balance: 'debit',  sort_order: 470 },
+  { code: '5710', name: 'Staff Commission Expense',      type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 475 },
 ];
 
 /** Map expense categories to account codes */

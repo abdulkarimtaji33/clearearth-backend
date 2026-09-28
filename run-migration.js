@@ -2510,6 +2510,98 @@ async function runMigration() {
       console.warn('  users.impersonate permission setup:', e.message);
     }
 
+    console.log('Creating commission_settings table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS commission_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        user_id INT NOT NULL,
+        commission_percentage DECIMAL(5,2) NOT NULL,
+        effective_from DATE NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_cs_tenant (tenant_id),
+        INDEX idx_cs_user (user_id),
+        INDEX idx_cs_active (is_active),
+        CONSTRAINT fk_commission_settings_user FOREIGN KEY (user_id) REFERENCES users(id),
+        CONSTRAINT fk_commission_settings_created_by FOREIGN KEY (created_by) REFERENCES users(id)
+      )
+    `);
+
+    console.log('Creating commissions table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS commissions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        user_id INT NOT NULL,
+        quotation_id INT NOT NULL,
+        deal_id INT NULL,
+        quotation_amount DECIMAL(15,2) NOT NULL,
+        commission_percentage DECIMAL(5,2) NOT NULL,
+        commission_amount DECIMAL(15,2) NOT NULL,
+        status ENUM('accrued','paid','in_payroll') NOT NULL DEFAULT 'accrued',
+        payslip_id INT NULL,
+        journal_entry_id INT NULL,
+        paid_at DATETIME NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY uq_commission_tenant_quotation (tenant_id, quotation_id),
+        INDEX idx_comm_tenant (tenant_id),
+        INDEX idx_comm_user (user_id),
+        INDEX idx_comm_status (status),
+        CONSTRAINT fk_commissions_user FOREIGN KEY (user_id) REFERENCES users(id),
+        CONSTRAINT fk_commissions_quotation FOREIGN KEY (quotation_id) REFERENCES quotations(id)
+      )
+    `);
+
+    console.log('Creating deal_inspection_location_tokens table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS deal_inspection_location_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        token VARCHAR(64) NOT NULL UNIQUE,
+        inspection_request_id INT NOT NULL,
+        tenant_id INT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        used_at DATETIME NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_dilt_request (inspection_request_id),
+        INDEX idx_dilt_tenant (tenant_id),
+        CONSTRAINT fk_dilt_inspection_request FOREIGN KEY (inspection_request_id) REFERENCES deal_inspection_requests(id) ON DELETE CASCADE
+      )
+    `);
+
+    console.log('Backfilling chart of accounts 2410 Commission Payable / 5710 Staff Commission Expense for existing tenants...');
+    try {
+      const [tenants] = await db.sequelize.query(`SELECT id FROM tenants`);
+      for (const t of tenants || []) {
+        const [existing] = await db.sequelize.query(
+          `SELECT code FROM chart_of_accounts WHERE tenant_id = ? AND code IN ('2410','5710')`,
+          { replacements: [t.id] }
+        );
+        const existingCodes = new Set((existing || []).map((r) => r.code));
+        if (!existingCodes.has('2410')) {
+          await db.sequelize.query(
+            `INSERT INTO chart_of_accounts (tenant_id, code, name, type, sub_type, normal_balance, is_group, is_system, is_active, sort_order, created_at, updated_at)
+             VALUES (?, '2410', 'Commission Payable', 'liability', 'current_liability', 'credit', 0, 1, 1, 145, NOW(), NOW())`,
+            { replacements: [t.id] }
+          ).catch((e) => console.warn(`  tenant ${t.id}: 2410 insert skipped:`, e.message));
+        }
+        if (!existingCodes.has('5710')) {
+          await db.sequelize.query(
+            `INSERT INTO chart_of_accounts (tenant_id, code, name, type, sub_type, normal_balance, is_group, is_system, is_active, sort_order, created_at, updated_at)
+             VALUES (?, '5710', 'Staff Commission Expense', 'expense', 'operating_expense', 'debit', 0, 1, 1, 475, NOW(), NOW())`,
+            { replacements: [t.id] }
+          ).catch((e) => console.warn(`  tenant ${t.id}: 5710 insert skipped:`, e.message));
+        }
+      }
+      console.log('  Chart of accounts backfill complete');
+    } catch (e) {
+      console.warn('  Chart of accounts backfill:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

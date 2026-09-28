@@ -89,6 +89,26 @@ const GrnItem = require('./GrnItem')(sequelize, DataTypes);
 const GrnImage = require('./GrnImage')(sequelize, DataTypes);
 const Inventory = require('./Inventory')(sequelize, DataTypes);
 
+// HRM
+const Department = require('./Department')(sequelize, DataTypes);
+const Employee = require('./Employee')(sequelize, DataTypes);
+const EmployeeSalaryStructure = require('./EmployeeSalaryStructure')(sequelize, DataTypes);
+const AttendanceRecord = require('./AttendanceRecord')(sequelize, DataTypes);
+const AttendanceRegularizationRequest = require('./AttendanceRegularizationRequest')(sequelize, DataTypes);
+const LeaveType = require('./LeaveType')(sequelize, DataTypes);
+const LeaveBalance = require('./LeaveBalance')(sequelize, DataTypes);
+const LeaveRequest = require('./LeaveRequest')(sequelize, DataTypes);
+const Holiday = require('./Holiday')(sequelize, DataTypes);
+const PayrollRun = require('./PayrollRun')(sequelize, DataTypes);
+const Payslip = require('./Payslip')(sequelize, DataTypes);
+
+// Sales Commission
+const CommissionSetting = require('./CommissionSetting')(sequelize, DataTypes);
+const Commission = require('./Commission')(sequelize, DataTypes);
+
+// Inspection Request Location Sharing
+const DealInspectionLocationToken = require('./DealInspectionLocationToken')(sequelize, DataTypes);
+
 // Create db object with all models
 const db = {
   sequelize,
@@ -158,6 +178,20 @@ const db = {
   GrnItem,
   GrnImage,
   Inventory,
+  Department,
+  Employee,
+  EmployeeSalaryStructure,
+  AttendanceRecord,
+  AttendanceRegularizationRequest,
+  LeaveType,
+  LeaveBalance,
+  LeaveRequest,
+  Holiday,
+  PayrollRun,
+  Payslip,
+  CommissionSetting,
+  Commission,
+  DealInspectionLocationToken,
 };
 
 // Define Associations

@@ -166,7 +166,7 @@ const update = async (tenantId, quotationId, data, scope = {}, actor = null) => 
   throw ApiError.badRequest('Quotations cannot be edited after creation');
 };
 
-const _approveQuotation = async (quotation, { approvedByUserId, requestedPickupDate }) => {
+const _approveQuotation = async (quotation, { approvedByUserId, requestedPickupDate }, transaction = null) => {
   if (quotation.status === QUOTATION_STATUS.APPROVED) {
     throw ApiError.badRequest('Quotation is already approved');
   }
@@ -188,7 +188,7 @@ const _approveQuotation = async (quotation, { approvedByUserId, requestedPickupD
     pickup_date_status: pickupDate ? 'pending' : null,
     confirmed_pickup_date: null,
     pickup_reschedule_note: null,
-  });
+  }, { transaction });
 };
 
 const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedPickupDate = null) => {
@@ -204,7 +204,17 @@ const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedP
   });
   if (!quotation) throw ApiError.notFound('Quotation not found');
 
-  await _approveQuotation(quotation, { approvedByUserId: actor.userId, requestedPickupDate });
+  await db.sequelize.transaction(async (t) => {
+    await _approveQuotation(quotation, { approvedByUserId: actor.userId, requestedPickupDate }, t);
+
+    // Sales commission — opt-in per user, resilient to GL failures (see commission.service.js)
+    try {
+      const commissionService = require('./commission.service');
+      await commissionService.createFromQuotation(tenantId, quotation, t);
+    } catch (commErr) {
+      console.warn('[Commission] creation skipped on quotation approval:', commErr.message);
+    }
+  });
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
   await notificationService.notifyQuotationApproved(tenantId, quotation, approvedByUser);

@@ -40,6 +40,13 @@ const grnRoutes = require('./grn.routes');
 const driverRoutes = require('./driver.routes');
 const dashboardRoutes = require('./dashboard.routes');
 const locationShareRoutes = require('./locationShare.routes');
+const commissionRoutes = require('./commission.routes');
+const inspectionLocationShareRoutes = require('./inspectionLocationShare.routes');
+const hrDepartmentRoutes = require('./department.routes');
+const hrEmployeeRoutes = require('./employee.routes');
+const hrAttendanceRoutes = require('./attendance.routes');
+const hrLeaveRoutes = require('./leave.routes');
+const hrPayrollRoutes = require('./payroll.routes');
 
 // PDF routes - must be before resource mounts so /quotations/:id/pdf matches
 router.use(pdfRoutes);
@@ -112,5 +119,12 @@ router.use('/grn', grnRoutes);
 router.use('/driver', driverRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/location-share', locationShareRoutes);
+router.use('/hr/departments', hrDepartmentRoutes);
+router.use('/hr/employees', hrEmployeeRoutes);
+router.use('/hr/attendance', hrAttendanceRoutes);
+router.use('/hr/leave', hrLeaveRoutes);
+router.use('/hr/payroll', hrPayrollRoutes);
+router.use('/commissions', commissionRoutes);
+router.use('/inspection-location-share', inspectionLocationShareRoutes);
 
 module.exports = router;
