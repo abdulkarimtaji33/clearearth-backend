@@ -42,7 +42,7 @@ const getAll = async (tenantId, filters = {}) => {
         as: 'deal',
         where: dealWhere,
         required: true,
-        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status', 'total', 'currency', 'inspection_required'],
+        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status', 'total', 'currency', 'inspection_required', 'deal_type'],
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
@@ -81,7 +81,7 @@ const getById = async (tenantId, requestId, scope = {}) => {
         as: 'deal',
         where: dealWhere,
         required: true,
-        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status', 'notes'],
+        attributes: ['id', 'title', 'deal_number', 'deal_date', 'status', 'notes', 'deal_type'],
         include: [
           { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
           { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },

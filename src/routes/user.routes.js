@@ -54,6 +54,9 @@ router.put('/:id/password', authorize('users.update'), changePasswordValidation,
 router.get('/:id', authorize('users.update'), userController.getById);
 router.post('/', authorize('users.create'), createUserValidation, userController.create);
 router.put('/:id', authorize('users.update'), updateUserValidation, userController.update);
+router.patch('/:id/disable', authorize('users.update'), userController.disable);
+router.patch('/:id/enable', authorize('users.update'), userController.enable);
+router.post('/:id/impersonate', authorize('users.impersonate'), userController.impersonate);
 router.delete('/:id', authorize('users.delete'), userController.remove);
 
 module.exports = router;

@@ -130,7 +130,18 @@ const create = async (tenantId, data, scope = {}) => {
   const existingCount = await db.Quotation.count({ where: { tenant_id: tenantId, deal_id: dealId } });
 
   const quotation = await db.sequelize.transaction(async (t) => {
-    const referenceNumber = await nextReferenceNumber(db.Quotation, SERVICE_QUOTATION_SEED, t);
+    let referenceNumber;
+    if (existingCount > 0) {
+      const firstQuotation = await db.Quotation.findOne({
+        where: { tenant_id: tenantId, deal_id: dealId },
+        order: [['id', 'ASC']],
+        transaction: t,
+      });
+      referenceNumber = firstQuotation?.reference_number
+        ?? (await nextReferenceNumber(db.Quotation, SERVICE_QUOTATION_SEED, t));
+    } else {
+      referenceNumber = await nextReferenceNumber(db.Quotation, SERVICE_QUOTATION_SEED, t);
+    }
     return db.Quotation.create(
       {
         tenant_id: tenantId,

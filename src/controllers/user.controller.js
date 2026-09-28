@@ -55,8 +55,23 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const update = asyncHandler(async (req, res) => {
-  const user = await userService.update(req.tenant.id, req.params.id, req.body);
+  const user = await userService.update(req.tenant.id, req.params.id, req.body, req.user);
   return ApiResponse.success(res, user, 'User updated successfully');
+});
+
+const disable = asyncHandler(async (req, res) => {
+  const user = await userService.disable(req.tenant.id, req.params.id);
+  return ApiResponse.success(res, user, 'User disabled successfully');
+});
+
+const enable = asyncHandler(async (req, res) => {
+  const user = await userService.enable(req.tenant.id, req.params.id);
+  return ApiResponse.success(res, user, 'User enabled successfully');
+});
+
+const impersonate = asyncHandler(async (req, res) => {
+  const result = await userService.impersonate(req.tenant.id, req.user.id, req.params.id);
+  return ApiResponse.success(res, result, 'Impersonation token issued');
 });
 
 const remove = asyncHandler(async (req, res) => {
@@ -69,4 +84,4 @@ const changePassword = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, user, 'Password updated successfully');
 });
 
-module.exports = { getAll, getInspectors, getDrivers, getAssignees, getById, create, update, remove, changePassword };
+module.exports = { getAll, getInspectors, getDrivers, getAssignees, getById, create, update, remove, changePassword, disable, enable, impersonate };

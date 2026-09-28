@@ -95,6 +95,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      preferred_inspection_date: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
     },
     {
       tableName: 'deal_inspection_requests',

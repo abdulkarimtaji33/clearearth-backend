@@ -399,6 +399,7 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
           requested_by: insp.requestedBy || null,
           notes: insp.notes || null,
           priority: insp.priority || 'medium',
+          preferred_inspection_date: insp.preferredInspectionDate || null,
         },
         { transaction }
       );
@@ -610,6 +611,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         requested_by: insp.requestedBy || null,
         notes: insp.notes || null,
         priority: insp.priority || existingInsp?.priority || 'medium',
+        preferred_inspection_date: insp.preferredInspectionDate || null,
       };
       if (existingInsp) {
         await existingInsp.update(inspPayload, { transaction });

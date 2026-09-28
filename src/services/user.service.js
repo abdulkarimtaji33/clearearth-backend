@@ -3,7 +3,7 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
-const { hashPassword } = require('../utils/helpers');
+const { hashPassword, generateToken } = require('../utils/helpers');
 const { Op } = db.Sequelize;
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 
@@ -130,7 +130,7 @@ const create = async (tenantId, data) => {
   return await getById(tenantId, user.id);
 };
 
-const update = async (tenantId, userId, data) => {
+const update = async (tenantId, userId, data, actor = null) => {
   const user = await getById(tenantId, userId);
 
   const updateData = {
@@ -152,7 +152,32 @@ const update = async (tenantId, userId, data) => {
     updateData.role_id = data.roleId || null;
   }
 
+  let emailChanged = false;
+  const oldEmail = user.email;
+  if (data.email !== undefined && data.email !== user.email) {
+    const existingWithEmail = await db.User.findOne({
+      where: { tenant_id: tenantId, email: data.email, id: { [Op.ne]: userId } },
+    });
+    if (existingWithEmail) throw ApiError.conflict('Email already exists');
+    updateData.email = data.email;
+    emailChanged = true;
+  }
+
   await user.update(updateData);
+
+  if (emailChanged) {
+    try {
+      await db.AuditLog.create({
+        tenant_id: tenantId,
+        user_id: actor?.userId || actor?.id || null,
+        module: 'users',
+        action: 'UPDATE_EMAIL',
+        record_id: userId,
+        old_data: { email: oldEmail },
+        new_data: { email: data.email },
+      });
+    } catch (e) { /* audit log failures should not block the update */ }
+  }
 
   return await getById(tenantId, userId);
 };
@@ -160,6 +185,60 @@ const update = async (tenantId, userId, data) => {
 const remove = async (tenantId, userId) => {
   const user = await getById(tenantId, userId);
   await user.destroy();
+};
+
+const disable = async (tenantId, userId) => {
+  const user = await getById(tenantId, userId);
+  await user.update({ status: 'suspended' });
+  return await getById(tenantId, userId);
+};
+
+const enable = async (tenantId, userId) => {
+  const user = await getById(tenantId, userId);
+  await user.update({ status: 'active' });
+  return await getById(tenantId, userId);
+};
+
+const impersonate = async (tenantId, adminUserId, targetUserId) => {
+  const targetUser = await db.User.findOne({
+    where: { id: targetUserId, tenant_id: tenantId },
+    include: [{ model: db.Role, as: 'role' }],
+  });
+  if (!targetUser) throw ApiError.notFound('User not found');
+  if (targetUser.status !== 'active') {
+    throw ApiError.badRequest('Cannot impersonate an inactive user');
+  }
+
+  const accessToken = generateToken({
+    userId: targetUser.id,
+    tenantId: targetUser.tenant_id,
+    email: targetUser.email,
+    role: targetUser.role?.name,
+    impersonatedBy: adminUserId,
+  });
+
+  try {
+    await db.AuditLog.create({
+      tenant_id: tenantId,
+      user_id: adminUserId,
+      module: 'users',
+      action: 'impersonate_start',
+      record_id: targetUser.id,
+      old_data: null,
+      new_data: { targetUserId: targetUser.id, targetEmail: targetUser.email },
+    });
+  } catch (e) { /* audit log failures should not block impersonation */ }
+
+  return {
+    accessToken,
+    user: {
+      id: targetUser.id,
+      email: targetUser.email,
+      firstName: targetUser.first_name,
+      lastName: targetUser.last_name,
+      role: targetUser.role?.name,
+    },
+  };
 };
 
 const changePassword = async (tenantId, userId, password) => {
@@ -175,4 +254,4 @@ const changePassword = async (tenantId, userId, password) => {
   return await getById(tenantId, userId);
 };
 
-module.exports = { getAll, getInspectors, getDrivers, getAssignees, getById, create, update, remove, changePassword };
+module.exports = { getAll, getInspectors, getDrivers, getAssignees, getById, create, update, remove, changePassword, disable, enable, impersonate };

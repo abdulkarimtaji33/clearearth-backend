@@ -333,7 +333,8 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const grandTotal = subtotal + totalVat + others;
   const vatLabel = isRcm ? 'Value-Added Tax' : `Value-Added Tax (${formatCompactNum(vatPct * 100)}%)`;
   const approved = resolvePdfAsApproved(isApprovedStatus(quotation.status), options);
-  const quoteRef = quotation.reference_number ?? quotation.id;
+  const quoteRefBase = quotation.reference_number ?? quotation.id;
+  const quoteRef = quotation.version > 1 ? `${quoteRefBase}_v${quotation.version}` : quoteRefBase;
   const quoteNumber = approved ? `SO/SERV/${quoteRef}/1` : `QT/SERV/${quoteRef}/1`;
   const quoteDate = formatDate(quotation.quotation_date);
   const documentTitle = approved ? 'SERVICE ORDER' : 'SERVICE QUOTATION';
@@ -385,7 +386,12 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     where: { id: poId, tenant_id: tenantId },
     include: [
       { model: db.Company, as: 'company', required: false },
-      { model: db.Supplier, as: 'supplier', required: false },
+      {
+        model: db.Supplier,
+        as: 'supplier',
+        required: false,
+        include: [{ model: db.Contact, as: 'primaryContact', required: false }],
+      },
       {
         model: db.Deal,
         as: 'deal',
@@ -482,7 +488,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
     fromPhone: tenant.phone || '-',
     fromAddress: fromAddr,
     fromVat: getVat(tenant),
-    toContactName: personFullName(po.deal?.contact) || '-',
+    toContactName: personFullName(po.supplier?.primaryContact) || personFullName(po.deal?.contact) || '-',
     toCompany: party?.company_name || '-',
     toEmail: party?.email || '-',
     toPhone: party?.phone || '-',

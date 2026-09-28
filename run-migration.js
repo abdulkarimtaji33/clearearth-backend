@@ -2470,6 +2470,46 @@ async function runMigration() {
       }
     }
 
+    console.log('Adding deal_inspection_requests.preferred_inspection_date column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE deal_inspection_requests ADD COLUMN preferred_inspection_date DATE NULL COMMENT 'Preferred date for inspection requested at submission time'`);
+      console.log('  Added deal_inspection_requests.preferred_inspection_date');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  deal_inspection_requests.preferred_inspection_date already exists, skipping');
+    }
+
+    console.log('Ensuring users.impersonate permission exists and granting to admin roles...');
+    try {
+      try {
+        await db.sequelize.query(`
+          ALTER TABLE permissions MODIFY COLUMN action ENUM(
+            'create','read','update','delete','approve','export','impersonate'
+          ) NOT NULL
+        `);
+      } catch (e) {
+        console.warn('  permissions.action enum alter:', e.message);
+      }
+      await db.sequelize.query(
+        `INSERT IGNORE INTO permissions (name, display_name, module, action, description) VALUES (?, ?, ?, ?, ?)`,
+        { replacements: ['users.impersonate', 'Impersonate Users', 'users', 'impersonate', 'Permission to log in as another user'] }
+      );
+      const [impRoles] = await db.sequelize.query(`SELECT id FROM roles WHERE name IN ('admin','super_admin','tenant_admin')`);
+      const [[impPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'users.impersonate' LIMIT 1`);
+      if (impPerm?.id) {
+        for (const role of impRoles || []) {
+          try {
+            await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, {
+              replacements: [role.id, impPerm.id],
+            });
+          } catch (e) { /* ignore dupes */ }
+        }
+      }
+      console.log('  users.impersonate permission ensured and granted to admin roles');
+    } catch (e) {
+      console.warn('  users.impersonate permission setup:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
