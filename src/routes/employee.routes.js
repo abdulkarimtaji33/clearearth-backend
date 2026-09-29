@@ -56,6 +56,7 @@ router.get('/me/history', employeeController.getMyHistory);
 
 router.get('/me/change-requests', employeeController.listMyChangeRequests);
 router.post('/me/change-requests', employeeController.createMyChangeRequest);
+router.post('/me/photo', uploadSingle('file'), employeeController.uploadMyPhoto);
 
 for (const [path, controller] of Object.entries(selfControllers)) {
   const uploadMw = uploadableEntities.has(path) ? [uploadSingle('file')] : [];
@@ -78,6 +79,8 @@ router.get('/:id', authorize('hr.employees.read', 'hr.employees.manage'), employ
 router.post('/', authorize('hr.employees.manage'), employeeController.create);
 router.put('/:id', authorize('hr.employees.manage'), employeeController.update);
 router.post('/:id/offboard', authorize('hr.employees.manage'), employeeController.offboard);
+
+router.post('/:employeeId/photo', authorize('hr.employees.manage'), uploadSingle('file'), employeeController.uploadPhoto);
 
 router.get('/:id/salary-structure', authorize('hr.employees.manage'), employeeController.getSalaryStructureHistory);
 router.post('/:id/salary-structure', authorize('hr.employees.manage'), employeeController.setSalaryStructure);

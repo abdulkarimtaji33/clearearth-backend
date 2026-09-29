@@ -27,6 +27,16 @@ const manualUpsert = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, record, 'Attendance updated successfully');
 });
 
+const bulkManualUpsert = asyncHandler(async (req, res) => {
+  const result = await attendanceService.bulkManualUpsert(req.tenant.id, req.user.id, req.body);
+  return ApiResponse.success(res, result, 'Bulk attendance processed');
+});
+
+const getTodayAll = asyncHandler(async (req, res) => {
+  const rows = await attendanceService.getTodayAll(req.tenant.id);
+  return ApiResponse.success(res, rows);
+});
+
 const listAttendance = asyncHandler(async (req, res) => {
   const { employeeId, dateFrom, dateTo, status, page, pageSize } = req.query;
   const { getPaginationParams } = require('../utils/helpers');
@@ -69,6 +79,7 @@ const reviewRegularization = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  checkIn, checkOut, getTodayStatus, manualUpsert, listAttendance, getMonthlySheet, getMyMonthlySheet,
+  checkIn, checkOut, getTodayStatus, manualUpsert, bulkManualUpsert, getTodayAll,
+  listAttendance, getMonthlySheet, getMyMonthlySheet,
   createRegularization, listRegularizations, reviewRegularization,
 };

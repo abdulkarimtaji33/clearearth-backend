@@ -15,6 +15,8 @@ router.post('/regularizations', attendanceController.createRegularization);
 // HR
 router.get('/', authorize('hr.attendance.read', 'hr.attendance.manage'), attendanceController.listAttendance);
 router.post('/manual', authorize('hr.attendance.manage'), attendanceController.manualUpsert);
+router.post('/bulk-manual', authorize('hr.attendance.manage'), attendanceController.bulkManualUpsert);
+router.get('/today-all', authorize('hr.attendance.manage'), attendanceController.getTodayAll);
 router.get('/sheet/:employeeId', authorize('hr.attendance.read', 'hr.attendance.manage'), attendanceController.getMonthlySheet);
 router.get('/regularizations', authorize('hr.attendance.read', 'hr.attendance.manage'), attendanceController.listRegularizations);
 router.post('/regularizations/:id/review', authorize('hr.attendance.manage'), attendanceController.reviewRegularization);

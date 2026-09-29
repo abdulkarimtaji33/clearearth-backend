@@ -1,9 +1,14 @@
 /**
  * Employee Controller (HRM)
  */
+const path = require('path');
+const config = require('../config');
+const db = require('../models');
+const { getFileUrl } = require('../middlewares/upload');
 const employeeService = require('../services/employee.service');
 const salaryStructureService = require('../services/salaryStructure.service');
 const ApiResponse = require('../utils/apiResponse');
+const ApiError = require('../utils/apiError');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
@@ -59,6 +64,29 @@ const getHistory = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, rows);
 });
 
+/** HR: upload/replace a specific employee's profile photo */
+const uploadPhoto = asyncHandler(async (req, res) => {
+  if (!req.file) throw ApiError.badRequest('No file uploaded');
+  const employee = await db.Employee.findOne({ where: { id: req.params.employeeId, tenant_id: req.tenant.id } });
+  if (!employee) throw ApiError.notFound('Employee not found');
+
+  const relativePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
+  await employee.update({ profile_photo: relativePath });
+  const fileUrl = getFileUrl(relativePath);
+  return ApiResponse.success(res, { path: relativePath, url: fileUrl }, 'Profile photo updated successfully');
+});
+
+/** Self-service: upload/replace the signed-in user's own profile photo */
+const uploadMyPhoto = asyncHandler(async (req, res) => {
+  if (!req.file) throw ApiError.badRequest('No file uploaded');
+  const employee = await employeeService.requireEmployeeForUser(req.tenant.id, req.user.id);
+
+  const relativePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
+  await employee.update({ profile_photo: relativePath });
+  const fileUrl = getFileUrl(relativePath);
+  return ApiResponse.success(res, { path: relativePath, url: fileUrl }, 'Profile photo updated successfully');
+});
+
 const createMyChangeRequest = asyncHandler(async (req, res) => {
   const row = await employeeService.createChangeRequest(req.tenant.id, req.user.id, req.body);
   return ApiResponse.created(res, row, 'Change request submitted');
@@ -96,6 +124,6 @@ const getSalaryStructureHistory = asyncHandler(async (req, res) => {
 
 module.exports = {
   getAll, getById, create, update, offboard, getMe, setSalaryStructure, getSalaryStructureHistory,
-  getMySalaryHistory, getMyHistory, getHistory,
+  getMySalaryHistory, getMyHistory, getHistory, uploadPhoto, uploadMyPhoto,
   createMyChangeRequest, listMyChangeRequests, listChangeRequests, approveChangeRequest, rejectChangeRequest,
 };

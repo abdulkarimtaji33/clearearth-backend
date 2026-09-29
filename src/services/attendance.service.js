@@ -108,12 +108,15 @@ const getTodayStatus = async (tenantId, actorUserId) => {
   return record;
 };
 
-/** HR-permission-gated: create/update any employee's attendance row for any date */
-const manualUpsert = async (tenantId, actorUserId, body) => {
-  const { employeeId, attendanceDate, checkInTime, checkOutTime, status, notes } = body;
+/**
+ * Core upsert logic shared by manualUpsert (single) and bulkManualUpsert (batch).
+ * Throws ApiError.notFound if employeeId doesn't belong to this tenant.
+ */
+const upsertOne = async (tenantId, actorUserId, entry, options = {}) => {
+  const { employeeId, attendanceDate, checkInTime, checkOutTime, status, notes } = entry;
   if (!employeeId || !attendanceDate) throw ApiError.badRequest('employeeId and attendanceDate are required');
 
-  const employee = await db.Employee.findOne({ where: { id: employeeId, tenant_id: tenantId } });
+  const employee = await db.Employee.findOne({ where: { id: employeeId, tenant_id: tenantId }, transaction: options.transaction });
   if (!employee) throw ApiError.notFound('Employee not found');
 
   let workHours = null;
@@ -129,6 +132,7 @@ const manualUpsert = async (tenantId, actorUserId, body) => {
       check_in_source: 'hr_manual', check_out_source: 'hr_manual',
       status: status || 'present', work_hours: workHours, notes: notes || null, entered_by: actorUserId,
     },
+    transaction: options.transaction,
   });
 
   await record.update({
@@ -140,9 +144,40 @@ const manualUpsert = async (tenantId, actorUserId, body) => {
     work_hours: workHours !== null ? workHours : record.work_hours,
     notes: notes !== undefined ? notes : record.notes,
     entered_by: actorUserId,
-  });
+  }, { transaction: options.transaction });
 
   return record;
+};
+
+/** HR-permission-gated: create/update any employee's attendance row for any date */
+const manualUpsert = async (tenantId, actorUserId, body) => upsertOne(tenantId, actorUserId, body);
+
+/**
+ * HR-permission-gated: bulk create/update attendance rows for many employees on one date.
+ * Runs in a single transaction; each entry is upserted independently with best-effort
+ * error handling — a failing entry (e.g. an employeeId not belonging to this tenant) is
+ * recorded in `failed` and does not abort the rest of the batch.
+ */
+const bulkManualUpsert = async (tenantId, actorUserId, body) => {
+  const { attendanceDate, entries } = body || {};
+  if (!attendanceDate) throw ApiError.badRequest('attendanceDate is required');
+  if (!Array.isArray(entries) || entries.length === 0) throw ApiError.badRequest('entries must be a non-empty array');
+
+  let updated = 0;
+  const failed = [];
+
+  await db.sequelize.transaction(async (t) => {
+    for (const entry of entries) {
+      try {
+        await upsertOne(tenantId, actorUserId, { ...entry, attendanceDate }, { transaction: t });
+        updated += 1;
+      } catch (e) {
+        failed.push({ employeeId: entry?.employeeId, error: e.message || 'Failed to upsert attendance' });
+      }
+    }
+  });
+
+  return { updated, failed };
 };
 
 /** Upsert just the status (used internally, e.g. by leave approval to mark 'on_leave') */
@@ -327,8 +362,41 @@ const reviewRegularization = async (tenantId, actorUserId, id, decision, reviewN
   return req;
 };
 
+/**
+ * Every ACTIVE employee in the tenant, left-joined with today's attendance row (if any).
+ * Used for the "mark attendance for everyone" HR view.
+ */
+const getTodayAll = async (tenantId) => {
+  const date = todayStr();
+  const employees = await db.Employee.findAll({
+    where: { tenant_id: tenantId, employment_status: 'active' },
+    include: [{ model: db.Department, as: 'department', attributes: ['id', 'name'] }],
+    order: [['first_name', 'ASC'], ['last_name', 'ASC']],
+  });
+
+  const records = await db.AttendanceRecord.findAll({
+    where: { tenant_id: tenantId, attendance_date: date, employee_id: { [Op.in]: employees.map((e) => e.id) } },
+  });
+  const recordByEmployeeId = {};
+  records.forEach((r) => { recordByEmployeeId[r.employee_id] = r; });
+
+  return employees.map((employee) => {
+    const record = recordByEmployeeId[employee.id];
+    return {
+      employeeId: employee.id,
+      employeeName: `${employee.first_name} ${employee.last_name}`.trim(),
+      employeeCode: employee.employee_code,
+      department: employee.department?.name || null,
+      status: record?.status || 'not_marked',
+      checkInTime: record?.check_in_time || null,
+      checkOutTime: record?.check_out_time || null,
+    };
+  });
+};
+
 module.exports = {
-  checkIn, checkOut, getTodayStatus, manualUpsert, setStatusForDate, listAttendance, getMonthlySheet,
+  checkIn, checkOut, getTodayStatus, manualUpsert, bulkManualUpsert, setStatusForDate, listAttendance, getMonthlySheet,
+  getTodayAll,
   createRegularization, listRegularizations, reviewRegularization,
   WEEKEND_DAYS,
 };
