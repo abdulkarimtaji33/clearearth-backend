@@ -15,6 +15,17 @@ const DEAL_STATUS = {
   LOST: 'lost',
 };
 
+// Guards against malformed date strings (e.g. a stray extra digit from a date
+// input, like "20261-10-15") reaching MySQL as a raw insert, which throws an
+// unhandled 500 instead of a clean validation error.
+const _validDateOrNull = (value) => {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw ApiError.badRequest(`Invalid date: "${value}"`);
+  const d = new Date(value + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) throw ApiError.badRequest(`Invalid date: "${value}"`);
+  return value;
+};
+
 const APPROVABLE_STATUSES = [DEAL_STATUS.NEW, DEAL_STATUS.PENDING_APPROVAL];
 const PIPELINE_STATUSES = [DEAL_STATUS.APPROVED, DEAL_STATUS.QUOTATION_SENT, DEAL_STATUS.NEGOTIATION, DEAL_STATUS.WON];
 const EDITABLE_STATUSES = [DEAL_STATUS.NEW, DEAL_STATUS.QUOTATION_SENT, DEAL_STATUS.NEGOTIATION, DEAL_STATUS.WON, DEAL_STATUS.LOST];
@@ -399,7 +410,7 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
           requested_by: insp.requestedBy || null,
           notes: insp.notes || null,
           priority: insp.priority || 'medium',
-          preferred_inspection_date: insp.preferredInspectionDate || null,
+          preferred_inspection_date: _validDateOrNull(insp.preferredInspectionDate),
         },
         { transaction }
       );
@@ -611,7 +622,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         requested_by: insp.requestedBy || null,
         notes: insp.notes || null,
         priority: insp.priority || existingInsp?.priority || 'medium',
-        preferred_inspection_date: insp.preferredInspectionDate || null,
+        preferred_inspection_date: _validDateOrNull(insp.preferredInspectionDate),
       };
       if (existingInsp) {
         await existingInsp.update(inspPayload, { transaction });
