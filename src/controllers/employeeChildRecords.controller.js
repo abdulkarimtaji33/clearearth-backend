@@ -33,7 +33,15 @@ function makeChildRecordController(service, resolveEmployeeId) {
 
   const update = asyncHandler(async (req, res) => {
     const employeeId = await resolveEmployeeId(req);
-    const row = await service.update(req.tenant.id, employeeId, req.params.id, req.body);
+    const body = { ...req.body };
+    if (req.file) {
+      const { getFileUrl } = require('../middlewares/upload');
+      const path = require('path');
+      const config = require('../config');
+      body.filePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
+      body._fileUrl = getFileUrl(body.filePath);
+    }
+    const row = await service.update(req.tenant.id, employeeId, req.params.id, body);
     return ApiResponse.success(res, row);
   });
 

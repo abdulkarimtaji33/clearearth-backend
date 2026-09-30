@@ -122,8 +122,30 @@ const getSalaryStructureHistory = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, rows);
 });
 
+/** HR: downloadable "Employee Information" PDF for any employee — HR always sees compensation. */
+const downloadInfoPdf = asyncHandler(async (req, res) => {
+  const employeePdfService = require('../services/employeePdf.service');
+  const buffer = await employeePdfService.generateEmployeeInfoPdf(req.tenant.id, req.params.employeeId, { includeCompensation: true });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="employee-info-${req.params.employeeId}.pdf"`);
+  return res.send(buffer);
+});
+
+/** Self-service: downloadable "Employee Information" PDF for the signed-in user's own record. */
+const downloadMyInfoPdf = asyncHandler(async (req, res) => {
+  const employee = await employeeService.requireEmployeeForUser(req.tenant.id, req.user.id);
+  const employeePdfService = require('../services/employeePdf.service');
+  const buffer = await employeePdfService.generateEmployeeInfoPdf(req.tenant.id, employee.id, {
+    includeCompensation: !!employee.salary_visible_to_employee,
+  });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="employee-info-${employee.id}.pdf"`);
+  return res.send(buffer);
+});
+
 module.exports = {
   getAll, getById, create, update, offboard, getMe, setSalaryStructure, getSalaryStructureHistory,
   getMySalaryHistory, getMyHistory, getHistory, uploadPhoto, uploadMyPhoto,
   createMyChangeRequest, listMyChangeRequests, listChangeRequests, approveChangeRequest, rejectChangeRequest,
+  downloadInfoPdf, downloadMyInfoPdf,
 };
