@@ -8,6 +8,8 @@ const childRecordsService = require('../services/employeeChildRecords.service');
 const {
   makeChildRecordController, hrEmployeeIdResolver, selfEmployeeIdResolver,
 } = require('../controllers/employeeChildRecords.controller');
+const employeeAssetsController = require('../controllers/employeeAssets.controller');
+const hrFormsPdfController = require('../controllers/hrFormsPdf.controller');
 
 router.use(authenticate);
 
@@ -21,6 +23,43 @@ router.get('/document-types', async (req, res, next) => {
         [db.Sequelize.Op.or]: [{ tenant_id: null }, { tenant_id: req.tenant.id }],
       },
       order: [['name', 'ASC']],
+    });
+    res.json({ success: true, message: 'Success', data: rows });
+  } catch (e) { next(e); }
+});
+
+// -- Document types: HR can name a custom document type on the fly ----------
+// Case-insensitive match against this tenant's own document types (system-wide,
+// tenant_id-null rows are never duplicated here — HR only ever creates tenant-scoped
+// custom types, so the fixed/system list stays clean).
+router.post('/document-types', authorize('hr.employees.manage'), async (req, res, next) => {
+  try {
+    const db = require('../models');
+    const name = (req.body?.name || '').trim();
+    if (!name) return res.status(400).json({ success: false, message: 'name is required' });
+
+    const existing = await db.DocumentType.findOne({
+      where: {
+        tenant_id: req.tenant.id,
+        name: db.sequelize.where(db.sequelize.fn('LOWER', db.sequelize.col('name')), name.toLowerCase()),
+      },
+    });
+    if (existing) {
+      return res.json({ success: true, message: 'Success', data: existing });
+    }
+
+    const row = await db.DocumentType.create({ tenant_id: req.tenant.id, name, is_active: true });
+    res.status(201).json({ success: true, message: 'Document type created', data: row });
+  } catch (e) { next(e); }
+});
+
+// -- Designations lookup (used by the Job tab's Designation field) ----------
+router.get('/designations', async (req, res, next) => {
+  try {
+    const db = require('../models');
+    const rows = await db.Designation.findAll({
+      where: { is_active: true },
+      order: [['display_order', 'ASC'], ['display_name', 'ASC']],
     });
     res.json({ success: true, message: 'Success', data: rows });
   } catch (e) { next(e); }
@@ -54,15 +93,18 @@ router.get('/me', employeeController.getMe);
 router.get('/me/salary-history', employeeController.getMySalaryHistory);
 router.get('/me/history', employeeController.getMyHistory);
 
+router.get('/me/assets', employeeAssetsController.listMine);
+
 router.get('/me/change-requests', employeeController.listMyChangeRequests);
 router.post('/me/change-requests', employeeController.createMyChangeRequest);
 router.post('/me/photo', uploadSingle('file'), employeeController.uploadMyPhoto);
+router.get('/me/info-pdf', employeeController.downloadMyInfoPdf);
 
 for (const [path, controller] of Object.entries(selfControllers)) {
   const uploadMw = uploadableEntities.has(path) ? [uploadSingle('file')] : [];
   router.get(`/me/${path}`, controller.list);
   router.post(`/me/${path}`, ...uploadMw, controller.create);
-  router.put(`/me/${path}/:id`, controller.update);
+  router.put(`/me/${path}/:id`, ...uploadMw, controller.update);
   router.delete(`/me/${path}/:id`, controller.remove);
 }
 
@@ -87,6 +129,8 @@ router.post('/:id/salary-structure', authorize('hr.employees.manage'), employeeC
 
 router.get('/:employeeId/history', authorize('hr.employees.read', 'hr.employees.manage'), employeeController.getHistory);
 
+router.get('/:employeeId/info-pdf', authorize('hr.employees.read', 'hr.employees.manage'), employeeController.downloadInfoPdf);
+
 // HR-only notes — never exposed on self-service endpoints
 router.get('/:employeeId/notes', authorize('hr.employees.manage'), employeeNoteController.list);
 router.post('/:employeeId/notes', authorize('hr.employees.manage'), employeeNoteController.create);
@@ -98,8 +142,21 @@ for (const [path, controller] of Object.entries(hrControllers)) {
   const uploadMw = uploadableEntities.has(path) ? [uploadSingle('file')] : [];
   router.get(`/:employeeId/${path}`, authorize('hr.employees.manage'), controller.list);
   router.post(`/:employeeId/${path}`, authorize('hr.employees.manage'), ...uploadMw, controller.create);
-  router.put(`/:employeeId/${path}/:id`, authorize('hr.employees.manage'), controller.update);
+  router.put(`/:employeeId/${path}/:id`, authorize('hr.employees.manage'), ...uploadMw, controller.update);
   router.delete(`/:employeeId/${path}/:id`, authorize('hr.employees.manage'), controller.remove);
 }
+
+// -- IT Asset tracking (HR-side CRUD + return action) ------------------------
+router.get('/:employeeId/assets', authorize('hr.employees.manage'), employeeAssetsController.list);
+router.post('/:employeeId/assets', authorize('hr.employees.manage'), employeeAssetsController.create);
+router.put('/:employeeId/assets/:id', authorize('hr.employees.manage'), employeeAssetsController.update);
+router.delete('/:employeeId/assets/:id', authorize('hr.employees.manage'), employeeAssetsController.remove);
+router.post('/:employeeId/assets/:id/return', authorize('hr.employees.manage'), employeeAssetsController.markReturned);
+
+// -- HR-generated forms (IT Asset Form, Salary Certificate, Salary Slip, Handover Form) --
+router.get('/:employeeId/asset-form-pdf', authorize('hr.employees.manage'), hrFormsPdfController.downloadAssetFormPdf);
+router.get('/:employeeId/salary-certificate-pdf', authorize('hr.employees.manage'), hrFormsPdfController.downloadSalaryCertificatePdf);
+router.get('/:employeeId/salary-slip-pdf', authorize('hr.employees.manage'), hrFormsPdfController.downloadSalarySlipPdf);
+router.get('/:employeeId/handover-form-pdf', authorize('hr.employees.manage'), hrFormsPdfController.downloadHandoverFormPdf);
 
 module.exports = router;

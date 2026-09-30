@@ -122,6 +122,7 @@ const EmployeeDocument = require('./EmployeeDocument')(sequelize, DataTypes);
 const EmployeeNote = require('./EmployeeNote')(sequelize, DataTypes);
 const EmployeeHistory = require('./EmployeeHistory')(sequelize, DataTypes);
 const ProfileChangeRequest = require('./ProfileChangeRequest')(sequelize, DataTypes);
+const EmployeeAsset = require('./EmployeeAsset')(sequelize, DataTypes);
 
 // Create db object with all models
 const db = {
@@ -218,6 +219,7 @@ const db = {
   EmployeeNote,
   EmployeeHistory,
   ProfileChangeRequest,
+  EmployeeAsset,
 };
 
 // Define Associations

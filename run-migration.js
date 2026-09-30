@@ -2951,6 +2951,28 @@ async function runMigration() {
       console.warn('  document_types seed:', e.message);
     }
 
+    console.log('Creating employee_assets table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS employee_assets (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        asset_type VARCHAR(100) NULL,
+        asset_name VARCHAR(150) NULL,
+        serial_number VARCHAR(100) NULL,
+        assigned_date DATE NULL,
+        condition_notes TEXT NULL,
+        status ENUM('assigned','returned') NOT NULL DEFAULT 'assigned',
+        returned_date DATE NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_ea_tenant (tenant_id),
+        INDEX idx_ea_employee (employee_id),
+        INDEX idx_ea_status (status),
+        CONSTRAINT fk_ea_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
     console.log('Adding lat/lng/ip columns to attendance_records...');
     {
       const attendanceColumns = [
