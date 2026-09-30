@@ -84,9 +84,10 @@ async function run() {
     );
     console.log(`  Processing ${expenses.length} expenses...`);
 
+    // 5100/5200/5300/5400 are group (parent) accounts and are not postable — map to their leaf children.
     const CATEGORY_TO_CODE = {
-      work_orders: '5000', materials: '5200', equipment: '5200',
-      professional: '5300', travel: '5400', fuel: '5400', utility: '5500', other: '5100',
+      work_orders: '5000', materials: '5210', equipment: '5220',
+      professional: '5310', travel: '5410', fuel: '5410', utility: '5500', other: '5140',
     };
 
     for (const exp of expenses) {
@@ -94,7 +95,7 @@ async function run() {
       if (exists) continue;
 
       try {
-        const expCode  = CATEGORY_TO_CODE[exp.category] || '5100';
+        const expCode  = CATEGORY_TO_CODE[exp.category] || '5140';
         const expAccId = await getSystemAccountId(tenantId, expCode);
         const accruId  = await getSystemAccountId(tenantId, '2200');
         const amt      = parseFloat(exp.amount) || 0;

@@ -13,9 +13,14 @@ router.get('/companies/:companyId/statement/pdf', authorize('accounting.read', '
 router.get('/companies/:companyId/statement', authorize('accounting.read', 'deals.read'), receivablesController.getStatement);
 router.post('/receive-payment', authorize('accounting.update'), [
   body('companyId').notEmpty().withMessage('companyId is required'),
-  body('allocations').isArray({ min: 1 }).withMessage('At least one invoice allocation is required'),
+  body('allocations').isArray().withMessage('allocations must be an array'),
   validate,
 ], receivablesController.receivePayment);
+router.get('/unapplied', authorize('accounting.read', 'deals.read'), receivablesController.listUnapplied);
+router.post('/unapplied/:paymentTransactionId/apply', authorize('accounting.update'), [
+  body('allocations').isArray({ min: 1 }).withMessage('At least one invoice allocation is required'),
+  validate,
+], receivablesController.applyUnappliedCredit);
 router.get('/', authorize('accounting.read', 'deals.read'), receivablesController.list);
 router.get('/:id/payments', authorize('accounting.read', 'deals.read'), receivablesController.listPayments);
 router.post('/:id/payment', authorize('accounting.update'), receivablesController.recordPayment);

@@ -84,7 +84,8 @@ async function resolveExpenseAccount(tenantId, { category, expenseAccountId } = 
   }
 
   const { EXPENSE_CATEGORY_TO_CODE } = require('../services/chartOfAccounts.service');
-  const code = EXPENSE_CATEGORY_TO_CODE[category] || '5100';
+  // 5100 is now a non-postable group account — fall back to its Miscellaneous G&A child.
+  const code = EXPENSE_CATEGORY_TO_CODE[category] || '5140';
   const accountId = await jeService.getSystemAccountId(tenantId, code);
   const acc = await db.ChartOfAccounts.findOne({
     where: { id: accountId, tenant_id: tenantId },

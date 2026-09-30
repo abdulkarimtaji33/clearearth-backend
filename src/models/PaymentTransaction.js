@@ -26,6 +26,12 @@ module.exports = (sequelize, DataTypes) => {
       received_from: { type: DataTypes.STRING(255), allowNull: true },
       notes: { type: DataTypes.TEXT, allowNull: true },
       paid_at: { type: DataTypes.DATEONLY, allowNull: true },
+      unapplied_amount: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: false,
+        defaultValue: 0,
+        comment: 'Remaining unapplied/advance credit balance on this receipt, not yet allocated to an invoice',
+      },
       created_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
       journal_entry_id: {
         type: DataTypes.INTEGER,

@@ -4,11 +4,14 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 
-const SOURCE_TYPES = ['receivable', 'payable', 'expense'];
+// 'receivable_advance' represents an unapplied/advance customer receipt — a receipt recorded
+// against a customer (source_id = companyId) that is not yet tied to a specific tax invoice.
+const SOURCE_TYPES = ['receivable', 'payable', 'expense', 'receivable_advance'];
+const RECEIPT_NUMBERED_TYPES = ['receivable', 'receivable_advance'];
 
 async function nextReceiptNumber(tenantId, transaction) {
   const count = await db.PaymentTransaction.count({
-    where: { tenant_id: tenantId, source_type: 'receivable' },
+    where: { tenant_id: tenantId, source_type: { [db.Sequelize.Op.in]: RECEIPT_NUMBERED_TYPES } },
     transaction,
   });
   return String(1000 + count + 1).padStart(7, '0');
@@ -26,13 +29,14 @@ const createPaymentTransaction = async (tenantId, userId, data, transaction) => 
     receivedFrom,
     notes,
     paidAt,
+    unappliedAmount,
   } = data;
 
   if (!SOURCE_TYPES.includes(sourceType)) {
     throw ApiError.badRequest(`Invalid sourceType: ${sourceType}`);
   }
 
-  const receiptNumber = sourceType === 'receivable' ? await nextReceiptNumber(tenantId, transaction) : null;
+  const receiptNumber = RECEIPT_NUMBERED_TYPES.includes(sourceType) ? await nextReceiptNumber(tenantId, transaction) : null;
 
   return db.PaymentTransaction.create(
     {
@@ -49,6 +53,7 @@ const createPaymentTransaction = async (tenantId, userId, data, transaction) => 
       notes: notes || null,
       paid_at: paidAt || new Date().toISOString().slice(0, 10),
       created_by: userId || null,
+      unapplied_amount: unappliedAmount != null ? unappliedAmount : 0,
     },
     { transaction }
   );

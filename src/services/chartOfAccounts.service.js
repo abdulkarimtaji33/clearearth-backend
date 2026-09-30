@@ -28,10 +28,22 @@ const DEFAULT_ACCOUNTS = [
   { code: '4100', name: 'Other Income',                  type: 'revenue',   sub_type: 'other_income',     normal_balance: 'credit', sort_order: 320 },
   // EXPENSES
   { code: '5000', name: 'Cost of Services (Work Orders)', type: 'expense',  sub_type: 'cost_of_revenue',  normal_balance: 'debit',  sort_order: 410 },
-  { code: '5100', name: 'General & Administrative Expenses', type: 'expense', sub_type: 'operating_expense', normal_balance: 'debit', sort_order: 420 },
-  { code: '5200', name: 'Materials & Equipment',         type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 430 },
-  { code: '5300', name: 'Professional Services',         type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 440 },
-  { code: '5400', name: 'Fuel & Transport',              type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 450 },
+  { code: '5100', name: 'General & Administrative Expenses', type: 'expense', sub_type: 'operating_expense', normal_balance: 'debit', sort_order: 420, isGroup: true },
+  { code: '5110', name: 'Office Supplies',               type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 421, parentCode: '5100' },
+  { code: '5120', name: 'Rent & Utilities',               type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 422, parentCode: '5100' },
+  { code: '5130', name: 'IT & Software',                  type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 423, parentCode: '5100' },
+  { code: '5140', name: 'Miscellaneous G&A',              type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 424, parentCode: '5100' },
+  { code: '5200', name: 'Materials & Equipment',         type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 430, isGroup: true },
+  { code: '5210', name: 'Raw Materials',                  type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 431, parentCode: '5200' },
+  { code: '5220', name: 'Equipment Purchase',             type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 432, parentCode: '5200' },
+  { code: '5230', name: 'Equipment Rental',               type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 433, parentCode: '5200' },
+  { code: '5300', name: 'Professional Services',         type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 440, isGroup: true },
+  { code: '5310', name: 'Legal & Consulting',             type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 441, parentCode: '5300' },
+  { code: '5320', name: 'Audit & Accounting',             type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 442, parentCode: '5300' },
+  { code: '5400', name: 'Fuel & Transport',              type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 450, isGroup: true },
+  { code: '5410', name: 'Fuel',                           type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 451, parentCode: '5400' },
+  { code: '5420', name: 'Vehicle Maintenance',            type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 452, parentCode: '5400' },
+  { code: '5430', name: 'Vehicle Insurance & Registration', type: 'expense', sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 453, parentCode: '5400' },
   { code: '5500', name: 'Utilities',                     type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 460 },
   { code: '5600', name: 'Finance Charges',               type: 'expense',   sub_type: 'finance_cost',     normal_balance: 'debit',  sort_order: 470 },
   { code: '5700', name: 'Salaries & Wages Expense',      type: 'expense',   sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 480 },
@@ -39,16 +51,20 @@ const DEFAULT_ACCOUNTS = [
   { code: '5720', name: 'Employee Benefits & Allowances', type: 'expense',  sub_type: 'operating_expense', normal_balance: 'debit',  sort_order: 490 },
 ];
 
-/** Map expense categories to account codes */
+/**
+ * Map expense categories to account codes.
+ * NOTE: 5100/5200/5300/5400 are now group (parent) accounts and are not postable — every
+ * category here must resolve to one of their leaf children, never the parent code directly.
+ */
 const EXPENSE_CATEGORY_TO_CODE = {
   work_orders:  '5000',
-  materials:    '5200',
-  equipment:    '5200',
-  professional: '5300',
-  travel:       '5400',
-  fuel:         '5400',
+  materials:    '5210', // Raw Materials (child of 5200 Materials & Equipment)
+  equipment:    '5220', // Equipment Purchase (child of 5200 Materials & Equipment)
+  professional: '5310', // Legal & Consulting (child of 5300 Professional Services)
+  travel:       '5410', // Fuel (child of 5400 Fuel & Transport) — closest existing leaf for travel
+  fuel:         '5410', // Fuel (child of 5400 Fuel & Transport)
   utility:      '5500',
-  other:        '5100',
+  other:        '5140', // Miscellaneous G&A (child of 5100 General & Administrative Expenses)
 };
 
 async function seedDefaultAccounts(tenantId, userId) {
@@ -63,7 +79,7 @@ async function seedDefaultAccounts(tenantId, userId) {
     type: a.type,
     sub_type: a.sub_type || null,
     normal_balance: a.normal_balance,
-    is_group: false,
+    is_group: !!a.isGroup,
     is_system: true,
     is_active: true,
     sort_order: a.sort_order || 0,
@@ -72,6 +88,27 @@ async function seedDefaultAccounts(tenantId, userId) {
   }));
 
   await db.ChartOfAccounts.bulkCreate(rows);
+
+  // Second pass: link children (e.g. 5110 Office Supplies) to their parent (5100) by code.
+  // Done as a lookup-then-update rather than relying on bulkCreate's returned ids, since
+  // MySQL bulkCreate id population is not guaranteed across all Sequelize/driver versions.
+  const withParent = DEFAULT_ACCOUNTS.filter((a) => a.parentCode);
+  if (withParent.length) {
+    const inserted = await db.ChartOfAccounts.findAll({
+      where: { tenant_id: tenantId },
+      attributes: ['id', 'code'],
+    });
+    const idByCode = {};
+    inserted.forEach((r) => { idByCode[r.code] = r.id; });
+    for (const a of withParent) {
+      const childId = idByCode[a.code];
+      const parentId = idByCode[a.parentCode];
+      if (childId && parentId) {
+        await db.ChartOfAccounts.update({ parent_id: parentId }, { where: { id: childId } });
+      }
+    }
+  }
+
   clearAccountCache(tenantId);
   return { seeded: true, count: rows.length };
 }

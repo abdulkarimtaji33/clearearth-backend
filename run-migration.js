@@ -934,12 +934,14 @@ async function runMigration() {
     try {
       await db.sequelize.query(`ALTER TABLE expenses DROP FOREIGN KEY fk_exp_wote`);
     } catch (e) {
-      if (!String(e.message || '').includes('Unknown') && !String(e.message || '').includes("doesn't exist")) throw e;
+      const m = String(e.message || '');
+      if (!m.includes('Unknown') && !m.includes("doesn't exist") && !m.includes('check that it exists')) throw e;
     }
     try {
       await db.sequelize.query(`ALTER TABLE expenses DROP INDEX uk_exp_task_line`);
     } catch (e) {
-      if (!String(e.message || '').includes('Unknown') && !String(e.message || '').includes("doesn't exist")) throw e;
+      const m = String(e.message || '');
+      if (!m.includes('Unknown') && !m.includes("doesn't exist") && !m.includes('check that it exists')) throw e;
     }
     try {
       await db.sequelize.query(`ALTER TABLE expenses MODIFY work_order_task_expense_id INT NULL`);
@@ -2992,6 +2994,165 @@ async function runMigration() {
           console.log(`  attendance_records.${col} already exists, skipping`);
         }
       }
+    }
+
+    // -----------------------------------------------------------------------
+    // Chart of Accounts: sub-account hierarchy for 5100/5200/5300/5400
+    // (client UAT gap — expense accounts were flat, with nothing to drill
+    // into under the cascading account picker). Converts these 4 existing
+    // system expense accounts to group (parent) accounts and adds leaf
+    // children under each. Existing journal_entry_lines already posted
+    // directly against the 4 parent codes are left untouched — converting
+    // an account to is_group=true does not invalidate historical postings,
+    // it only blocks *new* postings against it (enforced by
+    // resolveExpenseAccount / getSystemAccountId, whose EXPENSE_CATEGORY_TO_CODE
+    // mapping in chartOfAccounts.service.js was updated in this same change
+    // to default to the new leaf children instead).
+    // -----------------------------------------------------------------------
+    console.log('Backfilling any missing default system accounts (e.g. 2300 Unearned Revenue) for tenants with a partially-seeded Chart of Accounts...');
+    try {
+      const { DEFAULT_ACCOUNTS } = require('./src/services/chartOfAccounts.service');
+      const [baseTenants] = await db.sequelize.query('SELECT id FROM tenants');
+      for (const t of baseTenants || []) {
+        const [existingCodeRows] = await db.sequelize.query(
+          'SELECT code FROM chart_of_accounts WHERE tenant_id = ?',
+          { replacements: [t.id] }
+        );
+        const existingCodes = new Set((existingCodeRows || []).map((r) => r.code));
+        if (existingCodes.size === 0) continue; // fully-empty tenants are handled by the full seed below
+        // Only top-level (non-child) defaults here — hierarchy children are seeded by the
+        // dedicated step below, which resolves each parent's real DB id.
+        for (const a of DEFAULT_ACCOUNTS.filter((d) => !d.parentCode)) {
+          if (existingCodes.has(a.code)) continue;
+          await db.sequelize.query(
+            `INSERT INTO chart_of_accounts (tenant_id, code, name, type, sub_type, normal_balance, is_group, is_system, is_active, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, NOW(), NOW())`,
+            { replacements: [t.id, a.code, a.name, a.type, a.sub_type || null, a.normal_balance, a.isGroup ? 1 : 0, a.sort_order || 0] }
+          ).catch((e) => console.warn(`  tenant ${t.id}: ${a.code} insert skipped:`, e.message));
+          console.log(`  tenant ${t.id}: created missing default account ${a.code} ${a.name}`);
+        }
+      }
+      console.log('  Missing default system accounts backfill complete');
+    } catch (e) {
+      console.warn('  Missing default system accounts backfill:', e.message);
+    }
+
+    console.log('Backfilling chart-of-accounts sub-account hierarchy (5100/5200/5300/5400 groups + children) for existing tenants...');
+    try {
+      const { seedDefaultAccounts } = require('./src/services/chartOfAccounts.service');
+      const { clearAccountCache } = require('./src/services/journalEntry.service');
+
+      const PARENT_CODES = ['5100', '5200', '5300', '5400'];
+      const CHILD_DEFS = [
+        ['5100', '5110', 'Office Supplies', 421],
+        ['5100', '5120', 'Rent & Utilities', 422],
+        ['5100', '5130', 'IT & Software', 423],
+        ['5100', '5140', 'Miscellaneous G&A', 424],
+        ['5200', '5210', 'Raw Materials', 431],
+        ['5200', '5220', 'Equipment Purchase', 432],
+        ['5200', '5230', 'Equipment Rental', 433],
+        ['5300', '5310', 'Legal & Consulting', 441],
+        ['5300', '5320', 'Audit & Accounting', 442],
+        ['5400', '5410', 'Fuel', 451],
+        ['5400', '5420', 'Vehicle Maintenance', 452],
+        ['5400', '5430', 'Vehicle Insurance & Registration', 453],
+      ];
+      const PARENT_META = {
+        '5100': { name: 'General & Administrative Expenses', type: 'expense', sub_type: 'operating_expense', normal_balance: 'debit', sort_order: 420 },
+        '5200': { name: 'Materials & Equipment', type: 'expense', sub_type: 'operating_expense', normal_balance: 'debit', sort_order: 430 },
+        '5300': { name: 'Professional Services', type: 'expense', sub_type: 'operating_expense', normal_balance: 'debit', sort_order: 440 },
+        '5400': { name: 'Fuel & Transport', type: 'expense', sub_type: 'operating_expense', normal_balance: 'debit', sort_order: 450 },
+      };
+
+      const [coaTenants] = await db.sequelize.query('SELECT id FROM tenants');
+      for (const t of coaTenants || []) {
+        const [[totalRow]] = await db.sequelize.query(
+          'SELECT COUNT(*) c FROM chart_of_accounts WHERE tenant_id = ?',
+          { replacements: [t.id] }
+        );
+        if ((totalRow?.c || 0) === 0) {
+          // Tenant has no Chart of Accounts at all yet — the full default seed
+          // (updated in this change) already includes the hierarchy.
+          await seedDefaultAccounts(t.id).catch((e) => console.warn(`  tenant ${t.id}: full COA seed skipped:`, e.message));
+          continue;
+        }
+
+        // Promote each existing parent code to a group account (if not already), inserting it
+        // first if some earlier partial seed (e.g. the 2410/5710 backfill above) means this
+        // tenant has a nonzero account count but is still missing 5100/5200/5300/5400 outright.
+        // Report how many pre-existing journal_entry_lines reference it (left untouched).
+        for (const code of PARENT_CODES) {
+          let [[parentRow]] = await db.sequelize.query(
+            'SELECT id, is_group FROM chart_of_accounts WHERE tenant_id = ? AND code = ?',
+            { replacements: [t.id, code] }
+          );
+          if (!parentRow) {
+            const meta = PARENT_META[code];
+            await db.sequelize.query(
+              `INSERT INTO chart_of_accounts (tenant_id, code, name, type, sub_type, normal_balance, is_group, is_system, is_active, sort_order, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, 1, 1, 1, ?, NOW(), NOW())`,
+              { replacements: [t.id, code, meta.name, meta.type, meta.sub_type, meta.normal_balance, meta.sort_order] }
+            ).catch((e) => console.warn(`  tenant ${t.id}: ${code} insert skipped:`, e.message));
+            console.log(`  tenant ${t.id}: created missing parent account ${code} ${meta.name} (as group)`);
+            [[parentRow]] = await db.sequelize.query(
+              'SELECT id, is_group FROM chart_of_accounts WHERE tenant_id = ? AND code = ?',
+              { replacements: [t.id, code] }
+            );
+            if (!parentRow) continue;
+          }
+          const [[jelCount]] = await db.sequelize.query(
+            'SELECT COUNT(*) c FROM journal_entry_lines WHERE account_id = ?',
+            { replacements: [parentRow.id] }
+          );
+          if (jelCount?.c > 0) {
+            console.log(`  tenant ${t.id}: account ${code} has ${jelCount.c} pre-existing journal_entry_lines — left untouched`);
+          }
+          if (!parentRow.is_group) {
+            await db.sequelize.query('UPDATE chart_of_accounts SET is_group = 1 WHERE id = ?', { replacements: [parentRow.id] });
+            console.log(`  tenant ${t.id}: promoted ${code} to a group account`);
+          } else {
+            console.log(`  tenant ${t.id}: ${code} already a group account, skipping`);
+          }
+        }
+
+        // Insert missing children, resolving each parent's actual DB id (never hardcoded).
+        for (const [parentCode, code, name, sortOrder] of CHILD_DEFS) {
+          const [[existingChild]] = await db.sequelize.query(
+            'SELECT id FROM chart_of_accounts WHERE tenant_id = ? AND code = ?',
+            { replacements: [t.id, code] }
+          );
+          if (existingChild) {
+            console.log(`  tenant ${t.id}: ${code} already exists, skipping`);
+            continue;
+          }
+          const [[parentRow]] = await db.sequelize.query(
+            'SELECT id FROM chart_of_accounts WHERE tenant_id = ? AND code = ?',
+            { replacements: [t.id, parentCode] }
+          );
+          if (!parentRow) continue;
+          const meta = PARENT_META[parentCode];
+          await db.sequelize.query(
+            `INSERT INTO chart_of_accounts (tenant_id, code, name, type, sub_type, normal_balance, is_group, parent_id, is_system, is_active, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 0, ?, 1, 1, ?, NOW(), NOW())`,
+            { replacements: [t.id, code, name, meta.type, meta.sub_type, meta.normal_balance, parentRow.id, sortOrder] }
+          ).catch((e) => console.warn(`  tenant ${t.id}: ${code} insert skipped:`, e.message));
+          console.log(`  tenant ${t.id}: created ${code} ${name} under parent ${parentCode}`);
+        }
+
+        clearAccountCache(t.id);
+      }
+      console.log('  Chart of accounts sub-account hierarchy backfill complete');
+    } catch (e) {
+      console.warn('  Chart of accounts sub-account hierarchy backfill:', e.message);
+    }
+
+    console.log('Adding payment_transactions.unapplied_amount column (advance/unapplied customer receipts)...');
+    try {
+      await db.sequelize.query(`ALTER TABLE payment_transactions ADD COLUMN unapplied_amount DECIMAL(15,2) NOT NULL DEFAULT 0`);
+      console.log('  Added payment_transactions.unapplied_amount');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  payment_transactions.unapplied_amount already exists, skipping');
     }
 
     console.log('✅ Migration completed successfully!');

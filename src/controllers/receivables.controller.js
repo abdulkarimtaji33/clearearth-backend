@@ -44,6 +44,21 @@ const listPayments = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, rows);
 });
 
+const applyUnappliedCredit = asyncHandler(async (req, res) => {
+  const result = await receivablesService.applyUnappliedCredit(
+    req.tenant.id,
+    req.user?.id,
+    req.params.paymentTransactionId,
+    req.body.allocations
+  );
+  return ApiResponse.success(res, result, 'Advance credit applied');
+});
+
+const listUnapplied = asyncHandler(async (req, res) => {
+  const rows = await receivablesService.listUnappliedCredits(req.tenant.id);
+  return ApiResponse.success(res, rows);
+});
+
 const agingSummary = asyncHandler(async (req, res) => {
   const data = await receivablesService.getAgingSummary(req.tenant.id, req.query);
   return ApiResponse.success(res, data);
@@ -80,4 +95,15 @@ const getStatementPdf = asyncHandler(async (req, res) => {
   sendPdf(res, pdfBuffer, `statement-of-account-${req.params.companyId}.pdf`);
 });
 
-module.exports = { list, recordPayment, receivePayment, listPayments, agingSummary, getReceiptPdf, getStatement, getStatementPdf };
+module.exports = {
+  list,
+  recordPayment,
+  receivePayment,
+  applyUnappliedCredit,
+  listUnapplied,
+  listPayments,
+  agingSummary,
+  getReceiptPdf,
+  getStatement,
+  getStatementPdf,
+};

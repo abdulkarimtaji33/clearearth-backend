@@ -204,37 +204,54 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
  * less than the full balance on an invoice) and multi-invoice settlement. Each invoice gets its
  * own PaymentTransaction row (for per-invoice drill-down/receipts), but the GL impact is posted
  * as a single combined journal entry (Dr payment account / Cr Accounts Receivable) for the total.
+ *
+ * Advance / unapplied receipts: if `amountReceived` is more than the sum of `allocations`
+ * (or `allocations` is empty entirely), the caller must pass `allowUnapplied: true` to opt in —
+ * the unallocated remainder is recorded as an advance/unapplied credit for the customer
+ * (Cr Unearned Revenue 2300) instead of being rejected or silently dropped. It can later be
+ * applied to invoices via `applyUnappliedCredit`.
  */
 const receivePayment = async (tenantId, body, userId = null) => {
-  const { companyId, paymentDate, paymentMethod, paymentAccountId, referenceNo, receivedFrom, allocations } = body;
+  const { companyId, paymentDate, paymentMethod, paymentAccountId, referenceNo, receivedFrom, allowUnapplied } = body;
+  const allocations = Array.isArray(body.allocations) ? body.allocations : [];
 
   if (!companyId) throw ApiError.badRequest('companyId is required');
-  if (!Array.isArray(allocations) || allocations.length === 0) {
+
+  const amountReceivedNum = body.amountReceived != null && body.amountReceived !== ''
+    ? parseFloat(body.amountReceived)
+    : null;
+  const hasExplicitAmountReceived = Number.isFinite(amountReceivedNum) && amountReceivedNum > 0;
+
+  if (allocations.length === 0 && !(allowUnapplied && hasExplicitAmountReceived)) {
     throw ApiError.badRequest('At least one invoice allocation is required');
   }
 
   const invoiceIds = [...new Set(allocations.map((a) => parseInt(a.taxInvoiceId, 10)).filter(Number.isFinite))];
-  if (invoiceIds.length === 0) throw ApiError.badRequest('No valid invoices in allocation');
+  if (allocations.length > 0 && invoiceIds.length === 0) {
+    throw ApiError.badRequest('No valid invoices in allocation');
+  }
 
-  const rows = await db.TaxInvoice.findAll({
-    where: { id: { [Op.in]: invoiceIds }, tenant_id: tenantId },
-    include: [
-      {
-        model: db.ProformaInvoice,
-        as: 'proformaInvoice',
-        required: true,
+  const rows = invoiceIds.length
+    ? await db.TaxInvoice.findAll({
+        where: { id: { [Op.in]: invoiceIds }, tenant_id: tenantId },
         include: [
           {
-            model: db.Deal,
-            as: 'deal',
+            model: db.ProformaInvoice,
+            as: 'proformaInvoice',
             required: true,
-            where: { company_id: companyId },
-            include: [{ model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false }],
+            include: [
+              {
+                model: db.Deal,
+                as: 'deal',
+                required: true,
+                where: { company_id: companyId },
+                include: [{ model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false }],
+              },
+            ],
           },
         ],
-      },
-    ],
-  });
+      })
+    : [];
   if (rows.length !== invoiceIds.length) {
     throw ApiError.badRequest('One or more invoices were not found for this customer');
   }
@@ -259,7 +276,20 @@ const receivePayment = async (tenantId, body, userId = null) => {
     applied.push({ row, amt, total, cur });
     totalAmount += amt;
   }
-  if (applied.length === 0) throw ApiError.badRequest('No valid allocation amounts provided');
+  if (applied.length === 0 && !(allowUnapplied && hasExplicitAmountReceived)) {
+    throw ApiError.badRequest('No valid allocation amounts provided');
+  }
+
+  // Unapplied remainder = amountReceived minus what was actually allocated to invoices.
+  const effectiveAmountReceived = hasExplicitAmountReceived ? amountReceivedNum : totalAmount;
+  let unappliedAmount = Math.max(0, +(effectiveAmountReceived - totalAmount).toFixed(2));
+  if (unappliedAmount > 0.005 && !allowUnapplied) {
+    throw ApiError.badRequest(
+      `Amount received (AED ${effectiveAmountReceived.toFixed(2)}) exceeds the allocated total (AED ${totalAmount.toFixed(2)}) by AED ${unappliedAmount.toFixed(2)}. ` +
+      `Pass allowUnapplied: true to record the remainder as an advance/unapplied credit for this customer.`
+    );
+  }
+  if (!allowUnapplied) unappliedAmount = 0;
 
   const payDate = paymentDate || new Date().toISOString().slice(0, 10);
   const payAcct = await resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId });
@@ -303,36 +333,247 @@ const receivePayment = async (tenantId, body, userId = null) => {
       });
     }
 
-    // GL: Dr payment account / Cr Accounts Receivable (1100) — one combined entry for the receipt
-    if (totalAmount > 0.005) {
+    let advanceTx = null;
+    if (unappliedAmount > 0.005) {
+      advanceTx = await paymentTxService.createPaymentTransaction(tenantId, userId || 1, {
+        sourceType: 'receivable_advance',
+        sourceId: companyId,
+        amount: unappliedAmount,
+        paymentMethod,
+        paymentAccountId: payAcct.accountId,
+        referenceNo,
+        receivedFrom: clientName,
+        paidAt: payDate,
+        unappliedAmount,
+        notes: 'Advance / unapplied customer receipt',
+      }, t);
+    }
+
+    // GL: Dr payment account / Cr Accounts Receivable (1100) for the applied portion,
+    // and Cr Unearned Revenue (2300) for any unapplied remainder — one combined, balanced entry.
+    const grandTotal = totalAmount + unappliedAmount;
+    if (grandTotal > 0.005) {
       try {
-        const arId = await jeService.getSystemAccountId(tenantId, '1100');
+        const lines = [{ accountId: payAcct.accountId, debit: grandTotal, credit: 0 }];
+        if (totalAmount > 0.005) {
+          const arId = await jeService.getSystemAccountId(tenantId, '1100');
+          lines.push({ accountId: arId, debit: 0, credit: totalAmount });
+        }
+        if (unappliedAmount > 0.005) {
+          const unearnedId = await jeService.getSystemAccountId(tenantId, '2300');
+          lines.push({ accountId: unearnedId, debit: 0, credit: unappliedAmount });
+        }
+
         const entryId = await jeService.createJournalEntry(tenantId, userId || 1, {
           entryDate: payDate,
-          description: `Payment Received — ${updatedInvoices.length} invoice(s)`,
+          description: unappliedAmount > 0.005
+            ? `Payment Received — ${updatedInvoices.length} invoice(s) + AED ${unappliedAmount.toFixed(2)} advance`
+            : `Payment Received — ${updatedInvoices.length} invoice(s)`,
           sourceType: 'payment_received',
-          sourceId: updatedInvoices[0].invoiceId,
+          sourceId: updatedInvoices[0]?.invoiceId || companyId,
           receivedFrom: clientName,
-          lines: [
-            { accountId: payAcct.accountId, debit: totalAmount, credit: 0 },
-            { accountId: arId, debit: 0, credit: totalAmount },
-          ],
+          lines,
         }, t);
-        await db.PaymentTransaction.update(
-          { journal_entry_id: entryId },
-          { where: { id: { [Op.in]: updatedInvoices.map((u) => u.paymentTransactionId) } }, transaction: t }
-        );
+
+        if (updatedInvoices.length) {
+          await db.PaymentTransaction.update(
+            { journal_entry_id: entryId },
+            { where: { id: { [Op.in]: updatedInvoices.map((u) => u.paymentTransactionId) } }, transaction: t }
+          );
+        }
+        if (advanceTx) {
+          await advanceTx.update({ journal_entry_id: entryId }, { transaction: t });
+        }
       } catch (jeErr) {
         console.warn('[GL] payment_received (multi-invoice) journal entry skipped:', jeErr.message);
       }
     }
 
     await t.commit();
-    return { companyId, totalAmount, invoices: updatedInvoices };
+    return {
+      companyId,
+      totalAmount,
+      unappliedAmount,
+      invoices: updatedInvoices,
+      advance: advanceTx ? { paymentTransactionId: advanceTx.id, amount: unappliedAmount } : null,
+    };
   } catch (e) {
     await t.rollback();
     throw e;
   }
+};
+
+/**
+ * Apply a previously-recorded unapplied/advance customer credit (from `receivePayment` with
+ * `allowUnapplied: true`) to new or existing outstanding invoices for the same customer.
+ * Posts Dr Unearned Revenue (2300) / Cr Accounts Receivable (1100) for the amount now applied,
+ * updates the target invoices exactly like the main receipt flow, and reduces the tracked
+ * `unapplied_amount` on the original advance PaymentTransaction.
+ */
+const applyUnappliedCredit = async (tenantId, userId, paymentTransactionId, allocations) => {
+  if (!Array.isArray(allocations) || allocations.length === 0) {
+    throw ApiError.badRequest('At least one invoice allocation is required');
+  }
+
+  const advanceTx = await db.PaymentTransaction.findOne({
+    where: { id: paymentTransactionId, tenant_id: tenantId, source_type: 'receivable_advance' },
+  });
+  if (!advanceTx) throw ApiError.notFound('Unapplied credit transaction not found');
+
+  const remaining = parseNum(advanceTx.unapplied_amount);
+  if (remaining <= 0.005) throw ApiError.badRequest('This credit has already been fully applied');
+
+  const companyId = advanceTx.source_id;
+  const invoiceIds = [...new Set(allocations.map((a) => parseInt(a.taxInvoiceId, 10)).filter(Number.isFinite))];
+  if (invoiceIds.length === 0) throw ApiError.badRequest('No valid invoices in allocation');
+
+  const rows = await db.TaxInvoice.findAll({
+    where: { id: { [Op.in]: invoiceIds }, tenant_id: tenantId },
+    include: [
+      {
+        model: db.ProformaInvoice,
+        as: 'proformaInvoice',
+        required: true,
+        include: [
+          {
+            model: db.Deal,
+            as: 'deal',
+            required: true,
+            where: { company_id: companyId },
+            include: [{ model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false }],
+          },
+        ],
+      },
+    ],
+  });
+  if (rows.length !== invoiceIds.length) {
+    throw ApiError.badRequest('One or more invoices were not found for this customer');
+  }
+  const rowById = {};
+  rows.forEach((r) => { rowById[r.id] = r; });
+
+  const applied = [];
+  let totalAmount = 0;
+  for (const a of allocations) {
+    const invId = parseInt(a.taxInvoiceId, 10);
+    const amt = parseFloat(a.amount);
+    if (!Number.isFinite(amt) || amt <= 0) continue;
+    const row = rowById[invId];
+    if (!row) throw ApiError.badRequest(`Invoice ${invId} not found`);
+    const total = parseNum(row.total);
+    const cur = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
+    const bal = Math.max(0, total - cur);
+    if (amt - bal > 0.01) {
+      throw ApiError.badRequest(`Allocation for invoice ${row.tax_invoice_number} (AED ${amt}) exceeds its balance due (AED ${bal.toFixed(2)})`);
+    }
+    applied.push({ row, amt, total, cur });
+    totalAmount += amt;
+  }
+  if (applied.length === 0) throw ApiError.badRequest('No valid allocation amounts provided');
+  if (totalAmount - remaining > 0.01) {
+    throw ApiError.badRequest(`Allocation total (AED ${totalAmount.toFixed(2)}) exceeds the remaining unapplied credit (AED ${remaining.toFixed(2)})`);
+  }
+
+  const payDate = new Date().toISOString().slice(0, 10);
+  const clientName = rows[0]?.proformaInvoice?.deal?.company?.company_name || advanceTx.received_from || null;
+
+  const t = await db.sequelize.transaction();
+  try {
+    const updatedInvoices = [];
+    for (const { row, amt, total, cur } of applied) {
+      const next = Math.min(total, cur + amt);
+      let ps = 'unpaid';
+      if (next >= total - 0.01) ps = 'paid';
+      else if (next > 0) ps = 'partial';
+
+      await row.update({ paid_amount: next, payment_status: ps }, { transaction: t });
+
+      const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId || row.created_by || 1, {
+        sourceType: 'receivable',
+        sourceId: row.id,
+        amount: amt,
+        paymentMethod: advanceTx.payment_method,
+        paymentAccountId: advanceTx.payment_account_id,
+        referenceNo: advanceTx.reference_no,
+        receivedFrom: clientName,
+        paidAt: payDate,
+        notes: `Applied from advance credit #${advanceTx.receipt_number || advanceTx.id}`,
+      }, t);
+
+      updatedInvoices.push({
+        invoiceId: row.id,
+        invoiceNumber: row.tax_invoice_number,
+        amountApplied: amt,
+        paymentTransactionId: paymentTx.id,
+      });
+    }
+
+    // GL: Dr Unearned Revenue (2300) / Cr Accounts Receivable (1100) for the amount now applied
+    try {
+      const unearnedId = await jeService.getSystemAccountId(tenantId, '2300');
+      const arId = await jeService.getSystemAccountId(tenantId, '1100');
+      const entryId = await jeService.createJournalEntry(tenantId, userId || 1, {
+        entryDate: payDate,
+        description: `Advance credit applied — ${updatedInvoices.length} invoice(s)`,
+        sourceType: 'advance_credit_applied',
+        sourceId: advanceTx.id,
+        receivedFrom: clientName,
+        lines: [
+          { accountId: unearnedId, debit: totalAmount, credit: 0 },
+          { accountId: arId, debit: 0, credit: totalAmount },
+        ],
+      }, t);
+      await db.PaymentTransaction.update(
+        { journal_entry_id: entryId },
+        { where: { id: { [Op.in]: updatedInvoices.map((u) => u.paymentTransactionId) } }, transaction: t }
+      );
+    } catch (jeErr) {
+      console.warn('[GL] advance_credit_applied journal entry skipped:', jeErr.message);
+    }
+
+    const nextRemaining = Math.max(0, +(remaining - totalAmount).toFixed(2));
+    await advanceTx.update({ unapplied_amount: nextRemaining }, { transaction: t });
+
+    await t.commit();
+    return {
+      companyId,
+      totalAmount,
+      remainingUnapplied: nextRemaining,
+      invoices: updatedInvoices,
+    };
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
+};
+
+/** List customers/transactions with a remaining unapplied/advance credit balance. */
+const listUnappliedCredits = async (tenantId) => {
+  const rows = await db.PaymentTransaction.findAll({
+    where: { tenant_id: tenantId, source_type: 'receivable_advance', unapplied_amount: { [Op.gt]: 0 } },
+    order: [['paid_at', 'DESC'], ['id', 'DESC']],
+  });
+
+  const companyIds = [...new Set(rows.map((r) => r.source_id).filter(Boolean))];
+  const companies = companyIds.length
+    ? await db.Company.findAll({ where: { id: { [Op.in]: companyIds } }, attributes: ['id', 'company_name'] })
+    : [];
+  const companyById = {};
+  companies.forEach((c) => { companyById[c.id] = c.company_name; });
+
+  return rows.map((r) => {
+    const o = r.get({ plain: true });
+    return {
+      paymentTransactionId: o.id,
+      companyId: o.source_id,
+      companyName: companyById[o.source_id] || null,
+      receiptNumber: o.receipt_number,
+      originalAmount: parseNum(o.amount),
+      unappliedAmount: parseNum(o.unapplied_amount),
+      paidAt: o.paid_at,
+      receivedFrom: o.received_from,
+    };
+  });
 };
 
 const getAgingSummary = async (tenantId, filters = {}) => {
@@ -584,6 +825,8 @@ module.exports = {
   listReceivables,
   recordPayment,
   receivePayment,
+  applyUnappliedCredit,
+  listUnappliedCredits,
   listPayments,
   getAgingSummary,
   getStatementOfAccount,
