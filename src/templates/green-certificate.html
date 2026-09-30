@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  color: #1a2e22;
+  position: relative;
+}
+.page {
+  position: relative;
+  min-height: 700px;
+  padding: 24px 30px;
+  overflow: hidden;
+}
+.diagonal-corner {
+  position: absolute;
+  top: -60px;
+  right: -120px;
+  width: 420px;
+  height: 420px;
+  background: linear-gradient(135deg, #1e8449 0%, #145a32 100%);
+  transform: rotate(45deg);
+  z-index: 0;
+}
+.diagonal-corner::after {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  background: #c9a227;
+}
+.content { position: relative; z-index: 1; }
+.top-row { display: flex; justify-content: space-between; align-items: flex-start; }
+.logo { width: 110px; }
+.cert-no-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #145a32;
+  border: 1px solid #145a32;
+  border-radius: 4px;
+  padding: 4px 10px;
+  display: inline-block;
+}
+.tons-badge {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  z-index: 2;
+  color: #fff;
+  text-align: center;
+  width: 150px;
+}
+.tons-badge .scale-icon { font-size: 30px; display: block; }
+.tons-badge .tons-value { font-size: 26px; font-weight: 900; letter-spacing: 1px; }
+.tons-badge .tons-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+.title {
+  text-align: center;
+  font-size: 40px;
+  font-weight: 900;
+  color: #145a32;
+  letter-spacing: 4px;
+  margin: 30px 0 26px 0;
+}
+.body-text {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #2b3a2f;
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+}
+.tons-highlight { color: #c9a227; font-weight: 900; font-size: 15px; }
+.company-name {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 800;
+  color: #145a32;
+  margin: 18px 0 4px 0;
+}
+.company-address {
+  text-align: center;
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 18px;
+}
+.footer-fields {
+  display: flex;
+  justify-content: center;
+  gap: 60px;
+  margin: 24px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a2e22;
+}
+.thanks {
+  text-align: center;
+  font-style: italic;
+  font-size: 12.5px;
+  color: #3a4a3d;
+  margin: 20px 0 40px 0;
+}
+.bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 30px;
+}
+.co-block { font-size: 10px; color: #333; line-height: 1.6; }
+.co-block .license { font-weight: 700; }
+.co-block .co-name { font-weight: 900; color: #145a32; font-size: 12px; }
+.sign-block { text-align: center; font-size: 10.5px; color: #333; }
+.sign-line { margin: 2px 0; }
+.iso-badges { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end; }
+.iso-badge {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: #145a32; color: #fff; font-size: 6.5px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  border: 2px solid #c9a227; line-height: 1.1;
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="diagonal-corner"></div>
+  <div class="tons-badge">
+    <span class="scale-icon">&#9878;</span>
+    <div class="tons-value">{{tonsValue}} TONS</div>
+  </div>
+  <div class="content">
+    <div class="top-row">
+      <img class="logo" src="{{logoDataUri}}" alt="Clear Earth" />
+      <div class="cert-no-badge">CERT NO: {{certNo}}</div>
+    </div>
+
+    <div class="title">GREEN CERTIFICATE</div>
+
+    <div class="body-text">
+      THIS IS TO CERTIFY THAT <span class="tons-highlight">{{tonsValue}} TONS</span> OF
+      <strong>{{wasteType}}</strong> COLLECTED FROM
+    </div>
+    <div class="company-name">{{companyName}}</div>
+    <div class="company-address">{{companyAddress}}</div>
+    <div class="body-text">
+      Received for the month of <strong>{{monthYear}}</strong>, has been disposed of safely in an
+      Eco-friendly way as per applicable laws and regulations in accordance with UAE Federal Laws
+      and Technical Guidelines.
+    </div>
+
+    <div class="footer-fields">
+      <div>Collection Date: {{collectionDate}}</div>
+      <div>Certification Date: {{certificationDate}}</div>
+    </div>
+
+    <div class="thanks">Our sincere thanks for the co-operation and concern towards the environment.</div>
+
+    <div class="bottom-row">
+      <div class="co-block">
+        <img src="{{logoDataUri}}" style="width:60px;display:block;margin-bottom:4px;" />
+        <div class="license">License No: 1150878</div>
+        <div class="co-name">CLEAR EARTH RECYCLING LLC</div>
+        <div>#03B, PHASE 1, BLOCK B, DUBAI INDUSTRIAL CITY, DUBAI, UAE</div>
+        <div>PHONE: +971-42-4141-71 | EMAIL: INFO@CLEAREARTH.AE</div>
+      </div>
+      <div class="sign-block">
+        <div class="sign-line">Signature of</div>
+        <div class="sign-line"><strong>Clear Earth Managing Director,</strong></div>
+        <div class="iso-badges">
+          <div class="iso-badge">ISO<br/>21964</div>
+          <div class="iso-badge">ISO<br/>9001</div>
+          <div class="iso-badge">ISO<br/>45001</div>
+          <div class="iso-badge">ISO<br/>14001</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

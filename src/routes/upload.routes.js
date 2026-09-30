@@ -18,5 +18,6 @@ router.post('/tenant-signature', authenticate, uploadSingle('file'), uploadContr
 router.delete('/tenant-signature', authenticate, uploadController.deleteTenantSignature);
 router.post('/tax-invoice-attachment', authenticate, uploadSingle('file'), uploadController.uploadTaxInvoiceAttachment);
 router.post('/expense-evidence', authenticate, uploadSingle('file'), uploadController.uploadExpenseEvidence);
+router.post('/certificate-attachment', authenticate, uploadSingle('file'), uploadController.uploadCertificateAttachment);
 
 module.exports = router;

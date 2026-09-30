@@ -37,6 +37,7 @@ const reportsRoutes = require('./reports.routes');
 const fiscalYearRoutes = require('./fiscalYear.routes');
 const notificationRoutes = require('./notification.routes');
 const grnRoutes = require('./grn.routes');
+const certificateRoutes = require('./certificate.routes');
 const driverRoutes = require('./driver.routes');
 const dashboardRoutes = require('./dashboard.routes');
 const locationShareRoutes = require('./locationShare.routes');
@@ -116,6 +117,8 @@ router.use('/reports', reportsRoutes);
 router.use('/fiscal-years', fiscalYearRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/grn', grnRoutes);
+// certificate.routes.js mounts both /certificate-requests and /certificates itself.
+router.use('/', certificateRoutes);
 router.use('/driver', driverRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/location-share', locationShareRoutes);

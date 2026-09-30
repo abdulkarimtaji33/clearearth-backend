@@ -3155,6 +3155,213 @@ async function runMigration() {
       console.log('  payment_transactions.unapplied_amount already exists, skipping');
     }
 
+    // -----------------------------------------------------------------------
+    // Certificate Management Module (Green Certificate / Certificate of
+    // Destruction / Certificate of Data Destruction / Carbon Footprint /
+    // Destruction Report with Evidence). See src/database/migrations/
+    // 20260930000000-create-certificate-module.js for the documentation copy
+    // of this schema — this block is what the deploy process actually runs.
+    // -----------------------------------------------------------------------
+    console.log('Creating certificate_requests table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS certificate_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        grn_id INT NULL,
+        deal_id INT NULL,
+        company_name VARCHAR(200) NOT NULL,
+        contact_person VARCHAR(150) NOT NULL,
+        contact_no VARCHAR(30) NOT NULL,
+        contact_email VARCHAR(150) NOT NULL,
+        collection_date DATE NOT NULL,
+        grn_no VARCHAR(50) NULL,
+        material_waste_details TEXT NOT NULL,
+        total_weight_quantity DECIMAL(15,2) NOT NULL DEFAULT 0,
+        invoice_no VARCHAR(100) NULL,
+        additional_notes TEXT NULL,
+        destruction_report_variant ENUM('itemized_equipment','bulk_material') NULL,
+        wds_ref_no VARCHAR(100) NULL,
+        doc_ref VARCHAR(100) NULL,
+        req_no VARCHAR(100) NULL,
+        boe_no VARCHAR(100) NULL,
+        barcode VARCHAR(100) NULL,
+        requested_by INT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'pending_verification',
+        verified_by INT NULL,
+        verified_at DATETIME NULL,
+        verification_notes TEXT NULL,
+        material_type_id INT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_cr_tenant (tenant_id),
+        INDEX idx_cr_status (status),
+        INDEX idx_cr_grn (grn_id),
+        CONSTRAINT fk_cr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        CONSTRAINT fk_cr_grn FOREIGN KEY (grn_id) REFERENCES grns(id) ON DELETE SET NULL,
+        CONSTRAINT fk_cr_deal FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE SET NULL,
+        CONSTRAINT fk_cr_requested_by FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT fk_cr_verified_by FOREIGN KEY (verified_by) REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT fk_cr_material_type FOREIGN KEY (material_type_id) REFERENCES material_types(id) ON DELETE SET NULL
+      )
+    `);
+
+    console.log('Creating certificate_request_types table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS certificate_request_types (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        certificate_request_id INT NOT NULL,
+        type ENUM('green_certificate','certificate_of_destruction','certificate_of_data_destruction','carbon_footprint','destruction_report_evidence') NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_crt_request (certificate_request_id),
+        CONSTRAINT fk_crt_request FOREIGN KEY (certificate_request_id) REFERENCES certificate_requests(id) ON DELETE CASCADE
+      )
+    `);
+
+    console.log('Creating certificate_request_attachments table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS certificate_request_attachments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        certificate_request_id INT NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        file_name VARCHAR(255) NULL,
+        file_type ENUM('grn_report','wds','destruction_photo','other') NOT NULL DEFAULT 'other',
+        photo_stage ENUM('arrival','destruction_in_progress','other') NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_cra_request (certificate_request_id),
+        CONSTRAINT fk_cra_request FOREIGN KEY (certificate_request_id) REFERENCES certificate_requests(id) ON DELETE CASCADE
+      )
+    `);
+
+    console.log('Creating certificates table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS certificates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        certificate_request_id INT NOT NULL,
+        type ENUM('green_certificate','certificate_of_destruction','certificate_of_data_destruction','carbon_footprint','destruction_report_evidence') NOT NULL,
+        certificate_number VARCHAR(60) NOT NULL,
+        issued_date DATE NULL,
+        pdf_path VARCHAR(500) NULL,
+        generated_by INT NULL,
+        co2_saved DECIMAL(15,2) NULL,
+        liters_saved DECIMAL(15,2) NULL,
+        kg_saved DECIMAL(15,2) NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY uq_cert_tenant_number (tenant_id, certificate_number),
+        INDEX idx_cert_tenant (tenant_id),
+        CONSTRAINT fk_cert_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        CONSTRAINT fk_cert_request FOREIGN KEY (certificate_request_id) REFERENCES certificate_requests(id) ON DELETE CASCADE,
+        CONSTRAINT fk_cert_generated_by FOREIGN KEY (generated_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+
+    console.log('Creating certificate_items table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS certificate_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        certificate_id INT NOT NULL,
+        sl_no INT NULL,
+        description VARCHAR(255) NOT NULL,
+        qty DECIMAL(15,2) NULL,
+        unit VARCHAR(20) NULL DEFAULT 'nos',
+        manufacturer VARCHAR(100) NULL,
+        model_no VARCHAR(100) NULL,
+        serial_no VARCHAR(100) NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_ci_certificate (certificate_id),
+        CONSTRAINT fk_ci_certificate FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE CASCADE
+      )
+    `);
+
+    console.log('Creating carbon_footprint_factors table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS carbon_footprint_factors (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        material_type_id INT NULL,
+        co2_factor_per_ton DECIMAL(12,4) NOT NULL DEFAULT 50,
+        liters_factor_per_ton DECIMAL(12,4) NOT NULL DEFAULT 100,
+        kg_factor_per_ton DECIMAL(12,4) NOT NULL DEFAULT 500,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_cff_tenant (tenant_id),
+        CONSTRAINT fk_cff_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        CONSTRAINT fk_cff_material_type FOREIGN KEY (material_type_id) REFERENCES material_types(id) ON DELETE SET NULL
+      )
+    `);
+    console.log('  Certificate module tables ready');
+
+    console.log('Seeding tenant-wide default carbon_footprint_factors row (material_type_id = NULL) for existing tenants...');
+    try {
+      const [certTenants] = await db.sequelize.query('SELECT id FROM tenants');
+      for (const t of certTenants || []) {
+        const [[existingDefault]] = await db.sequelize.query(
+          'SELECT id FROM carbon_footprint_factors WHERE tenant_id = ? AND material_type_id IS NULL LIMIT 1',
+          { replacements: [t.id] }
+        );
+        if (!existingDefault) {
+          await db.sequelize.query(
+            `INSERT INTO carbon_footprint_factors (tenant_id, material_type_id, co2_factor_per_ton, liters_factor_per_ton, kg_factor_per_ton, created_at, updated_at)
+             VALUES (?, NULL, 50, 100, 500, NOW(), NOW())`,
+            { replacements: [t.id] }
+          );
+        }
+      }
+      console.log('  Default carbon footprint factor rows seeded');
+    } catch (e) {
+      console.warn('  Default carbon footprint factors seed:', e.message);
+    }
+
+    console.log('Seeding certificate permissions...');
+    const certPerms = [
+      ['certificates.read', 'Read Certificates', 'certificates', 'read', 'View certificate requests and issued certificates'],
+      ['certificates.create', 'Create Certificate Requests', 'certificates', 'create', 'Submit certificate requests'],
+      ['certificates.verify', 'Verify & Generate Certificates', 'certificates', 'verify', 'HR verification and certificate generation'],
+      ['certificates.manage', 'Manage Certificate Settings', 'certificates', 'manage', 'Manage carbon footprint factors and certificate settings'],
+    ];
+    for (const [name, displayName, mod, act, desc] of certPerms) {
+      try {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO permissions (name, display_name, module, action, description) VALUES (?, ?, ?, ?, ?)`,
+          { replacements: [name, displayName, mod, act, desc] }
+        );
+      } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  certificates perm:', e.message); }
+    }
+
+    console.log('Assigning certificates.read + certificates.create to sales, sales_manager...');
+    {
+      const [[readPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'certificates.read' LIMIT 1`);
+      const [[createPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'certificates.create' LIMIT 1`);
+      for (const roleName of ['sales', 'sales_manager']) {
+        const [[roleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`, { replacements: [roleName] });
+        if (roleRow?.id) {
+          if (readPerm?.id) await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, readPerm.id] });
+          if (createPerm?.id) await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, createPerm.id] });
+          console.log(`  Assigned certificates.read/create to ${roleName}`);
+        }
+      }
+    }
+
+    console.log('Assigning full certificates.* to hr_manager, admin, tenant_admin, super_admin...');
+    {
+      const [allCertPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name LIKE 'certificates.%'`);
+      for (const roleName of ['hr_manager', 'admin', 'tenant_admin', 'super_admin']) {
+        const [[roleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`, { replacements: [roleName] });
+        if (roleRow?.id) {
+          for (const p of allCertPerms) {
+            try {
+              await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, p.id] });
+            } catch (e) { /* ignore */ }
+          }
+          console.log(`  Assigned certificates.* to ${roleName}`);
+        }
+      }
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

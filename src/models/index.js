@@ -87,6 +87,14 @@ const PaymentTransaction = require('./PaymentTransaction')(sequelize, DataTypes)
 const Grn = require('./Grn')(sequelize, DataTypes);
 const GrnItem = require('./GrnItem')(sequelize, DataTypes);
 const GrnImage = require('./GrnImage')(sequelize, DataTypes);
+
+// Certificate Management
+const CertificateRequest = require('./CertificateRequest')(sequelize, DataTypes);
+const CertificateRequestType = require('./CertificateRequestType')(sequelize, DataTypes);
+const CertificateRequestAttachment = require('./CertificateRequestAttachment')(sequelize, DataTypes);
+const Certificate = require('./Certificate')(sequelize, DataTypes);
+const CertificateItem = require('./CertificateItem')(sequelize, DataTypes);
+const CarbonFootprintFactor = require('./CarbonFootprintFactor')(sequelize, DataTypes);
 const Inventory = require('./Inventory')(sequelize, DataTypes);
 
 // HRM
@@ -220,6 +228,12 @@ const db = {
   EmployeeHistory,
   ProfileChangeRequest,
   EmployeeAsset,
+  CertificateRequest,
+  CertificateRequestType,
+  CertificateRequestAttachment,
+  Certificate,
+  CertificateItem,
+  CarbonFootprintFactor,
 };
 
 // Define Associations

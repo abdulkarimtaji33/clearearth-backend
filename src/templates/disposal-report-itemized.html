@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #1a2e22; font-size: 11px; }
+.page { padding: 24px 30px; }
+.top-row { display: flex; justify-content: space-between; align-items: flex-start; }
+.logo { width: 110px; }
+.doc-title { font-size: 24px; font-weight: 900; color: #1e8449; letter-spacing: 1px; }
+.header-divider { height: 3px; background: linear-gradient(90deg, #1e8449, #2ea85c); margin: 14px 0 18px 0; border-radius: 2px; }
+.party-grid { display: flex; gap: 20px; margin-bottom: 16px; }
+.party-col { width: 50%; background: #f7f9f8; border: 1px solid #e6ebe8; border-radius: 8px; padding: 12px 14px; }
+.party-col-title { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e8449; margin-bottom: 6px; }
+.party-line { font-size: 11px; margin: 3px 0; }
+.thanks-text { font-size: 11.5px; line-height: 1.7; margin: 14px 0; }
+.section-title { font-size: 14px; font-weight: 800; color: #1e8449; margin: 18px 0 6px 0; }
+.weight-badge {
+  display: inline-block; background: #1e8449; color: #fff; font-weight: 800; padding: 6px 14px;
+  border-radius: 6px; font-size: 12px; margin-bottom: 10px;
+}
+.items-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.items-table th { background: #1e8449; color: #fff; padding: 6px 6px; text-align: left; }
+.items-table td { padding: 6px 6px; border: 1px solid #e6e9e7; }
+.sign-grid { display: flex; justify-content: space-between; margin-top: 26px; font-size: 11px; }
+.footer-note {
+  margin-top: 26px; padding-top: 10px; border-top: 1px solid #eee; font-size: 9.5px; color: #93a09b;
+  display: flex; justify-content: space-between;
+}
+.evidence-page { page-break-before: always; padding-top: 20px; }
+.evidence-title { font-size: 18px; font-weight: 800; color: #1e8449; margin-bottom: 14px; }
+.evidence-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.evidence-item { width: 47%; }
+.evidence-item img { width: 100%; height: 210px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; }
+.evidence-caption { font-size: 9.5px; color: #555; margin-top: 4px; text-transform: capitalize; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="top-row">
+    <img class="logo" src="{{logoDataUri}}" alt="Clear Earth" />
+    <div style="text-align:right;">
+      <div class="doc-title">DISPOSAL REPORT</div>
+      <div style="font-size:10px;font-weight:700;">Cert No: {{certNo}}</div>
+    </div>
+  </div>
+  <div class="header-divider"></div>
+
+  <div class="party-grid">
+    <div class="party-col">
+      <div class="party-col-title">To,</div>
+      <div class="party-line"><strong>{{toCompany}}</strong></div>
+      <div class="party-line">{{toAddress}}</div>
+    </div>
+    <div class="party-col">
+      <div class="party-col-title">From,</div>
+      <div class="party-line"><strong>{{fromCompany}}</strong></div>
+      <div class="party-line">{{fromAddress}}</div>
+      <div class="party-line">{{fromContact}}</div>
+    </div>
+  </div>
+
+  <div class="thanks-text">
+    Thank you for ensuring the safe disposal of E-Waste for certified recycling. All items listed below
+    have been processed and recycled in full compliance with WEEE (Waste Electrical and Electronic
+    Equipment) Directive Standards.
+  </div>
+
+  <div class="section-title">LIST OF THE DISPOSED MATERIALS</div>
+  <div class="weight-badge">Total Weight: {{totalWeightKg}} Kgs</div>
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width:6%">NO.</th><th>ITEM</th><th style="width:14%">MFR.</th>
+        <th style="width:14%">MODEL NO.</th><th style="width:16%">SERIAL NO.</th><th style="width:8%">QTY</th>
+      </tr>
+    </thead>
+    <tbody>{{itemRowsHtml}}</tbody>
+  </table>
+
+  <div class="sign-grid">
+    <div>
+      <div><strong>Received by:</strong></div>
+      <div>Name: Clear Earth Recycling LLC</div>
+      <div>Date: {{issuedDate}}</div>
+    </div>
+    <div>
+      <div><strong>Disposed by:</strong></div>
+      <div>Name: {{fromCompany}}</div>
+      <div>Date: {{issuedDate}}</div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <span>Clear Earth Recycling LLC — License No: 1150878 — #03B, Phase 1, Block B, Dubai Industrial City, Dubai, UAE</span>
+    <span>Phone: +971-42-4141-71 | Email: info@clearearth.ae</span>
+  </div>
+
+  {{evidenceAppendixHtml}}
+</div>
+</body>
+</html>
