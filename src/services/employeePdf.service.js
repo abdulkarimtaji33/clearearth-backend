@@ -122,7 +122,7 @@ async function generateEmployeeInfoPdf(tenantId, employeeId, options = {}) {
       },
     ],
   });
-  if (!employee) throw new Error('Employee not found');
+  if (!employee) throw ApiError.notFound('Employee not found');
 
   const tenant = await db.Tenant.findByPk(tenantId);
 
