@@ -15,6 +15,7 @@
 const path = require('path');
 const fs = require('fs');
 const db = require('../models');
+const ApiError = require('../utils/apiError');
 
 let puppeteer;
 try {
