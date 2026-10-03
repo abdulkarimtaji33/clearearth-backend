@@ -93,7 +93,6 @@ async function htmlToPdf(html) {
   }
 }
 
-const PINNED_DOCUMENT_TYPES = ['Passport', 'Emirates ID', 'UAE Visa', 'Labour Card'];
 
 /**
  * @param {number} tenantId
@@ -139,21 +138,19 @@ async function generateEmployeeInfoPdf(tenantId, employeeId, options = {}) {
     return uri ? `<img class="photo" src="${uri}" />` : '<div class="photo photo-placeholder"></div>';
   })();
 
-  // -- Identity documents: pull the 4 pinned types by name, recorded data only --
-  const docsByType = new Map();
-  for (const doc of employee.documents || []) {
-    const typeName = doc.documentType?.name;
-    if (typeName && !docsByType.has(typeName)) docsByType.set(typeName, doc);
-  }
-  const identityDocsHtml = PINNED_DOCUMENT_TYPES.map((typeName) => {
-    const doc = docsByType.get(typeName);
-    return `<tr>
-      <td>${escapeHtml(typeName)}</td>
-      <td>${doc ? val(doc.document_number) : '-'}</td>
-      <td>${doc ? formatDate(doc.issue_date) : '-'}</td>
-      <td>${doc ? formatDate(doc.expiry_date) : '-'}</td>
-    </tr>`;
-  }).join('');
+  // -- Identity documents: number, issue and expiry come from the employee record --
+  const identityRows = [
+    ['Passport', employee.passport_number, employee.passport_issue_date, employee.passport_expiry_date],
+    ['Emirates ID', employee.emirates_id_number, employee.emirates_id_issue_date, employee.emirates_id_expiry_date],
+    ['UAE Visa', employee.visa_number, employee.visa_issue_date, employee.visa_expiry_date],
+    ['Labour Card', employee.labour_card_no, employee.labour_card_issue_date, employee.labour_card_expiry_date],
+  ];
+  const identityDocsHtml = identityRows.map(([name, number, issue, expiry]) => `<tr>
+      <td>${escapeHtml(name)}</td>
+      <td>${val(number)}</td>
+      <td>${formatDate(issue)}</td>
+      <td>${formatDate(expiry)}</td>
+    </tr>`).join('');
 
   const emergencyContactsHtml = (employee.emergencyContacts || []).length
     ? (employee.emergencyContacts || []).map((c) => `<tr>
@@ -186,11 +183,11 @@ async function generateEmployeeInfoPdf(tenantId, employeeId, options = {}) {
           <tr><td>Housing Allowance</td><td>${formatNum(activeSalaryStructure.housing_allowance)}</td></tr>
           <tr><td>Supplement Allowance</td><td>${formatNum(activeSalaryStructure.other_allowance)}</td></tr>
           <tr class="total-row"><td>Total Amount</td><td>${formatNum(
-            (parseFloat(activeSalaryStructure.basic_salary) || 0)
+        (parseFloat(activeSalaryStructure.basic_salary) || 0)
             + (parseFloat(activeSalaryStructure.housing_allowance) || 0)
             + (parseFloat(activeSalaryStructure.transport_allowance) || 0)
             + (parseFloat(activeSalaryStructure.other_allowance) || 0)
-          )}</td></tr>
+      )}</td></tr>
         </table>`
       : '<p class="muted">No active salary structure on record.</p>')
     : '<p class="muted">Compensation details are not visible to you. Contact HR for details.</p>';

@@ -39,7 +39,11 @@ const create = async (tenantId, actorUserId, body) => {
   const {
     firstName, lastName, email, phone, departmentId, designationId, managerId,
     employmentType, dateOfJoining, gender, dateOfBirth, nationality, nationalId,
-    passportNumber, address, emergencyContactName, emergencyContactPhone,
+    passportNumber, passportIssueDate, passportExpiryDate,
+    emiratesIdNumber, emiratesIdIssueDate, emiratesIdExpiryDate,
+    visaNumber, visaIssueDate, visaExpiryDate,
+    labourCardNo, labourCardIssueDate, labourCardExpiryDate,
+    address, emergencyContactName, emergencyContactPhone,
     bankName, bankAccountNumber, bankIban, notes,
     createLoginAccount, roleId, existingUserId,
   } = body;
@@ -96,6 +100,17 @@ const create = async (tenantId, actorUserId, body) => {
       nationality: nationality || null,
       national_id: nationalId || null,
       passport_number: passportNumber || null,
+      passport_issue_date: passportIssueDate || null,
+      passport_expiry_date: passportExpiryDate || null,
+      emirates_id_number: emiratesIdNumber || null,
+      emirates_id_issue_date: emiratesIdIssueDate || null,
+      emirates_id_expiry_date: emiratesIdExpiryDate || null,
+      visa_number: visaNumber || null,
+      visa_issue_date: visaIssueDate || null,
+      visa_expiry_date: visaExpiryDate || null,
+      labour_card_no: labourCardNo || null,
+      labour_card_issue_date: labourCardIssueDate || null,
+      labour_card_expiry_date: labourCardExpiryDate || null,
       address: address || null,
       emergency_contact_name: emergencyContactName || null,
       emergency_contact_phone: emergencyContactPhone || null,
@@ -228,6 +243,10 @@ const update = async (tenantId, id, body, actorUserId = null) => {
     workLocationId: 'work_location_id', probationStart: 'probation_start', probationEnd: 'probation_end', confirmationDate: 'confirmation_date',
     labourCardNo: 'labour_card_no', molPersonId: 'mol_person_id', wpsPersonCode: 'wps_person_code', taxId: 'tax_id',
     paymentMethodDetail: 'payment_method_detail', routingCode: 'routing_code', salaryVisibleToEmployee: 'salary_visible_to_employee',
+    passportIssueDate: 'passport_issue_date', passportExpiryDate: 'passport_expiry_date',
+    emiratesIdNumber: 'emirates_id_number', emiratesIdIssueDate: 'emirates_id_issue_date', emiratesIdExpiryDate: 'emirates_id_expiry_date',
+    visaNumber: 'visa_number', visaIssueDate: 'visa_issue_date', visaExpiryDate: 'visa_expiry_date',
+    labourCardIssueDate: 'labour_card_issue_date', labourCardExpiryDate: 'labour_card_expiry_date',
   };
   for (const f of fields) {
     if (body[f] !== undefined) {
