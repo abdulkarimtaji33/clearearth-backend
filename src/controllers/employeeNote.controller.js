@@ -9,6 +9,7 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const list = asyncHandler(async (req, res) => {
   const rows = await db.EmployeeNote.findAll({
     where: { tenant_id: req.tenant.id, employee_id: req.params.employeeId },
+    include: [{ model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'] }],
     order: [['id', 'DESC']],
   });
   return ApiResponse.success(res, rows);

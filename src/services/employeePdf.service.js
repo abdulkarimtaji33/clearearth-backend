@@ -127,9 +127,11 @@ async function generateEmployeeInfoPdf(tenantId, employeeId, options = {}) {
   const tenant = await db.Tenant.findByPk(tenantId);
 
   let activeSalaryStructure = null;
+  let salaryHistory = [];
   if (includeCompensation) {
     const salaryStructureService = require('./salaryStructure.service');
     activeSalaryStructure = await salaryStructureService.getActive(tenantId, employeeId);
+    salaryHistory = await salaryStructureService.history(tenantId, employeeId);
   }
 
   const fullName = `${employee.first_name || ''} ${employee.last_name || ''}`.trim();
@@ -176,21 +178,41 @@ async function generateEmployeeInfoPdf(tenantId, employeeId, options = {}) {
     ? (employee.certifications || []).map((c) => `<li>${val(c.name)}${c.issuer ? ` — ${val(c.issuer)}` : ''}${c.expiry_date ? `, expires ${formatDate(c.expiry_date)}` : ''}</li>`).join('')
     : '<li class="muted">None recorded</li>';
 
+  const salaryTotal = (s) => (parseFloat(s.basic_salary) || 0)
+    + (parseFloat(s.housing_allowance) || 0)
+    + (parseFloat(s.other_allowance) || 0);
+  const paymentMethodLabel = (m) => ({ bank_transfer: 'Bank transfer', cash: 'Cash', cheque: 'Cheque' }[m] || m || '-');
+  const salaryHistoryHtml = salaryHistory.length > 1
+    ? `<h3>Salary revisions</h3><table>
+        <tr><th>Effective from</th><th>Effective to</th><th>Basic</th><th>Housing</th><th>Supplement</th><th>Total Amount</th></tr>
+        ${salaryHistory.map((s) => `<tr>
+          <td>${formatDate(s.effective_from)}</td><td>${s.effective_to ? formatDate(s.effective_to) : 'Current'}</td>
+          <td>${formatNum(s.basic_salary)}</td><td>${formatNum(s.housing_allowance)}</td>
+          <td>${formatNum(s.other_allowance)}</td><td>${formatNum(salaryTotal(s))}</td>
+        </tr>`).join('')}
+      </table>`
+    : '';
   const compensationSectionHtml = includeCompensation
     ? (activeSalaryStructure
       ? `<table class="kv-table">
           <tr><td>Basic Salary</td><td>${formatNum(activeSalaryStructure.basic_salary)} ${escapeHtml(activeSalaryStructure.currency || 'AED')}</td></tr>
           <tr><td>Housing Allowance</td><td>${formatNum(activeSalaryStructure.housing_allowance)}</td></tr>
           <tr><td>Supplement Allowance</td><td>${formatNum(activeSalaryStructure.other_allowance)}</td></tr>
-          <tr class="total-row"><td>Total Amount</td><td>${formatNum(
-        (parseFloat(activeSalaryStructure.basic_salary) || 0)
-            + (parseFloat(activeSalaryStructure.housing_allowance) || 0)
-            + (parseFloat(activeSalaryStructure.transport_allowance) || 0)
-            + (parseFloat(activeSalaryStructure.other_allowance) || 0)
-      )}</td></tr>
-        </table>`
+          <tr class="total-row"><td>Total Amount</td><td>${formatNum(salaryTotal(activeSalaryStructure))}</td></tr>
+          <tr><td>Payment method</td><td>${paymentMethodLabel(activeSalaryStructure.payment_method)}</td></tr>
+          <tr><td>Effective from</td><td>${formatDate(activeSalaryStructure.effective_from)}</td></tr>
+          <tr><td>Commission eligible</td><td>${activeSalaryStructure.commission_eligible ? 'Yes' : 'No'}</td></tr>
+        </table>
+        ${salaryHistoryHtml}`
       : '<p class="muted">No active salary structure on record.</p>')
     : '<p class="muted">Compensation details are not visible to you. Contact HR for details.</p>';
+
+  const documentsListHtml = (employee.documents || []).length
+    ? [...(employee.documents || [])].sort((a, b) => (a.documentType?.name || '').localeCompare(b.documentType?.name || '')).map((d) => `<tr>
+        <td>${val(d.documentType?.name)}</td><td>${val(d.document_number)}</td>
+        <td>${formatDate(d.issue_date)}</td><td>${formatDate(d.expiry_date)}</td><td>${val(d.notes)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="muted">No documents uploaded</td></tr>';
 
   const html = `
   <html>
@@ -338,6 +360,14 @@ async function generateEmployeeInfoPdf(tenantId, employeeId, options = {}) {
       <table>
         <tr><th>Document</th><th>Document Number</th><th>Issue Date</th><th>Expiry Date</th></tr>
         ${identityDocsHtml}
+      </table>
+    </section>
+
+    <section>
+      <h2>Uploaded Documents</h2>
+      <table>
+        <tr><th>Document type</th><th>Number</th><th>Issue date</th><th>Expiry date</th><th>Notes</th></tr>
+        ${documentsListHtml}
       </table>
     </section>
 
