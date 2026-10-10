@@ -39,5 +39,8 @@ router.post('/:id/payment', authorize('deals.update'), dealController.updatePaym
 
 // Inspection report - deals.read OR inspection_reports.create/update (for inspection team)
 router.put('/:id/inspection-report', authorize('deals.read', 'inspection_reports.create', 'inspection_reports.update'), dealController.saveInspectionReport);
+// PDF download - deals.read is enough, same as viewing the report embedded in GET /deals/:id,
+// so any role (e.g. sales) that can view a deal can also download its inspection report.
+router.get('/:id/inspection-report/pdf', authorize('deals.read'), dealController.getInspectionReportPdf);
 
 module.exports = router;
