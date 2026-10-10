@@ -129,6 +129,59 @@ const listGrns = async (tenantId, filters = {}) => {
   return { grns: rows.map((r) => r.get({ plain: true })), total: count };
 };
 
+/**
+ * Flat inventory list: every GrnItem across every GRN, each row carrying its
+ * parent GRN (number, status) and the GRN's deal (number, title, company) so
+ * the frontend can link straight through to either. Filterable by GRN number
+ * (exact or partial), item name, material type, and GRN status.
+ */
+const listInventoryItems = async (tenantId, filters = {}) => {
+  const { offset, limit, search, grnNumber, materialTypeId, status, dealId } = filters;
+
+  const grnWhere = { tenant_id: tenantId };
+  if (status && GRN_STATUSES.includes(status)) grnWhere.status = status;
+  if (grnNumber) grnWhere.grn_number = { [Op.like]: `%${String(grnNumber).trim()}%` };
+  if (dealId) grnWhere.deal_id = dealId;
+
+  const itemWhere = {};
+  if (materialTypeId) itemWhere.material_type_id = materialTypeId;
+  if (search) {
+    const s = `%${String(search).trim()}%`;
+    itemWhere[Op.or] = [
+      { item_name: { [Op.like]: s } },
+      { make: { [Op.like]: s } },
+      { model: { [Op.like]: s } },
+      { serial_number: { [Op.like]: s } },
+    ];
+  }
+
+  const { count, rows } = await db.GrnItem.findAndCountAll({
+    where: itemWhere,
+    include: [
+      {
+        model: db.Grn,
+        as: 'grn',
+        where: grnWhere,
+        required: true,
+        attributes: ['id', 'grn_number', 'status', 'work_order_id', 'deal_id', 'created_at'],
+        include: [
+          { model: db.Deal, as: 'deal', attributes: ['id', 'deal_number', 'title', 'company_id'], required: false,
+            include: [{ model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false }] },
+          { model: db.WorkOrder, as: 'workOrder', attributes: ['id', 'title'], required: false },
+        ],
+      },
+      { model: db.MaterialType, as: 'materialType', attributes: ['id', 'display_name', 'value'], required: false },
+      { model: db.GrnImage, as: 'images', required: false, separate: true },
+    ],
+    offset,
+    limit,
+    order: [['id', 'DESC']],
+    distinct: true,
+  });
+
+  return { items: rows.map((r) => r.get({ plain: true })), total: count };
+};
+
 const getById = async (tenantId, id) => {
   const row = await db.Grn.findOne({
     where: { id, tenant_id: tenantId },
@@ -363,6 +416,7 @@ const ensureGrnForWorkOrder = async (tenantId, workOrderId, userId = null) => {
 
 module.exports = {
   listGrns,
+  listInventoryItems,
   getById,
   createGrn,
   updateGrn,

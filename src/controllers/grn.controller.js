@@ -28,6 +28,24 @@ const getById = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, row);
 });
 
+const listInventory = asyncHandler(async (req, res) => {
+  const { page, pageSize, search, grnNumber, materialTypeId, status, dealId } = req.query;
+  const pagination = getPaginationParams(page, pageSize);
+  const result = await grnService.listInventoryItems(req.tenant.id, {
+    ...pagination,
+    search,
+    grnNumber,
+    materialTypeId,
+    status,
+    dealId,
+  });
+  return ApiResponse.paginated(res, result.items, {
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalItems: result.total,
+  });
+});
+
 const create = asyncHandler(async (req, res) => {
   const row = await grnService.createGrn(req.tenant.id, req.user.id, req.body);
   return ApiResponse.created(res, row, 'GRN created');
@@ -73,4 +91,4 @@ const getPdf = asyncHandler(async (req, res) => {
   res.end(pdfBuffer, 'binary');
 });
 
-module.exports = { list, getById, create, update, uploadItemImages, approve, getPdf };
+module.exports = { list, listInventory, getById, create, update, uploadItemImages, approve, getPdf };

@@ -3,7 +3,7 @@ const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 
 const overview = asyncHandler(async (req, res) => {
-  const data = await dashboardService.getOverview(req.tenant?.id, req.user);
+  const data = await dashboardService.getOverview(req.tenant?.id, req.user, { period: req.query.period });
   return ApiResponse.success(res, data);
 });
 

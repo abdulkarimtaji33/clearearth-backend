@@ -22,6 +22,254 @@ function daysAgo(n) {
   return d.toISOString().slice(0, 10);
 }
 
+/** Monday-based start of the week containing `d`. */
+function startOfWeek(d) {
+  const dt = new Date(d);
+  dt.setHours(0, 0, 0, 0);
+  const day = dt.getDay(); // 0 = Sunday
+  const diff = day === 0 ? -6 : 1 - day;
+  dt.setDate(dt.getDate() + diff);
+  return dt;
+}
+
+/**
+ * Computes the current and immediately-preceding date range for a
+ * dashboard "period" selector (today / week / month), plus a nominal
+ * `periodEnd` (used only for the human-readable label — queries are
+ * always capped at `now`, since nothing can have a future timestamp).
+ */
+function startOfPeriod(period = 'week') {
+  const now = new Date();
+  let from, periodEnd, prevFrom, prevTo;
+
+  if (period === 'today') {
+    from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+    periodEnd = new Date(from);
+    periodEnd.setHours(23, 59, 59, 999);
+    prevTo = new Date(from);
+    prevFrom = new Date(from);
+    prevFrom.setDate(prevFrom.getDate() - 1);
+  } else if (period === 'month') {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+    periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    prevTo = new Date(from);
+    prevFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  } else {
+    from = startOfWeek(now);
+    periodEnd = new Date(from);
+    periodEnd.setDate(periodEnd.getDate() + 6);
+    periodEnd.setHours(23, 59, 59, 999);
+    prevTo = new Date(from);
+    prevFrom = new Date(from);
+    prevFrom.setDate(prevFrom.getDate() - 7);
+  }
+
+  return { period, from, to: now, periodEnd, prevFrom, prevTo };
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatPeriodLabel({ period, from, periodEnd }) {
+  if (period === 'today') {
+    return `${from.getDate()} ${MONTH_NAMES[from.getMonth()]} ${from.getFullYear()}`;
+  }
+  if (period === 'month') {
+    return `${MONTH_NAMES[from.getMonth()]} ${from.getFullYear()}`;
+  }
+  const sameMonth = from.getMonth() === periodEnd.getMonth();
+  const left = `${from.getDate()}`;
+  const right = sameMonth
+    ? `${periodEnd.getDate()} ${MONTH_NAMES[periodEnd.getMonth()]} ${periodEnd.getFullYear()}`
+    : `${periodEnd.getDate()} ${MONTH_NAMES[periodEnd.getMonth()]} ${periodEnd.getFullYear()}`;
+  return sameMonth
+    ? `${left} – ${right}`
+    : `${left} ${MONTH_NAMES[from.getMonth()]} – ${right}`;
+}
+
+function pctDelta(cur, prev) {
+  const c = parseFloat(cur) || 0;
+  const p = parseFloat(prev) || 0;
+  if (!p) return c > 0 ? 100 : 0;
+  return Math.round(((c - p) / p) * 1000) / 10;
+}
+
+/**
+ * Buckets a model's rows into `weeks` (default 13, ~3 months) consecutive
+ * 7-day windows ending "now", summing `valueField` (or counting rows when
+ * omitted) per bucket. One query per metric — simple and correct.
+ */
+async function weeklyTrend(model, tenantId, dateField, extraWhere = {}, valueField = null, weeks = 13) {
+  const since = new Date();
+  since.setDate(since.getDate() - weeks * 7);
+  since.setHours(0, 0, 0, 0);
+
+  const rows = await model.findAll({
+    where: { tenant_id: tenantId, ...extraWhere, [dateField]: { [Op.gte]: since } },
+    attributes: [dateField, ...(valueField ? [valueField] : [])],
+    raw: true,
+  }).catch(() => []);
+
+  const buckets = [];
+  for (let i = 0; i < weeks; i += 1) {
+    const start = new Date(since);
+    start.setDate(start.getDate() + i * 7);
+    buckets.push({ start, value: 0 });
+  }
+
+  rows.forEach((r) => {
+    const raw = r[dateField];
+    const d = raw instanceof Date ? raw : new Date(raw);
+    if (Number.isNaN(d.getTime())) return;
+    const idx = Math.floor((d.getTime() - since.getTime()) / (7 * 86400000));
+    if (idx >= 0 && idx < weeks) {
+      buckets[idx].value += valueField ? (parseFloat(r[valueField]) || 0) : 1;
+    }
+  });
+
+  return buckets.map((b) => ({ date: b.start.toISOString().slice(0, 10), value: b.value }));
+}
+
+/** Same idea as `weeklyTrend` but buckets Deal rows into otc/otp/foc counts per week in one pass. */
+async function weeklyDealTypeTrend(tenantId, weeks = 13) {
+  const since = new Date();
+  since.setDate(since.getDate() - weeks * 7);
+  since.setHours(0, 0, 0, 0);
+
+  const rows = await db.Deal.findAll({
+    where: { tenant_id: tenantId, created_at: { [Op.gte]: since } },
+    attributes: ['deal_type', 'created_at'],
+    raw: true,
+  }).catch(() => []);
+
+  const buckets = [];
+  for (let i = 0; i < weeks; i += 1) {
+    const start = new Date(since);
+    start.setDate(start.getDate() + i * 7);
+    buckets.push({ start, otc: 0, otp: 0, foc: 0 });
+  }
+
+  rows.forEach((r) => {
+    const d = r.created_at instanceof Date ? r.created_at : new Date(r.created_at);
+    if (Number.isNaN(d.getTime())) return;
+    const idx = Math.floor((d.getTime() - since.getTime()) / (7 * 86400000));
+    if (idx < 0 || idx >= weeks) return;
+    if (r.deal_type === 'offer_to_charge') buckets[idx].otc += 1;
+    else if (r.deal_type === 'offer_to_purchase') buckets[idx].otp += 1;
+    else if (r.deal_type === 'free_of_charge') buckets[idx].foc += 1;
+  });
+
+  return buckets.map((b) => ({ date: b.start.toISOString().slice(0, 10), otc: b.otc, otp: b.otp, foc: b.foc }));
+}
+
+const QUOTATION_SENT_OR_BEYOND = ['sent', 'under_review', 'revised', 'pending_approval', 'approved', 'rejected'];
+
+/**
+ * Builds the "Operations Pulse" panel payload for the admin dashboard —
+ * additive to `getAdminOverview`'s existing response, never required by it.
+ */
+async function getPulseData(tenantId, period = 'week') {
+  const range = startOfPeriod(period);
+  const { from, to, prevFrom, prevTo } = range;
+
+  const periodWhere = (field = 'created_at') => ({ [field]: { [Op.gte]: from, [Op.lte]: to } });
+  const prevWhere = (field = 'created_at') => ({ [field]: { [Op.gte]: prevFrom, [Op.lt]: prevTo } });
+
+  const [
+    leadsCreated, leadsCreatedPrev,
+    dealsConverted, dealsConvertedPrev,
+    quotationsSent, quotationsSentPrev,
+    dealsWon, dealsWonPrev,
+    woScheduled, woScheduledPrev,
+    woCompleted, woCompletedPrev,
+    invoicesRows, invoicesRowsPrev,
+    dealTypeCurRows,
+    arSummary, apSummary,
+  ] = await Promise.all([
+    db.Lead.count({ where: { tenant_id: tenantId, ...periodWhere() } }).catch(() => 0),
+    db.Lead.count({ where: { tenant_id: tenantId, ...prevWhere() } }).catch(() => 0),
+    db.Deal.count({ where: { tenant_id: tenantId, ...periodWhere() } }).catch(() => 0),
+    db.Deal.count({ where: { tenant_id: tenantId, ...prevWhere() } }).catch(() => 0),
+    db.Quotation.count({ where: { tenant_id: tenantId, status: { [Op.in]: QUOTATION_SENT_OR_BEYOND }, ...periodWhere() } }).catch(() => 0),
+    db.Quotation.count({ where: { tenant_id: tenantId, status: { [Op.in]: QUOTATION_SENT_OR_BEYOND }, ...prevWhere() } }).catch(() => 0),
+    db.Deal.count({ where: { tenant_id: tenantId, status: 'won', ...periodWhere('updated_at') } }).catch(() => 0),
+    db.Deal.count({ where: { tenant_id: tenantId, status: 'won', ...prevWhere('updated_at') } }).catch(() => 0),
+    db.WorkOrder.count({ where: { tenant_id: tenantId, ...periodWhere() } }).catch(() => 0),
+    db.WorkOrder.count({ where: { tenant_id: tenantId, ...prevWhere() } }).catch(() => 0),
+    db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'completed', ...periodWhere('updated_at') } }).catch(() => 0),
+    db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'completed', ...prevWhere('updated_at') } }).catch(() => 0),
+    db.TaxInvoice.findAll({ where: { tenant_id: tenantId, ...periodWhere() }, attributes: [[fn('COALESCE', fn('SUM', col('total')), 0), 'total']], raw: true }).catch(() => [{ total: 0 }]),
+    db.TaxInvoice.findAll({ where: { tenant_id: tenantId, ...prevWhere() }, attributes: [[fn('COALESCE', fn('SUM', col('total')), 0), 'total']], raw: true }).catch(() => [{ total: 0 }]),
+    db.Deal.findAll({ where: { tenant_id: tenantId, ...periodWhere() }, attributes: ['deal_type'], raw: true }).catch(() => []),
+    receivablesService.getAgingSummary(tenantId, {}).catch(() => ({ buckets: {} })),
+    payablesService.getAgingSummary(tenantId, {}).catch(() => ({ buckets: {} })),
+  ]);
+
+  const invoicesGenerated = parseFloat(invoicesRows[0]?.total || 0);
+  const invoicesGeneratedPrev = parseFloat(invoicesRowsPrev[0]?.total || 0);
+
+  const [
+    leadsTrend, dealsConvertedTrend, quotationsSentTrend, dealsWonTrend,
+    woScheduledTrend, woCompletedTrend, invoicesTrend, dealsByTypeTrend,
+  ] = await Promise.all([
+    weeklyTrend(db.Lead, tenantId, 'created_at'),
+    weeklyTrend(db.Deal, tenantId, 'created_at'),
+    weeklyTrend(db.Quotation, tenantId, 'created_at', { status: { [Op.in]: QUOTATION_SENT_OR_BEYOND } }),
+    weeklyTrend(db.Deal, tenantId, 'updated_at', { status: 'won' }),
+    weeklyTrend(db.WorkOrder, tenantId, 'created_at'),
+    weeklyTrend(db.WorkOrder, tenantId, 'updated_at', { status: 'completed' }),
+    weeklyTrend(db.TaxInvoice, tenantId, 'created_at', {}, 'total'),
+    weeklyDealTypeTrend(tenantId),
+  ]);
+
+  const dealTypeCounts = { otc: 0, otp: 0, foc: 0 };
+  dealTypeCurRows.forEach((r) => {
+    if (r.deal_type === 'offer_to_charge') dealTypeCounts.otc += 1;
+    else if (r.deal_type === 'offer_to_purchase') dealTypeCounts.otp += 1;
+    else if (r.deal_type === 'free_of_charge') dealTypeCounts.foc += 1;
+  });
+
+  const receivables = Object.values(arSummary.buckets || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const payables = Object.values(apSummary.buckets || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const arB = arSummary.buckets || {};
+  const apB = apSummary.buckets || {};
+
+  return {
+    period,
+    periodLabel: formatPeriodLabel(range),
+    updatedAt: new Date().toISOString(),
+    metrics: [
+      { key: 'leadsCreated', label: 'Leads Created', value: leadsCreated, deltaPct: pctDelta(leadsCreated, leadsCreatedPrev), trend: leadsTrend },
+      { key: 'dealsConverted', label: 'Deals Converted', value: dealsConverted, deltaPct: pctDelta(dealsConverted, dealsConvertedPrev), trend: dealsConvertedTrend },
+      { key: 'quotationsSent', label: 'Quotations Sent', value: quotationsSent, deltaPct: pctDelta(quotationsSent, quotationsSentPrev), trend: quotationsSentTrend },
+      { key: 'dealsWon', label: 'Deals Won', value: dealsWon, deltaPct: pctDelta(dealsWon, dealsWonPrev), trend: dealsWonTrend },
+      { key: 'workOrdersScheduled', label: 'Work Orders Scheduled', value: woScheduled, deltaPct: pctDelta(woScheduled, woScheduledPrev), trend: woScheduledTrend },
+      { key: 'workOrdersCompleted', label: 'Work Orders Completed', value: woCompleted, deltaPct: pctDelta(woCompleted, woCompletedPrev), trend: woCompletedTrend },
+      { key: 'invoicesGenerated', label: 'Invoices Generated', value: invoicesGenerated, deltaPct: pctDelta(invoicesGenerated, invoicesGeneratedPrev), trend: invoicesTrend, format: 'currency' },
+    ],
+    dealsByType: {
+      period: dealTypeCounts,
+      trend: dealsByTypeTrend,
+    },
+    receivablesPayables: {
+      receivables,
+      payables,
+      receivablesAging: {
+        '0-30': (arB.current || 0) + (arB.bucket_1_30 || 0),
+        '31-60': arB.bucket_31_60 || 0,
+        '61-90': arB.bucket_61_90 || 0,
+        '90+': (arB.bucket_over_90 || 0) + (arB.bucket_no_due_date || 0),
+      },
+      payablesAging: {
+        '0-30': (apB.current || 0) + (apB.bucket_1_30 || 0),
+        '31-60': apB.bucket_31_60 || 0,
+        '61-90': apB.bucket_61_90 || 0,
+        '90+': (apB.bucket_over_90 || 0) + (apB.bucket_no_due_date || 0),
+      },
+    },
+  };
+}
+
 async function countByStatus(model, tenantId, statusField = 'status', extraWhere = {}) {
   const rows = await model.findAll({
     where: { tenant_id: tenantId, ...extraWhere },
@@ -35,12 +283,13 @@ async function countByStatus(model, tenantId, statusField = 'status', extraWhere
   }, {});
 }
 
-async function getAdminOverview(tenantId) {
+async function getAdminOverview(tenantId, period = 'week') {
   const monthFrom = monthStart();
   const [
     arSummary, apSummary, woByStatus, dealsByStatus,
     pendingExpenses, draftGrns, pendingPos, unassignedPickups, revenueRows,
     completedWOsThisMonth, wonDealsThisMonth, recentDeals, recentWorkOrders,
+    pulse,
   ] = await Promise.all([
     receivablesService.getAgingSummary(tenantId, {}),
     payablesService.getAgingSummary(tenantId, {}),
@@ -75,6 +324,7 @@ async function getAdminOverview(tenantId) {
       order: [['updated_at', 'DESC']],
       limit: 5,
     }).catch(() => []),
+    getPulseData(tenantId, period).catch(() => null),
   ]);
 
   const outstandingAr = Object.values(arSummary.buckets || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
@@ -104,6 +354,7 @@ async function getAdminOverview(tenantId) {
     },
     recentDeals: recentDeals.map((d) => d.get({ plain: true })),
     recentWorkOrders: recentWorkOrders.map((w) => w.get({ plain: true })),
+    pulse,
   };
 }
 
@@ -597,15 +848,16 @@ async function getAccountsOverview(tenantId) {
   };
 }
 
-const getOverview = async (tenantId, user) => {
+const getOverview = async (tenantId, user, options = {}) => {
   const roleName = user?.role?.name || user?.Role?.name || 'sales';
+  const period = ['today', 'week', 'month'].includes(options.period) ? options.period : 'week';
 
   switch (roleName) {
     case 'super_admin':
       return getSuperAdminOverview();
     case 'tenant_admin':
     case 'admin':
-      return getAdminOverview(tenantId);
+      return getAdminOverview(tenantId, period);
     case 'sales_manager':
       return getSalesManagerOverview(tenantId);
     case 'sales':
