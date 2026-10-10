@@ -114,12 +114,18 @@ const listGrns = async (tenantId, filters = {}) => {
   if (workOrderId) where.work_order_id = workOrderId;
   if (search) {
     const s = `%${String(search).trim()}%`;
-    where[Op.or] = [{ grn_number: { [Op.like]: s } }, { notes: { [Op.like]: s } }];
+    where[Op.or] = [
+      { grn_number: { [Op.like]: s } },
+      { notes: { [Op.like]: s } },
+      { '$deal.deal_number$': { [Op.like]: s } },
+      { '$deal.title$': { [Op.like]: s } },
+    ];
   }
 
   const { count, rows } = await db.Grn.findAndCountAll({
     where,
     include: grnIncludes,
+    subQuery: false,
     offset,
     limit,
     order: [['id', 'DESC']],
