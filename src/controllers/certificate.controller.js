@@ -46,9 +46,9 @@ const generate = asyncHandler(async (req, res) => {
 // ---- Certificates (register) ----
 
 const listCertificates = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, type, status, from, to } = req.query;
+  const { page, pageSize, search, type, status, from, to, collectionDate } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const result = await certificateService.listCertificates(req.tenant.id, { ...pagination, search, type, status, from, to });
+  const result = await certificateService.listCertificates(req.tenant.id, { ...pagination, search, type, status, from, to, collectionDate });
   return ApiResponse.paginated(res, result.certificates, {
     page: pagination.page,
     pageSize: pagination.pageSize,

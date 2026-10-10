@@ -72,6 +72,7 @@ const PurchaseOrderTerm = require('./PurchaseOrderTerm')(sequelize, DataTypes);
 const WorkOrder = require('./WorkOrder')(sequelize, DataTypes);
 const WorkOrderTask = require('./WorkOrderTask')(sequelize, DataTypes);
 const WorkOrderTaskExpense = require('./WorkOrderTaskExpense')(sequelize, DataTypes);
+const WorkOrderTaskAssignee = require('./WorkOrderTaskAssignee')(sequelize, DataTypes);
 const WorkOrderTaskFile = require('./WorkOrderTaskFile')(sequelize, DataTypes);
 const Expense = require('./Expense')(sequelize, DataTypes);
 const ExpenseCategory = require('./ExpenseCategory')(sequelize, DataTypes);
@@ -187,6 +188,7 @@ const db = {
   WorkOrder,
   WorkOrderTask,
   WorkOrderTaskExpense,
+  WorkOrderTaskAssignee,
   WorkOrderTaskFile,
   Expense,
   ExpenseCategory,

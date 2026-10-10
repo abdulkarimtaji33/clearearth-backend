@@ -373,6 +373,10 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
         container_type: data.containerType || null,
         location_type: data.locationType || null,
         wds_required: data.wdsRequired || false,
+        certificate_required: data.certificateRequired || false,
+        required_certificate_types: data.certificateRequired && Array.isArray(data.requiredCertificateTypes)
+          ? data.requiredCertificateTypes
+          : null,
         inspection_required: data.inspectionRequired || false,
         custom_inspection: data.customInspection || false,
         trakhees_inspection: data.trakheesInspection || false,
@@ -566,6 +570,12 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         container_type: data.containerType !== undefined ? data.containerType : deal.container_type,
         location_type: data.locationType !== undefined ? data.locationType : deal.location_type,
         wds_required: data.wdsRequired !== undefined ? data.wdsRequired : deal.wds_required,
+        certificate_required: data.certificateRequired !== undefined ? data.certificateRequired : deal.certificate_required,
+        required_certificate_types: data.certificateRequired !== undefined
+          ? (data.certificateRequired && Array.isArray(data.requiredCertificateTypes) ? data.requiredCertificateTypes : null)
+          : (data.requiredCertificateTypes !== undefined
+            ? (Array.isArray(data.requiredCertificateTypes) ? data.requiredCertificateTypes : null)
+            : deal.required_certificate_types),
         inspection_required: data.inspectionRequired !== undefined ? data.inspectionRequired : deal.inspection_required,
         custom_inspection: data.customInspection !== undefined ? data.customInspection : deal.custom_inspection,
         trakhees_inspection: data.trakheesInspection !== undefined ? data.trakheesInspection : deal.trakhees_inspection,

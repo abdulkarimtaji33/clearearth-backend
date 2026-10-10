@@ -176,7 +176,7 @@ async function generateGreenCertificate(certificate, request, tenant) {
 async function generateCertificateOfDestruction(certificate, request, tenant) {
   const items = certificate.items?.length
     ? certificate.items
-    : [{ sl_no: 1, description: request.material_waste_details, qty: request.total_weight_quantity, unit: 'tons' }];
+    : [{ sl_no: 1, description: request.material_waste_details, qty: request.total_weight_quantity, unit: request.uom || 'tons' }];
   const html = renderTemplate(path.join(__dirname, '../templates/certificate-of-destruction.html'), {
     logoDataUri: getLogoDataUri(),
     certNo: certificate.certificate_number,
@@ -187,7 +187,7 @@ async function generateCertificateOfDestruction(certificate, request, tenant) {
     totalTons: formatNum(request.total_weight_quantity),
     collectionDate: formatDate(request.collection_date),
     certificationDate: formatDate(certificate.issued_date),
-    itemRowsHtml: buildItemRowsHtml(items, { qtyUnit: 'Tons' }),
+    itemRowsHtml: buildItemRowsHtml(items, { qtyUnit: request.uom || 'Tons' }),
   });
   return htmlToPdf(html);
 }
@@ -195,7 +195,7 @@ async function generateCertificateOfDestruction(certificate, request, tenant) {
 async function generateCertificateOfDataDestruction(certificate, request, tenant) {
   const items = certificate.items?.length
     ? certificate.items
-    : [{ sl_no: 1, description: request.material_waste_details, qty: request.total_weight_quantity, unit: 'nos' }];
+    : [{ sl_no: 1, description: request.material_waste_details, qty: request.total_weight_quantity, unit: request.uom || 'nos' }];
   const totalUnits = items.reduce((sum, it) => sum + (parseFloat(it.qty) || 0), 0);
   const html = renderTemplate(path.join(__dirname, '../templates/certificate-of-data-destruction.html'), {
     logoDataUri: getLogoDataUri(),
@@ -322,7 +322,7 @@ async function generateDisposalReportPhotos(certificate, request, tenant) {
     sourceLine: escapeHtml(sourceLine || '-'),
     collectionDate: formatDate(request.collection_date),
     destructionDate: formatDate(certificate.issued_date),
-    totalQuantity: `${formatNum(request.total_weight_quantity)} Tons`,
+    totalQuantity: `${formatNum(request.total_weight_quantity)} ${request.uom || 'Tons'}`,
     photoPagesHtml: buildPhotoPagesHtml(photos),
   });
   return htmlToPdf(html);

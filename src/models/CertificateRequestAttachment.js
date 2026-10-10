@@ -15,6 +15,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('arrival', 'destruction_in_progress', 'other'),
         allowNull: true,
       },
+      source_task_file_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'WorkOrderTaskFile this attachment was copied from, when linked from task completion evidence',
+      },
     },
     {
       tableName: 'certificate_request_attachments',

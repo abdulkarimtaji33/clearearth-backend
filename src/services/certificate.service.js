@@ -80,7 +80,7 @@ const getRequestById = async (tenantId, id) => {
 const createRequest = async (tenantId, userId, body) => {
   const {
     grnId, dealId, companyName, contactPerson, contactNo, contactEmail, collectionDate,
-    grnNo, materialWasteDetails, totalWeightQuantity, invoiceNo, additionalNotes,
+    grnNo, materialWasteDetails, totalWeightQuantity, uom, invoiceNo, additionalNotes,
     certificateTypes = [], destructionReportVariant, wdsRefNo, docRef, reqNo, boeNo, barcode,
     materialTypeId, attachments = [],
   } = body;
@@ -118,6 +118,7 @@ const createRequest = async (tenantId, userId, body) => {
         grn_no: grnNo || null,
         material_waste_details: materialWasteDetails,
         total_weight_quantity: parseFloat(totalWeightQuantity) || 0,
+        uom: uom || null,
         invoice_no: invoiceNo || null,
         additional_notes: additionalNotes || null,
         destruction_report_variant: certificateTypes.includes('destruction_report_evidence')
@@ -335,7 +336,7 @@ const generateCertificate = async (tenantId, userId, requestId, types) => {
 };
 
 const listCertificates = async (tenantId, filters = {}) => {
-  const { offset, limit, search, type, status, from, to } = filters;
+  const { offset, limit, search, type, status, from, to, collectionDate } = filters;
   const where = { tenant_id: tenantId };
   if (type) where.type = type;
   if (from || to) {
@@ -350,6 +351,7 @@ const listCertificates = async (tenantId, filters = {}) => {
     requestWhere[Op.or] = [{ company_name: { [Op.like]: s } }, { contact_person: { [Op.like]: s } }];
   }
   if (status) requestWhere.status = status;
+  if (collectionDate) requestWhere.collection_date = collectionDate;
 
   const { count, rows } = await db.Certificate.findAndCountAll({
     where,

@@ -3372,6 +3372,44 @@ async function runMigration() {
       }
     }
 
+    // -----------------------------------------------------------------------
+    // Work order task multi-assignee + evidence, deal certificate flags,
+    // certificate request UoM (2026-10-10)
+    // -----------------------------------------------------------------------
+    console.log('Creating work_order_task_assignees table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS work_order_task_assignees (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        task_id INT NOT NULL,
+        user_id INT NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY uniq_wota_task_user (task_id, user_id),
+        INDEX idx_wota_task (task_id),
+        INDEX idx_wota_user (user_id),
+        CONSTRAINT fk_wota_task FOREIGN KEY (task_id) REFERENCES work_order_tasks(id) ON DELETE CASCADE,
+        CONSTRAINT fk_wota_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    console.log('Backfilling work_order_task_assignees from work_order_tasks.assigned_to...');
+    try {
+      await db.sequelize.query(`
+        INSERT IGNORE INTO work_order_task_assignees (task_id, user_id, created_at, updated_at)
+        SELECT id, assigned_to, NOW(), NOW() FROM work_order_tasks WHERE assigned_to IS NOT NULL
+      `);
+    } catch (e) { console.warn('  backfill work_order_task_assignees:', e.message); }
+
+    console.log('Adding certificate_required / required_certificate_types to deals...');
+    try { await db.sequelize.query(`ALTER TABLE deals ADD COLUMN certificate_required TINYINT(1) NOT NULL DEFAULT 0`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  deals.certificate_required:', e.message); }
+    try { await db.sequelize.query(`ALTER TABLE deals ADD COLUMN required_certificate_types JSON NULL`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  deals.required_certificate_types:', e.message); }
+
+    console.log('Adding uom to certificate_requests...');
+    try { await db.sequelize.query(`ALTER TABLE certificate_requests ADD COLUMN uom VARCHAR(20) NULL`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  certificate_requests.uom:', e.message); }
+
+    console.log('Linking work_order_task_files to certificate_request_attachments (nullable source reference)...');
+    try { await db.sequelize.query(`ALTER TABLE certificate_request_attachments ADD COLUMN source_task_file_id INT NULL`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  certificate_request_attachments.source_task_file_id:', e.message); }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

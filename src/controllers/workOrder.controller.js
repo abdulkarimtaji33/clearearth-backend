@@ -1,11 +1,14 @@
 /**
  * Work Order Controller
  */
+const path = require('path');
+const config = require('../config');
 const workOrderService = require('../services/workOrder.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 const { shouldHideDealFinancials, sanitizeDealPayload } = require('../utils/dealFinancials');
+const { getFileUrl } = require('../middlewares/upload');
 
 const sanitizeWorkOrderDeal = (workOrder, hideFinancials) => {
   if (!hideFinancials || !workOrder) return workOrder;
@@ -65,8 +68,10 @@ const updateTaskNotes = asyncHandler(async (req, res) => {
 });
 
 const updateTaskAssignment = asyncHandler(async (req, res) => {
-  const { assignedTo } = req.body;
-  const task = await workOrderService.updateTaskAssignment(req.tenant.id, req.params.id, req.params.taskId, assignedTo);
+  const { assignedTo, assigneeIds } = req.body;
+  const task = await workOrderService.updateTaskAssignment(
+    req.tenant.id, req.params.id, req.params.taskId, Array.isArray(assigneeIds) ? assigneeIds : assignedTo
+  );
   return ApiResponse.success(res, task, 'Task assignment updated');
 });
 
@@ -75,4 +80,35 @@ const remove = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'Work order deleted successfully');
 });
 
-module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove };
+// ---- Task evidence (completion) files ----
+
+const listTaskFiles = asyncHandler(async (req, res) => {
+  const files = await workOrderService.listTaskFiles(req.tenant.id, req.params.id, req.params.taskId);
+  return ApiResponse.success(res, files);
+});
+
+const uploadTaskFiles = asyncHandler(async (req, res) => {
+  const files = (req.files || []).map((f) => {
+    const relativePath = path.relative(config.upload.path, f.path).replace(/\\/g, '/');
+    return { imageUrl: getFileUrl(relativePath), originalName: f.originalname };
+  });
+  const rows = await workOrderService.addTaskFiles(req.tenant.id, req.params.id, req.params.taskId, files);
+  return ApiResponse.success(res, rows, 'Evidence uploaded');
+});
+
+const deleteTaskFile = asyncHandler(async (req, res) => {
+  await workOrderService.deleteTaskFile(req.tenant.id, req.params.id, req.params.taskId, req.params.fileId);
+  return ApiResponse.success(res, null, 'Evidence removed');
+});
+
+const linkTaskFileToCertificate = asyncHandler(async (req, res) => {
+  const row = await workOrderService.linkTaskFileToCertificate(
+    req.tenant.id, req.params.id, req.params.taskId, req.params.fileId, req.body.certificateRequestId
+  );
+  return ApiResponse.success(res, row, 'Evidence linked to certificate request');
+});
+
+module.exports = {
+  getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove,
+  listTaskFiles, uploadTaskFiles, deleteTaskFile, linkTaskFileToCertificate,
+};

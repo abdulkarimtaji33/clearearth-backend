@@ -34,7 +34,7 @@ const create = asyncHandler(async (req, res) => {
 });
 
 const update = asyncHandler(async (req, res) => {
-  const row = await grnService.updateGrn(req.tenant.id, req.params.id, req.body);
+  const row = await grnService.updateGrn(req.tenant.id, req.params.id, req.body, req.user);
   return ApiResponse.success(res, row, 'GRN updated');
 });
 

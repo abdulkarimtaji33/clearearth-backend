@@ -471,6 +471,21 @@ const notifyExpenseSubmitted = async (tenantId, workOrderId, taskName, submitted
   });
 };
 
+const notifyGrnSubmitted = async (tenantId, grn, salesUserId, submittedByUser) => {
+  if (!salesUserId) return;
+  const userName = submittedByUser
+    ? [submittedByUser.first_name, submittedByUser.last_name].filter(Boolean).join(' ')
+    : 'Operations';
+  const companyName = grn.deal?.title || grn.deal?.deal_number || `Deal #${grn.deal_id}`;
+  await createForUsers(tenantId, [salesUserId], {
+    type: 'grn_submitted',
+    title: 'GRN submitted',
+    message: `${userName} submitted GRN ${grn.grn_number} for ${companyName}. You can download it now.`,
+    entityType: 'grn',
+    entityId: grn.id,
+  });
+};
+
 // -- HRM notifications --------------------------------------------------------
 
 const employeeFullName = (employee) => [employee?.first_name, employee?.last_name].filter(Boolean).join(' ') || 'An employee';
@@ -597,6 +612,7 @@ module.exports = {
   notifyQuotationApprovalRequested,
   notifyPurchaseOrderApprovalRequested,
   notifyExpenseSubmitted,
+  notifyGrnSubmitted,
   getOperationsManagerUserIds,
   notifyQuotationApproved,
   notifyPurchaseOrderApproved,

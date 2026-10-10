@@ -138,6 +138,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      certificate_required: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'Whether the sales side has flagged this deal as needing a certificate from Certificate Management',
+      },
+      required_certificate_types: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: 'Array of CertificateRequestType.type values the deal needs, set when certificate_required is true',
+      },
       inspection_required: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,

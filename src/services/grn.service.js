@@ -3,6 +3,7 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const notificationService = require('./notification.service');
 const { Op } = db.Sequelize;
 
 const DEFAULT_WAREHOUSE_ID = 1;
@@ -246,17 +247,20 @@ const createGrn = async (tenantId, userId, body) => {
   }
 };
 
-const updateGrn = async (tenantId, id, body) => {
+const updateGrn = async (tenantId, id, body, actorUser) => {
   const grn = await db.Grn.findOne({ where: { id, tenant_id: tenantId } });
   if (!grn) throw ApiError.notFound('GRN not found');
   if (grn.status === 'approved') throw ApiError.badRequest('Approved GRN cannot be edited');
+
+  const prevStatus = grn.status;
+  const nextStatus = body.status && GRN_STATUSES.includes(body.status) ? body.status : grn.status;
 
   const t = await db.sequelize.transaction();
   try {
     await grn.update(
       {
         notes: body.notes !== undefined ? body.notes : grn.notes,
-        status: body.status && GRN_STATUSES.includes(body.status) ? body.status : grn.status,
+        status: nextStatus,
       },
       { transaction: t }
     );
@@ -269,11 +273,19 @@ const updateGrn = async (tenantId, id, body) => {
     }
 
     await t.commit();
-    return getById(tenantId, id);
   } catch (e) {
     await t.rollback();
     throw e;
   }
+
+  const updated = await getById(tenantId, id);
+
+  // Sales should hear about it the moment Operations submits the GRN.
+  if (nextStatus === 'submitted' && prevStatus !== 'submitted' && updated.deal?.assigned_to) {
+    notificationService.notifyGrnSubmitted(tenantId, updated, updated.deal.assigned_to, actorUser).catch(() => {});
+  }
+
+  return updated;
 };
 
 const addItemImages = async (tenantId, grnId, itemId, images) => {

@@ -15,6 +15,20 @@ const taskInclude = {
   order: [['sort_order', 'ASC'], ['id', 'ASC']],
   include: [
     { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+    {
+      model: db.User,
+      as: 'assignees',
+      attributes: ['id', 'first_name', 'last_name', 'email'],
+      required: false,
+      through: { attributes: [] },
+    },
+    {
+      model: db.WorkOrderTaskFile,
+      as: 'files',
+      required: false,
+      separate: true,
+      order: [['id', 'DESC']],
+    },
     { model: db.WorkType, as: 'workType', attributes: ['id', 'name'], required: false },
     {
       model: db.WorkOrderTaskExpense,
@@ -53,6 +67,34 @@ const buildExpenseLines = (task) => {
   return { expenseLines: lines, expenseTotal: sum };
 };
 
+/**
+ * Resolve the assignee list for a task. Accepts the new `assigneeIds` array
+ * (preferred) or the legacy single `assignedTo`, validates each id is an
+ * active tenant user, and de-duplicates. Returns an array (possibly empty).
+ */
+const resolveAssigneeIds = async (tenantId, task, transaction) => {
+  let ids;
+  if (Array.isArray(task.assigneeIds)) {
+    ids = task.assigneeIds;
+  } else if (task.assignedTo != null && task.assignedTo !== '') {
+    ids = [task.assignedTo];
+  } else {
+    ids = [];
+  }
+  ids = [...new Set(ids.map((v) => parseInt(v, 10)).filter((v) => Number.isFinite(v)))];
+  if (ids.length === 0) return [];
+
+  const users = await db.User.findAll({
+    where: { id: { [Op.in]: ids }, tenant_id: tenantId, status: 'active' },
+    attributes: ['id'],
+    transaction,
+  });
+  const validIds = new Set(users.map((u) => u.id));
+  const invalid = ids.filter((id) => !validIds.has(id));
+  if (invalid.length) throw ApiError.badRequest('One or more assigned users were not found');
+  return ids;
+};
+
 const resolveTaskPayload = async (tenantId, task, transaction) => {
   let typeOfWork = task.typeOfWork != null && task.typeOfWork !== '' ? String(task.typeOfWork).trim() : null;
   let workTypeId = task.workTypeId != null ? parseInt(task.workTypeId, 10) : null;
@@ -64,18 +106,7 @@ const resolveTaskPayload = async (tenantId, task, transaction) => {
     workTypeId = null;
   }
 
-  let assignedTo = task.assignedTo != null && task.assignedTo !== '' ? parseInt(task.assignedTo, 10) : null;
-  if (assignedTo != null) {
-    if (!Number.isFinite(assignedTo)) {
-      assignedTo = null;
-    } else {
-      const user = await db.User.findOne({
-        where: { id: assignedTo, tenant_id: tenantId, status: 'active' },
-        transaction,
-      });
-      if (!user) throw ApiError.badRequest('Assigned user not found');
-    }
-  }
+  const assigneeIds = await resolveAssigneeIds(tenantId, task, transaction);
 
   const status = task.status || 'not_started';
   const { expenseLines, expenseTotal } = buildExpenseLines(task);
@@ -87,12 +118,26 @@ const resolveTaskPayload = async (tenantId, task, transaction) => {
       estimated_duration: task.estimatedDuration || null,
       start_date: task.startDate || null,
       end_date: task.endDate || null,
-      assigned_to: assignedTo,
+      // Legacy single-assignee column mirrors the first assignee, for back-compat reads
+      // (e.g. the driver app's `assigned_to: userId` lookup).
+      assigned_to: assigneeIds[0] ?? null,
       status,
       notes: task.notes || null,
     },
     expenseLines,
+    assigneeIds,
   };
+};
+
+/** Replace a task's assignee rows to match `assigneeIds` exactly. */
+const syncTaskAssignees = async (taskId, assigneeIds, transaction) => {
+  await db.WorkOrderTaskAssignee.destroy({ where: { task_id: taskId }, transaction });
+  if (assigneeIds.length > 0) {
+    await db.WorkOrderTaskAssignee.bulkCreate(
+      assigneeIds.map((user_id) => ({ task_id: taskId, user_id })),
+      { transaction }
+    );
+  }
 };
 
 const syncTaskExpenses = async (taskId, expenseLines, transaction) => {
@@ -176,16 +221,18 @@ const safeDeleteTask = async (taskId, transaction) => {
 const updateTaskInPlace = async (tenantId, taskId, task, transaction, sortOrder = null) => {
   const row = await db.WorkOrderTask.findOne({ where: { id: taskId }, transaction });
   if (!row) throw ApiError.badRequest('Task not found');
-  const { payload, expenseLines } = await resolveTaskPayload(tenantId, task, transaction);
+  const { payload, expenseLines, assigneeIds } = await resolveTaskPayload(tenantId, task, transaction);
   const updatePayload = sortOrder !== null ? { ...payload, sort_order: sortOrder } : payload;
   await row.update(updatePayload, { transaction });
   await syncTaskExpenses(taskId, expenseLines, transaction);
+  await syncTaskAssignees(taskId, assigneeIds, transaction);
   return row;
 };
 
 const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction, sortOrder = 0) => {
-  const { payload, expenseLines } = await resolveTaskPayload(tenantId, task, transaction);
+  const { payload, expenseLines, assigneeIds } = await resolveTaskPayload(tenantId, task, transaction);
   const created = await db.WorkOrderTask.create({ ...payload, work_order_id: workOrderId, sort_order: sortOrder }, { transaction });
+  await syncTaskAssignees(created.id, assigneeIds, transaction);
   if (expenseLines.length > 0) {
     await db.WorkOrderTaskExpense.bulkCreate(
       expenseLines.map((line) => ({
@@ -255,7 +302,7 @@ const getById = async (tenantId, workOrderId) => {
         as: 'deal',
         attributes: [
           'id', 'deal_number', 'title', 'status', 'deal_type', 'deal_date', 'description', 'notes',
-          'container_type', 'location_type', 'wds_required', 'inspection_required',
+          'container_type', 'location_type', 'wds_required', 'certificate_required', 'required_certificate_types', 'inspection_required',
           'custom_inspection', 'trakhees_inspection', 'dubai_municipality_inspection',
           'pickup_location', 'pickup_contact_name', 'pickup_contact_number',
           'downstream_partner_supplier_id', 'supplier_id', 'company_id', 'contact_id',
@@ -503,20 +550,27 @@ const updateTaskNotes = async (tenantId, workOrderId, taskId, notes) => {
   return task;
 };
 
-const updateTaskAssignment = async (tenantId, workOrderId, taskId, assignedTo) => {
+/** `assigneeIds` (array) is preferred; a bare `assignedTo` id is accepted for back-compat. */
+const updateTaskAssignment = async (tenantId, workOrderId, taskId, assignedToOrIds) => {
   const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
   if (!workOrder) throw ApiError.notFound('Work order not found');
   const task = await db.WorkOrderTask.findOne({ where: { id: taskId, work_order_id: workOrderId } });
   if (!task) throw ApiError.notFound('Task not found');
-  const userId = assignedTo != null ? parseInt(assignedTo, 10) : null;
-  if (userId) {
-    const user = await db.User.findOne({ where: { id: userId, tenant_id: tenantId, status: 'active' } });
-    if (!user) throw ApiError.badRequest('Assigned user not found');
-  }
-  await task.update({ assigned_to: userId });
+
+  const taskLike = Array.isArray(assignedToOrIds) ? { assigneeIds: assignedToOrIds } : { assignedTo: assignedToOrIds };
+  const assigneeIds = await resolveAssigneeIds(tenantId, taskLike);
+
+  await db.sequelize.transaction(async (t) => {
+    await task.update({ assigned_to: assigneeIds[0] ?? null }, { transaction: t });
+    await syncTaskAssignees(taskId, assigneeIds, t);
+  });
+
   const updated = await db.WorkOrderTask.findOne({
     where: { id: taskId },
-    include: [{ model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false }],
+    include: [
+      { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+      { model: db.User, as: 'assignees', attributes: ['id', 'first_name', 'last_name', 'email'], required: false, through: { attributes: [] } },
+    ],
   });
   return updated;
 };
@@ -528,4 +582,71 @@ const remove = async (tenantId, workOrderId) => {
   await workOrder.destroy();
 };
 
-module.exports = { getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove };
+/** Shared lookup used by the task evidence (file) endpoints below. */
+const findTaskInWorkOrder = async (tenantId, workOrderId, taskId) => {
+  const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
+  if (!workOrder) throw ApiError.notFound('Work order not found');
+  const task = await db.WorkOrderTask.findOne({ where: { id: taskId, work_order_id: workOrderId } });
+  if (!task) throw ApiError.notFound('Task not found');
+  return { workOrder, task };
+};
+
+/**
+ * Add evidence files to a task — typically submitted at task completion, but
+ * allowed at any time (status is not checked) so Operations can add evidence
+ * before formally marking the task complete.
+ */
+const addTaskFiles = async (tenantId, workOrderId, taskId, files) => {
+  await findTaskInWorkOrder(tenantId, workOrderId, taskId);
+  if (!files || files.length === 0) return [];
+  const rows = await db.WorkOrderTaskFile.bulkCreate(
+    files.map((f) => ({ task_id: taskId, image_url: f.imageUrl, original_name: f.originalName }))
+  );
+  return rows;
+};
+
+const listTaskFiles = async (tenantId, workOrderId, taskId) => {
+  await findTaskInWorkOrder(tenantId, workOrderId, taskId);
+  return db.WorkOrderTaskFile.findAll({ where: { task_id: taskId }, order: [['id', 'DESC']] });
+};
+
+const deleteTaskFile = async (tenantId, workOrderId, taskId, fileId) => {
+  await findTaskInWorkOrder(tenantId, workOrderId, taskId);
+  const file = await db.WorkOrderTaskFile.findOne({ where: { id: fileId, task_id: taskId } });
+  if (!file) throw ApiError.notFound('Evidence file not found');
+  await file.destroy();
+};
+
+/**
+ * Copy a task's evidence file(s) into a Certificate Management request as
+ * `destruction_photo` attachments — the bridge between work-order evidence
+ * and the Certificate Management module. The certificate request must
+ * already exist (created from the deal, as usual) and belong to the same
+ * tenant; it does not need to belong to the same deal as the work order,
+ * since Operations may be consolidating evidence across related requests,
+ * but the common case is the work order's own deal.
+ */
+const linkTaskFileToCertificate = async (tenantId, workOrderId, taskId, fileId, certificateRequestId) => {
+  await findTaskInWorkOrder(tenantId, workOrderId, taskId);
+  const file = await db.WorkOrderTaskFile.findOne({ where: { id: fileId, task_id: taskId } });
+  if (!file) throw ApiError.notFound('Evidence file not found');
+
+  const request = await db.CertificateRequest.findOne({ where: { id: certificateRequestId, tenant_id: tenantId } });
+  if (!request) throw ApiError.notFound('Certificate request not found');
+
+  const relativePath = String(file.image_url || '').replace(/^\/uploads\//, '');
+  const attachment = await db.CertificateRequestAttachment.create({
+    certificate_request_id: request.id,
+    file_path: relativePath,
+    file_name: file.original_name || null,
+    file_type: 'destruction_photo',
+    photo_stage: 'destruction_in_progress',
+    source_task_file_id: file.id,
+  });
+  return attachment;
+};
+
+module.exports = {
+  getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove,
+  addTaskFiles, listTaskFiles, deleteTaskFile, linkTaskFileToCertificate,
+};

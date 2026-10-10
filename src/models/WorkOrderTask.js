@@ -89,10 +89,19 @@ module.exports = (sequelize, DataTypes) => {
 
   WorkOrderTask.associate = models => {
     WorkOrderTask.belongsTo(models.WorkOrder, { foreignKey: 'work_order_id', as: 'workOrder' });
+    // Legacy single assignee (first of `assigneeRows`, kept for back-compat reads e.g. the driver app).
     WorkOrderTask.belongsTo(models.User, { foreignKey: 'assigned_to', as: 'assignedUser' });
     WorkOrderTask.belongsTo(models.WorkType, { foreignKey: 'work_type_id', as: 'workType' });
     WorkOrderTask.hasMany(models.WorkOrderTaskExpense, { foreignKey: 'work_order_task_id', as: 'expenses' });
     WorkOrderTask.hasMany(models.WorkOrderTaskFile, { foreignKey: 'task_id', as: 'files' });
+    // Multiple assignees.
+    WorkOrderTask.hasMany(models.WorkOrderTaskAssignee, { foreignKey: 'task_id', as: 'assigneeRows' });
+    WorkOrderTask.belongsToMany(models.User, {
+      through: models.WorkOrderTaskAssignee,
+      foreignKey: 'task_id',
+      otherKey: 'user_id',
+      as: 'assignees',
+    });
   };
 
   return WorkOrderTask;

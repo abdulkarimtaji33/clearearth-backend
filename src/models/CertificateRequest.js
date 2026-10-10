@@ -36,6 +36,7 @@ module.exports = (sequelize, DataTypes) => {
       verified_at: { type: DataTypes.DATE, allowNull: true },
       verification_notes: { type: DataTypes.TEXT, allowNull: true },
       material_type_id: { type: DataTypes.INTEGER, allowNull: true },
+      uom: { type: DataTypes.STRING(20), allowNull: true, comment: 'Unit of measure for total_weight_quantity, e.g. kg, tons, pcs' },
     },
     {
       tableName: 'certificate_requests',
