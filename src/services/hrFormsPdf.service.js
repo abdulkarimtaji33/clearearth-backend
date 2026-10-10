@@ -153,6 +153,9 @@ async function generateAssetFormPdf(employeeId, tenantId) {
     where: { tenant_id: tenantId, employee_id: employeeId, status: 'assigned' },
     order: [['assigned_date', 'DESC'], ['id', 'DESC']],
   });
+  if (assets.length === 0) {
+    throw ApiError.badRequest('No assets assigned — cannot generate an IT Asset Form');
+  }
 
   let rowsHtml = '';
   assets.forEach((a) => {

@@ -46,10 +46,11 @@ function assertPhotoRequirement(types, attachments) {
 }
 
 const listRequests = async (tenantId, filters = {}) => {
-  const { offset, limit, search, status, requestedBy } = filters;
+  const { offset, limit, search, status, requestedBy, dealId } = filters;
   const where = { tenant_id: tenantId };
   if (status) where.status = status;
   if (requestedBy) where.requested_by = requestedBy;
+  if (dealId) where.deal_id = dealId;
   if (search) {
     const s = `%${String(search).trim()}%`;
     where[Op.or] = [
