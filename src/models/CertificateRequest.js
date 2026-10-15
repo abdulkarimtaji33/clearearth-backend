@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       contact_no: { type: DataTypes.STRING(30), allowNull: false },
       contact_email: { type: DataTypes.STRING(150), allowNull: false },
       collection_date: { type: DataTypes.DATEONLY, allowNull: false },
+      collection_date_to: { type: DataTypes.DATEONLY, allowNull: true, comment: 'End of collection date range; null when collection was a single day' },
       grn_no: { type: DataTypes.STRING(50), allowNull: true, comment: 'Free-text fallback when no linked GRN' },
       material_waste_details: { type: DataTypes.TEXT, allowNull: false },
       total_weight_quantity: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },

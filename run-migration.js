@@ -3410,6 +3410,9 @@ async function runMigration() {
     console.log('Linking work_order_task_files to certificate_request_attachments (nullable source reference)...');
     try { await db.sequelize.query(`ALTER TABLE certificate_request_attachments ADD COLUMN source_task_file_id INT NULL`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  certificate_request_attachments.source_task_file_id:', e.message); }
 
+    console.log('Adding collection_date_to to certificate_requests...');
+    try { await db.sequelize.query(`ALTER TABLE certificate_requests ADD COLUMN collection_date_to DATE NULL AFTER collection_date`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  certificate_requests.collection_date_to:', e.message); }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

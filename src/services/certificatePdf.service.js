@@ -59,6 +59,14 @@ function formatDate(d) {
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/** Renders a single date, or a "from – to" range when the two dates differ. */
+function formatDateRange(from, to) {
+  const fromStr = formatDate(from);
+  const toStr = formatDate(to);
+  if (toStr && toStr !== fromStr) return `${fromStr} - ${toStr}`;
+  return fromStr;
+}
+
 function formatMonthYear(d) {
   if (!d) return '';
   const date = new Date(d);
@@ -167,7 +175,7 @@ async function generateGreenCertificate(certificate, request, tenant) {
     companyName: escapeHtml(request.company_name),
     companyAddress: escapeHtml(buildCompanyAddress(request)),
     monthYear: formatMonthYear(request.collection_date),
-    collectionDate: formatDate(request.collection_date),
+    collectionDate: formatDateRange(request.collection_date, request.collection_date_to),
     certificationDate: formatDate(certificate.issued_date),
   });
   return htmlToPdf(html);
@@ -185,7 +193,7 @@ async function generateCertificateOfDestruction(certificate, request, tenant) {
     material: escapeHtml(request.material_waste_details),
     units: '',
     totalTons: formatNum(request.total_weight_quantity),
-    collectionDate: formatDate(request.collection_date),
+    collectionDate: formatDateRange(request.collection_date, request.collection_date_to),
     certificationDate: formatDate(certificate.issued_date),
     itemRowsHtml: buildItemRowsHtml(items, { qtyUnit: request.uom || 'Tons' }),
   });
@@ -205,7 +213,7 @@ async function generateCertificateOfDataDestruction(certificate, request, tenant
     material: escapeHtml(request.material_waste_details),
     units: '',
     totalUnits: formatNum(totalUnits || request.total_weight_quantity),
-    collectionDate: formatDate(request.collection_date),
+    collectionDate: formatDateRange(request.collection_date, request.collection_date_to),
     certificationDate: formatDate(certificate.issued_date),
     itemRowsHtml: buildItemRowsHtml(items, { qtyUnit: 'Nos' }),
   });
@@ -320,7 +328,7 @@ async function generateDisposalReportPhotos(certificate, request, tenant) {
     itemDescription: escapeHtml(request.material_waste_details),
     clientContact: escapeHtml(`${request.contact_person} | ${request.contact_no} | ${request.contact_email}`),
     sourceLine: escapeHtml(sourceLine || '-'),
-    collectionDate: formatDate(request.collection_date),
+    collectionDate: formatDateRange(request.collection_date, request.collection_date_to),
     destructionDate: formatDate(certificate.issued_date),
     totalQuantity: `${formatNum(request.total_weight_quantity)} ${request.uom || 'Tons'}`,
     photoPagesHtml: buildPhotoPagesHtml(photos),

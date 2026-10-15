@@ -80,7 +80,7 @@ const getRequestById = async (tenantId, id) => {
 
 const createRequest = async (tenantId, userId, body) => {
   const {
-    grnId, dealId, companyName, contactPerson, contactNo, contactEmail, collectionDate,
+    grnId, dealId, companyName, contactPerson, contactNo, contactEmail, collectionDate, collectionDateTo,
     grnNo, materialWasteDetails, totalWeightQuantity, uom, invoiceNo, additionalNotes,
     certificateTypes = [], destructionReportVariant, wdsRefNo, docRef, reqNo, boeNo, barcode,
     materialTypeId, attachments = [],
@@ -88,6 +88,9 @@ const createRequest = async (tenantId, userId, body) => {
 
   if (!companyName || !contactPerson || !contactNo || !contactEmail || !collectionDate || !materialWasteDetails) {
     throw ApiError.badRequest('Missing required fields for certificate request');
+  }
+  if (collectionDateTo && collectionDateTo < collectionDate) {
+    throw ApiError.badRequest('Collection date "to" cannot be before the "from" date');
   }
   if (!Array.isArray(certificateTypes) || !certificateTypes.length) {
     throw ApiError.badRequest('Select at least one certificate type');
@@ -116,6 +119,7 @@ const createRequest = async (tenantId, userId, body) => {
         contact_no: contactNo,
         contact_email: contactEmail,
         collection_date: collectionDate,
+        collection_date_to: collectionDateTo || null,
         grn_no: grnNo || null,
         material_waste_details: materialWasteDetails,
         total_weight_quantity: parseFloat(totalWeightQuantity) || 0,
@@ -199,7 +203,7 @@ const verifyRequest = async (tenantId, requestId, userId, body = {}) => {
   // HR may correct/confirm intake values during verification.
   const editableFields = {
     companyName: 'company_name', contactPerson: 'contact_person', contactNo: 'contact_no',
-    contactEmail: 'contact_email', collectionDate: 'collection_date', grnNo: 'grn_no',
+    contactEmail: 'contact_email', collectionDate: 'collection_date', collectionDateTo: 'collection_date_to', grnNo: 'grn_no',
     materialWasteDetails: 'material_waste_details', totalWeightQuantity: 'total_weight_quantity',
     invoiceNo: 'invoice_no', additionalNotes: 'additional_notes', materialTypeId: 'material_type_id',
   };

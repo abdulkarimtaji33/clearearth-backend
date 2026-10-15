@@ -20,6 +20,7 @@ module.exports = {
       contact_no: { type: Sequelize.STRING(30), allowNull: false },
       contact_email: { type: Sequelize.STRING(150), allowNull: false },
       collection_date: { type: Sequelize.DATEONLY, allowNull: false },
+      collection_date_to: { type: Sequelize.DATEONLY, allowNull: true },
       grn_no: { type: Sequelize.STRING(50), allowNull: true },
       material_waste_details: { type: Sequelize.TEXT, allowNull: false },
       total_weight_quantity: { type: Sequelize.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
