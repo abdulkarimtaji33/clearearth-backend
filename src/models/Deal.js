@@ -147,6 +147,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.JSON,
         allowNull: true,
         comment: 'Array of CertificateRequestType.type values the deal needs, set when certificate_required is true',
+        // mysql2 returns JSON columns pre-parsed, and Sequelize's own JSON.parse then
+        // re-stringifies that value into a plain string — unwrap it defensively here.
+        get() {
+          const raw = this.getDataValue('required_certificate_types');
+          if (Array.isArray(raw) || raw == null) return raw;
+          if (typeof raw === 'string') {
+            try { return JSON.parse(raw); } catch (e) { return raw; }
+          }
+          return raw;
+        },
       },
       inspection_required: {
         type: DataTypes.BOOLEAN,
