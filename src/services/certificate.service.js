@@ -116,6 +116,52 @@ const getAutofillForDeal = async (tenantId, dealId) => {
   };
 };
 
+/**
+ * Auto-creates a certificate request for a deal once there's enough to work
+ * with — called after a GRN tied to the deal is approved. Idempotent (skips
+ * if a request already exists for the deal) and silent on missing data
+ * (e.g. no confirmed pickup date yet) rather than failing the GRN approval
+ * that triggered it; the request can still be created manually later once
+ * the missing piece is filled in.
+ */
+const autoCreateFromDeal = async (tenantId, userId, dealId) => {
+  if (!dealId) return null;
+
+  const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
+  if (!deal || !deal.certificate_required) return null;
+
+  const existing = await db.CertificateRequest.findOne({ where: { tenant_id: tenantId, deal_id: dealId } });
+  if (existing) return null;
+
+  const autofill = await getAutofillForDeal(tenantId, dealId);
+  if (!autofill.certificateTypes.length) return null;
+  if (!autofill.companyName || !autofill.contactPerson || !autofill.contactNo || !autofill.contactEmail
+    || !autofill.collectionDate || !autofill.materialWasteDetails) {
+    return null;
+  }
+
+  try {
+    return await createRequest(tenantId, userId, {
+      dealId,
+      companyName: autofill.companyName,
+      contactPerson: autofill.contactPerson,
+      contactNo: autofill.contactNo,
+      contactEmail: autofill.contactEmail,
+      collectionDate: autofill.collectionDate,
+      grnId: autofill.grnId || undefined,
+      grnNo: autofill.grnNo || undefined,
+      materialWasteDetails: autofill.materialWasteDetails,
+      totalWeightQuantity: autofill.totalWeightQuantity,
+      uom: autofill.uom || undefined,
+      invoiceNo: autofill.invoiceNo || undefined,
+      certificateTypes: autofill.certificateTypes,
+    });
+  } catch (e) {
+    console.warn('[Certificate] auto-create from deal skipped:', e.message);
+    return null;
+  }
+};
+
 const listRequests = async (tenantId, filters = {}) => {
   const { offset, limit, search, status, requestedBy, dealId } = filters;
   const where = { tenant_id: tenantId };
@@ -498,6 +544,7 @@ const upsertCarbonFactor = async (tenantId, body) => {
 module.exports = {
   CERTIFICATE_TYPES,
   getAutofillForDeal,
+  autoCreateFromDeal,
   listRequests,
   getRequestById,
   createRequest,

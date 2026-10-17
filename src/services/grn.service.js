@@ -401,6 +401,16 @@ const approveGrn = async (tenantId, id, userId) => {
     );
 
     await t.commit();
+
+    if (grn.deal_id) {
+      try {
+        const certificateService = require('./certificate.service');
+        await certificateService.autoCreateFromDeal(tenantId, userId, grn.deal_id);
+      } catch (e) {
+        console.warn('[Certificate] auto-create on GRN approval skipped:', e.message);
+      }
+    }
+
     return getById(tenantId, id);
   } catch (e) {
     await t.rollback();
