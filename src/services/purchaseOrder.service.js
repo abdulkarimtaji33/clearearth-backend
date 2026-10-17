@@ -167,7 +167,7 @@ const getById = async (tenantId, poId, scope = {}) => {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId },
     include: [
-      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number', 'assigned_to', 'certificate_required', 'required_certificate_types'] },
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number', 'assigned_to', 'certificate_required', 'required_certificate_types', 'wds_required'] },
       { model: db.Company, as: 'company', required: false },
       { model: db.Supplier, as: 'supplier', required: false },
       {
