@@ -167,7 +167,7 @@ const getById = async (tenantId, poId, scope = {}) => {
   const po = await db.PurchaseOrder.findOne({
     where: { id: poId, tenant_id: tenantId },
     include: [
-      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number', 'assigned_to'] },
+      { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number', 'assigned_to', 'certificate_required', 'required_certificate_types'] },
       { model: db.Company, as: 'company', required: false },
       { model: db.Supplier, as: 'supplier', required: false },
       {
@@ -650,6 +650,9 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
   await notificationService.notifyPurchaseOrderApproved(tenantId, po, approvedByUser);
+  if (po.requested_pickup_date) {
+    await notificationService.notifyPickupDateScheduled(tenantId, 'purchase_order', po, approvedByUser);
+  }
 
   if (prevStatus !== PO_STATUS.APPROVED) {
     try {

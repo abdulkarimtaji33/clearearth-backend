@@ -218,6 +218,9 @@ const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedP
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
   await notificationService.notifyQuotationApproved(tenantId, quotation, approvedByUser);
+  if (quotation.requested_pickup_date) {
+    await notificationService.notifyPickupDateScheduled(tenantId, 'quotation', quotation, approvedByUser);
+  }
 
   return await getById(tenantId, quotationId);
 };

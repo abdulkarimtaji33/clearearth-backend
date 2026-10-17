@@ -410,6 +410,25 @@ const notifyPurchaseOrderApproved = async (tenantId, po, approvedByUser) => {
   });
 };
 
+/** Sales schedules/requests a pickup date (first time, at approval). Distinct from the "approved" notification so the date doesn't get buried. */
+const notifyPickupDateScheduled = async (tenantId, entityType, entity, scheduledByUser) => {
+  if (!entity.requested_pickup_date) return;
+  const recipientIds = await getOperationsManagerUserIds(tenantId);
+  if (recipientIds.length === 0) return;
+  const userName = scheduledByUser
+    ? [scheduledByUser.first_name, scheduledByUser.last_name].filter(Boolean).join(' ')
+    : 'Sales';
+  const label = entityType === 'quotation' ? `service quotation #${entity.id}` : `purchase order #${entity.id}`;
+  const dealTitle = entity.deal?.title || entity.deal?.deal_number || null;
+  await createForUsers(tenantId, recipientIds, {
+    type: 'pickup_date_scheduled',
+    title: 'Pickup date scheduled',
+    message: `${userName} scheduled a pickup for ${label}${dealTitle ? ` (${dealTitle})` : ''} on ${entity.requested_pickup_date}.`,
+    entityType,
+    entityId: entity.id,
+  });
+};
+
 const notifyPickupDateConfirmed = async (tenantId, entityType, entity, preparedByUserId, confirmedByUser) => {
   if (!preparedByUserId) return;
   const userName = confirmedByUser
@@ -616,6 +635,7 @@ module.exports = {
   getOperationsManagerUserIds,
   notifyQuotationApproved,
   notifyPurchaseOrderApproved,
+  notifyPickupDateScheduled,
   notifyPickupDateConfirmed,
   notifyPickupRescheduleRequested,
   notifyPickupDateRescheduled,
