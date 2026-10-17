@@ -108,10 +108,11 @@ async function incrementInventory(tenantId, materialTypeId, quantity, unitOfMeas
 }
 
 const listGrns = async (tenantId, filters = {}) => {
-  const { offset, limit, search, status, workOrderId } = filters;
+  const { offset, limit, search, status, workOrderId, dealId } = filters;
   const where = { tenant_id: tenantId };
   if (status && GRN_STATUSES.includes(status)) where.status = status;
   if (workOrderId) where.work_order_id = workOrderId;
+  if (dealId) where.deal_id = dealId;
   if (search) {
     const s = `%${String(search).trim()}%`;
     where[Op.or] = [
