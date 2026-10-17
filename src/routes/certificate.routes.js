@@ -9,6 +9,7 @@ router.use(authenticate);
 router.get('/certificate-requests', authorize('certificates.read'), certificateController.listRequests);
 router.get('/certificate-requests/autofill/:dealId', authorize('certificates.create'), certificateController.getAutofillForDeal);
 router.get('/certificate-requests/:id', authorize('certificates.read'), certificateController.getRequestById);
+router.get('/certificate-requests/:id/task-evidence', authorize('certificates.read'), certificateController.getTaskEvidence);
 router.post('/certificate-requests', authorize('certificates.create'), certificateController.createRequest);
 router.post('/certificate-requests/:id/attachments', authorize('certificates.create'), certificateController.uploadAttachment);
 router.post('/certificate-requests/:id/verify', authorize('certificates.verify'), certificateController.verifyRequest);

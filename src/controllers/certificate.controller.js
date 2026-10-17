@@ -28,6 +28,11 @@ const getAutofillForDeal = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, row);
 });
 
+const getTaskEvidence = asyncHandler(async (req, res) => {
+  const rows = await certificateService.getTaskEvidenceForRequest(req.tenant.id, req.params.id);
+  return ApiResponse.success(res, rows);
+});
+
 const createRequest = asyncHandler(async (req, res) => {
   const row = await certificateService.createRequest(req.tenant.id, req.user.id, req.body);
   return ApiResponse.created(res, row, 'Certificate request created');
@@ -99,6 +104,7 @@ module.exports = {
   listRequests,
   getRequestById,
   getAutofillForDeal,
+  getTaskEvidence,
   createRequest,
   uploadAttachment,
   verifyRequest,

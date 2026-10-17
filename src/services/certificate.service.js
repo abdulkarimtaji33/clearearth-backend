@@ -162,6 +162,50 @@ const autoCreateFromDeal = async (tenantId, userId, dealId) => {
   }
 };
 
+/**
+ * Work-order task evidence photos for a certificate request's deal, scoped to
+ * `certificates.read` so HR/verifiers can see them without needing the
+ * broader operations/deals read permission that the work-orders list
+ * endpoint itself requires.
+ */
+const getTaskEvidenceForRequest = async (tenantId, requestId) => {
+  const request = await db.CertificateRequest.findOne({ where: { id: requestId, tenant_id: tenantId } });
+  if (!request) throw ApiError.notFound('Certificate request not found');
+  if (!request.deal_id) return [];
+
+  const workOrders = await db.WorkOrder.findAll({
+    where: { deal_id: request.deal_id, tenant_id: tenantId },
+    include: [
+      {
+        model: db.WorkOrderTask,
+        as: 'tasks',
+        separate: true,
+        include: [
+          { model: db.WorkType, as: 'workType', attributes: ['id', 'name'], required: false },
+          { model: db.WorkOrderTaskFile, as: 'files', required: false, separate: true, order: [['id', 'DESC']] },
+        ],
+      },
+    ],
+  });
+
+  const evidence = [];
+  workOrders.forEach((wo) => {
+    (wo.tasks || []).forEach((task) => {
+      (task.files || []).forEach((f) => {
+        evidence.push({
+          id: f.id,
+          workOrderId: wo.id,
+          taskId: task.id,
+          taskName: task.workType?.name || task.type_of_work || `Task #${task.id}`,
+          imageUrl: f.image_url,
+          originalName: f.original_name,
+        });
+      });
+    });
+  });
+  return evidence;
+};
+
 const listRequests = async (tenantId, filters = {}) => {
   const { offset, limit, search, status, requestedBy, dealId } = filters;
   const where = { tenant_id: tenantId };
@@ -545,6 +589,7 @@ module.exports = {
   CERTIFICATE_TYPES,
   getAutofillForDeal,
   autoCreateFromDeal,
+  getTaskEvidenceForRequest,
   listRequests,
   getRequestById,
   createRequest,
