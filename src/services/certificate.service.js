@@ -45,6 +45,77 @@ function assertPhotoRequirement(types, attachments) {
   }
 }
 
+/**
+ * Assembles everything a certificate request needs from an existing deal, so the
+ * "New Certificate Request" form can be fully auto-filled with no manual typing.
+ * Pulls: company/contact from the deal, material + quantity + collection date from
+ * its most recent GRN, pickup date from its quotation/purchase order, invoice number
+ * from its tax invoice chain, and the certificate type(s) already flagged on the deal.
+ */
+const getAutofillForDeal = async (tenantId, dealId) => {
+  const deal = await db.Deal.findOne({
+    where: { id: dealId, tenant_id: tenantId },
+    include: [
+      { model: db.Company, as: 'company', required: false },
+      { model: db.Contact, as: 'contact', required: false },
+    ],
+  });
+  if (!deal) throw ApiError.notFound('Deal not found');
+
+  const grn = await db.Grn.findOne({
+    where: { deal_id: dealId, tenant_id: tenantId },
+    include: [{ model: db.GrnItem, as: 'items', required: false }],
+    order: [['id', 'DESC']],
+  });
+
+  const quotation = await db.Quotation.findOne({
+    where: { deal_id: dealId, tenant_id: tenantId },
+    order: [['id', 'DESC']],
+  });
+  const purchaseOrder = await db.PurchaseOrder.findOne({
+    where: { deal_id: dealId, tenant_id: tenantId },
+    order: [['id', 'DESC']],
+  });
+  const pickupSource = quotation || purchaseOrder;
+  const collectionDate = pickupSource?.confirmed_pickup_date || pickupSource?.requested_pickup_date || null;
+
+  let invoiceNo = null;
+  const proforma = await db.ProformaInvoice.findOne({
+    where: { deal_id: dealId, tenant_id: tenantId },
+    include: [{ model: db.TaxInvoice, as: 'taxInvoice', required: false }],
+    order: [['id', 'DESC']],
+  });
+  if (proforma?.taxInvoice?.tax_invoice_number) invoiceNo = proforma.taxInvoice.tax_invoice_number;
+
+  const grnItems = grn?.items || [];
+  const materialWasteDetails = grnItems.length
+    ? grnItems.map((i) => i.item_name).filter(Boolean).join(', ')
+    : (deal.description || deal.notes || deal.title || '');
+  const totalWeightQuantity = grnItems.length
+    ? grnItems.reduce((sum, i) => sum + (parseFloat(i.quantity) || 0), 0)
+    : 0;
+  const uom = grnItems[0]?.unit_of_measure || null;
+
+  const contactName = [deal.contact?.first_name, deal.contact?.last_name].filter(Boolean).join(' ');
+
+  return {
+    dealId: deal.id,
+    companyName: deal.company?.company_name || deal.pickup_contact_name || '',
+    contactPerson: contactName || deal.pickup_contact_name || '',
+    contactNo: deal.contact?.phone || deal.contact?.mobile || deal.pickup_contact_number || '',
+    contactEmail: deal.contact?.email || deal.company?.email || '',
+    collectionDate,
+    grnId: grn?.id || null,
+    grnNo: grn?.grn_number || null,
+    materialWasteDetails,
+    totalWeightQuantity,
+    uom,
+    invoiceNo,
+    certificateRequired: Boolean(deal.certificate_required),
+    certificateTypes: Array.isArray(deal.required_certificate_types) ? deal.required_certificate_types : [],
+  };
+};
+
 const listRequests = async (tenantId, filters = {}) => {
   const { offset, limit, search, status, requestedBy, dealId } = filters;
   const where = { tenant_id: tenantId };
@@ -426,6 +497,7 @@ const upsertCarbonFactor = async (tenantId, body) => {
 
 module.exports = {
   CERTIFICATE_TYPES,
+  getAutofillForDeal,
   listRequests,
   getRequestById,
   createRequest,

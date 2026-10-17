@@ -7,6 +7,7 @@ router.use(authenticate);
 
 // Certificate requests
 router.get('/certificate-requests', authorize('certificates.read'), certificateController.listRequests);
+router.get('/certificate-requests/autofill/:dealId', authorize('certificates.create'), certificateController.getAutofillForDeal);
 router.get('/certificate-requests/:id', authorize('certificates.read'), certificateController.getRequestById);
 router.post('/certificate-requests', authorize('certificates.create'), certificateController.createRequest);
 router.post('/certificate-requests/:id/attachments', authorize('certificates.create'), certificateController.uploadAttachment);

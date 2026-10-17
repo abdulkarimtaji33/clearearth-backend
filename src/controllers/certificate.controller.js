@@ -23,6 +23,11 @@ const getRequestById = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, row);
 });
 
+const getAutofillForDeal = asyncHandler(async (req, res) => {
+  const row = await certificateService.getAutofillForDeal(req.tenant.id, req.params.dealId);
+  return ApiResponse.success(res, row);
+});
+
 const createRequest = asyncHandler(async (req, res) => {
   const row = await certificateService.createRequest(req.tenant.id, req.user.id, req.body);
   return ApiResponse.created(res, row, 'Certificate request created');
@@ -93,6 +98,7 @@ const upsertCarbonFactor = asyncHandler(async (req, res) => {
 module.exports = {
   listRequests,
   getRequestById,
+  getAutofillForDeal,
   createRequest,
   uploadAttachment,
   verifyRequest,
