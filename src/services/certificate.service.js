@@ -362,14 +362,35 @@ const verifyRequest = async (tenantId, requestId, userId, body = {}) => {
   };
 
   // HR may correct/confirm intake values during verification.
-  const editableFields = {
-    companyName: 'company_name', contactPerson: 'contact_person', contactNo: 'contact_no',
-    contactEmail: 'contact_email', collectionDate: 'collection_date', collectionDateTo: 'collection_date_to', grnNo: 'grn_no',
-    materialWasteDetails: 'material_waste_details', totalWeightQuantity: 'total_weight_quantity',
-    invoiceNo: 'invoice_no', additionalNotes: 'additional_notes', materialTypeId: 'material_type_id',
-  };
-  for (const [inKey, dbKey] of Object.entries(editableFields)) {
+  for (const [inKey, dbKey] of Object.entries(EDITABLE_REQUEST_FIELDS)) {
     if (body[inKey] !== undefined) updates[dbKey] = body[inKey];
+  }
+
+  await request.update(updates);
+  return getRequestById(tenantId, requestId);
+};
+
+const EDITABLE_REQUEST_FIELDS = {
+  companyName: 'company_name', contactPerson: 'contact_person', contactNo: 'contact_no',
+  contactEmail: 'contact_email', collectionDate: 'collection_date', collectionDateTo: 'collection_date_to',
+  grnNo: 'grn_no', materialWasteDetails: 'material_waste_details', totalWeightQuantity: 'total_weight_quantity',
+  uom: 'uom', invoiceNo: 'invoice_no', additionalNotes: 'additional_notes', materialTypeId: 'material_type_id',
+};
+
+/** Correct any auto-filled or hand-entered request detail — available any time before the certificate is issued. */
+const updateRequest = async (tenantId, requestId, body = {}) => {
+  const request = await db.CertificateRequest.findOne({ where: { id: requestId, tenant_id: tenantId } });
+  if (!request) throw ApiError.notFound('Certificate request not found');
+  if (request.status === 'issued') {
+    throw ApiError.badRequest('Cannot edit a certificate request once its certificate has been issued');
+  }
+
+  const updates = {};
+  for (const [inKey, dbKey] of Object.entries(EDITABLE_REQUEST_FIELDS)) {
+    if (body[inKey] !== undefined) updates[dbKey] = body[inKey];
+  }
+  if (Object.keys(updates).length === 0) {
+    throw ApiError.badRequest('No editable fields provided');
   }
 
   await request.update(updates);
@@ -593,6 +614,7 @@ module.exports = {
   listRequests,
   getRequestById,
   createRequest,
+  updateRequest,
   addAttachments,
   verifyRequest,
   generateCertificate,

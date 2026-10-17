@@ -3413,6 +3413,18 @@ async function runMigration() {
     console.log('Adding collection_date_to to certificate_requests...');
     try { await db.sequelize.query(`ALTER TABLE certificate_requests ADD COLUMN collection_date_to DATE NULL AFTER collection_date`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  certificate_requests.collection_date_to:', e.message); }
 
+    console.log('Assigning grn.read + operations.read to hr_manager (view GRN/work order linked from certificate requests)...');
+    {
+      const [[grnReadPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'grn.read' LIMIT 1`);
+      const [[opsReadPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'operations.read' LIMIT 1`);
+      const [[roleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'hr_manager' AND tenant_id IS NULL LIMIT 1`);
+      if (roleRow?.id) {
+        if (grnReadPerm?.id) await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, grnReadPerm.id] });
+        if (opsReadPerm?.id) await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, opsReadPerm.id] });
+        console.log('  Assigned grn.read + operations.read to hr_manager');
+      }
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

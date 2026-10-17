@@ -38,6 +38,11 @@ const createRequest = asyncHandler(async (req, res) => {
   return ApiResponse.created(res, row, 'Certificate request created');
 });
 
+const updateRequest = asyncHandler(async (req, res) => {
+  const row = await certificateService.updateRequest(req.tenant.id, req.params.id, req.body);
+  return ApiResponse.success(res, row, 'Certificate request updated');
+});
+
 const uploadAttachment = asyncHandler(async (req, res) => {
   const row = await certificateService.addAttachments(req.tenant.id, req.params.id, req.body.attachments || []);
   return ApiResponse.success(res, row, 'Attachments added');
@@ -106,6 +111,7 @@ module.exports = {
   getAutofillForDeal,
   getTaskEvidence,
   createRequest,
+  updateRequest,
   uploadAttachment,
   verifyRequest,
   generate,

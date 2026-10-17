@@ -11,6 +11,7 @@ router.get('/certificate-requests/autofill/:dealId', authorize('certificates.cre
 router.get('/certificate-requests/:id', authorize('certificates.read'), certificateController.getRequestById);
 router.get('/certificate-requests/:id/task-evidence', authorize('certificates.read'), certificateController.getTaskEvidence);
 router.post('/certificate-requests', authorize('certificates.create'), certificateController.createRequest);
+router.put('/certificate-requests/:id', authorize('certificates.update'), certificateController.updateRequest);
 router.post('/certificate-requests/:id/attachments', authorize('certificates.create'), certificateController.uploadAttachment);
 router.post('/certificate-requests/:id/verify', authorize('certificates.verify'), certificateController.verifyRequest);
 router.post('/certificate-requests/:id/generate', authorize('certificates.verify'), certificateController.generate);
