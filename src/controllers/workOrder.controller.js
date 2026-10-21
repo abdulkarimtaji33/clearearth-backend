@@ -18,13 +18,17 @@ const sanitizeWorkOrderDeal = (workOrder, hideFinancials) => {
 };
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dealId, status } = req.query;
+  const { page, pageSize, search, dealId, status, overdue, assignedTo, unassigned, sort } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await workOrderService.getAll(req.tenant.id, {
     ...pagination,
     search,
     dealId,
     status,
+    overdue: overdue === 'true',
+    unassigned: unassigned === 'true',
+    assignedTo,
+    sort,
   });
   return ApiResponse.paginated(res, result.workOrders, {
     page: pagination.page,
@@ -75,6 +79,13 @@ const updateTaskAssignment = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, task, 'Task assignment updated');
 });
 
+const updateTaskExpenses = asyncHandler(async (req, res) => {
+  const rows = await workOrderService.updateTaskExpenses(
+    req.tenant.id, req.params.id, req.params.taskId, req.body.expenses, req.user
+  );
+  return ApiResponse.success(res, rows, 'Task expenses updated');
+});
+
 const remove = asyncHandler(async (req, res) => {
   await workOrderService.remove(req.tenant.id, req.params.id);
   return ApiResponse.success(res, null, 'Work order deleted successfully');
@@ -109,6 +120,6 @@ const linkTaskFileToCertificate = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove,
+  getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, updateTaskExpenses, remove,
   listTaskFiles, uploadTaskFiles, deleteTaskFile, linkTaskFileToCertificate,
 };

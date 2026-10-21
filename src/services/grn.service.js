@@ -189,6 +189,26 @@ const listInventoryItems = async (tenantId, filters = {}) => {
   return { items: rows.map((r) => r.get({ plain: true })), total: count };
 };
 
+/** Stock on hand: aggregated inventory rows (populated on GRN approval). */
+const getStockOnHand = async (tenantId) => {
+  const rows = await db.Inventory.findAll({
+    where: { tenant_id: tenantId },
+    include: [{ model: db.MaterialType, as: 'materialType', attributes: ['id', 'display_name', 'value'], required: false }],
+    order: [['last_updated', 'DESC']],
+  });
+  return rows.map((r) => {
+    const p = r.get({ plain: true });
+    return {
+      id: p.id,
+      materialTypeId: p.material_type_id,
+      materialType: p.materialType ? { id: p.materialType.id, displayName: p.materialType.display_name, value: p.materialType.value } : null,
+      totalQuantity: p.total_quantity != null ? parseFloat(p.total_quantity) : 0,
+      unitOfMeasure: p.unit_of_measure,
+      lastUpdated: p.last_updated,
+    };
+  });
+};
+
 const getById = async (tenantId, id) => {
   const row = await db.Grn.findOne({
     where: { id, tenant_id: tenantId },
@@ -434,6 +454,7 @@ const ensureGrnForWorkOrder = async (tenantId, workOrderId, userId = null) => {
 module.exports = {
   listGrns,
   listInventoryItems,
+  getStockOnHand,
   getById,
   createGrn,
   updateGrn,

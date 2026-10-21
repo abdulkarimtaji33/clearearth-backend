@@ -40,6 +40,40 @@ const markAllRead = async (tenantId, userId) => {
   );
 };
 
+/** Best-effort Expo push delivery. Never throws; no-op when users have no registered tokens. */
+const sendExpoPush = async (userIds, payload) => {
+  try {
+    const rows = await db.UserPushToken.findAll({ where: { user_id: { [Op.in]: userIds } }, attributes: ['token'] });
+    const tokens = rows.map((r) => r.token).filter((t) => /^Expo(nent)?PushToken\[/.test(t));
+    if (tokens.length === 0 || typeof fetch !== 'function') return;
+    const messages = tokens.map((to) => ({
+      to,
+      sound: 'default',
+      title: payload.title,
+      body: payload.message,
+      data: { type: payload.type, entityType: payload.entityType || null, entityId: payload.entityId || null },
+    }));
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(messages),
+    });
+  } catch { /* push is optional */ }
+};
+
+const registerPushToken = async (tenantId, userId, token, platform) => {
+  const existing = await db.UserPushToken.findOne({ where: { token } });
+  if (existing) {
+    await existing.update({ tenant_id: tenantId, user_id: userId, platform: platform || existing.platform });
+    return existing;
+  }
+  return db.UserPushToken.create({ tenant_id: tenantId, user_id: userId, token, platform: platform || null });
+};
+
+const removePushToken = async (userId, token) => {
+  await db.UserPushToken.destroy({ where: { user_id: userId, token } });
+};
+
 const createForUsers = async (tenantId, userIds, payload) => {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   if (uniqueIds.length === 0) return [];
@@ -66,6 +100,7 @@ const createForUsers = async (tenantId, userIds, payload) => {
       entityId: payload.entityId || null,
     });
   } catch { /* socket optional */ }
+  sendExpoPush(uniqueIds, payload);
   return created;
 };
 
@@ -620,6 +655,8 @@ module.exports = {
   getForUser,
   markRead,
   markAllRead,
+  registerPushToken,
+  removePushToken,
   notifyInspectionRequestCreated,
   notifyInspectionReportSubmitted,
   createForUsers,

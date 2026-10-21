@@ -12,7 +12,7 @@ const {
 } = require('../utils/dealFinancials');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo } = req.query;
+  const { page, pageSize, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo, hasWorkOrder } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const scope = getSalesScope(req);
   const result = await purchaseOrderService.getAll(req.tenant.id, {
@@ -26,6 +26,7 @@ const getAll = asyncHandler(async (req, res) => {
     side,
     dateFrom,
     dateTo,
+    hasWorkOrder: hasWorkOrder === 'true' ? true : hasWorkOrder === 'false' ? false : undefined,
     ...scope,
   });
   const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);

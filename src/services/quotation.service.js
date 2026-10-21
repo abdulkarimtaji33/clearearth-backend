@@ -28,7 +28,7 @@ const APPROVABLE_STATUSES = [
   QUOTATION_STATUS.PENDING_APPROVAL,
 ];
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, statusNot, dealId, scopeUserId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, status, statusNot, dealId, scopeUserId, dateFrom, dateTo, hasWorkOrder } = filters;
   const where = { tenant_id: tenantId };
 
   if (scopeUserId) where.prepared_by = scopeUserId;
@@ -38,6 +38,8 @@ const getAll = async (tenantId, filters) => {
     where.status = { [Op.ne]: statusNot };
   }
   if (dealId) where.deal_id = dealId;
+  if (hasWorkOrder === true) where['$workOrder.id$'] = { [Op.ne]: null };
+  if (hasWorkOrder === false) where['$workOrder.id$'] = null;
 
   const dealWhereForSearch = () => {
     if (!search) return undefined;

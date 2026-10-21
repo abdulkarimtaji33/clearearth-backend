@@ -247,9 +247,42 @@ const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction, 
   return created;
 };
 
+const dateKey = (d) => (d ? String(d).slice(0, 10) : null);
+
+/** Lightweight per-WO progress rollup so list cards don't need task detail. */
+const summarizeTasks = (tasks, today) => {
+  let completed = 0; let inProgress = 0; let overdue = 0; let nextDue = null;
+  tasks.forEach((t) => {
+    if (t.status === 'completed') { completed += 1; return; }
+    if (t.status === 'in_progress') inProgress += 1;
+    const end = dateKey(t.end_date);
+    if (end && end < today) overdue += 1;
+    if (end && (nextDue === null || end < nextDue)) nextDue = end;
+  });
+  return { total: tasks.length, completed, inProgress, overdue, nextDue };
+};
+
 const getAll = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dealId, status } = filters;
+  const { offset, limit, search, dealId, status, overdue, assignedTo, unassigned, sort } = filters;
   const where = { tenant_id: tenantId };
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Task-level filters (mobile): restrict to work orders that have a matching open task.
+  const taskConds = [];
+  if (overdue) taskConds.push({ status: { [Op.ne]: 'completed' }, end_date: { [Op.lt]: today } });
+  if (unassigned) taskConds.push({ status: { [Op.ne]: 'completed' }, assigned_to: null });
+  if (assignedTo) taskConds.push({ assigned_to: parseInt(assignedTo, 10) });
+  if (taskConds.length) {
+    const idSets = await Promise.all(taskConds.map((c) =>
+      db.WorkOrderTask.findAll({ where: c, attributes: ['work_order_id'], group: ['work_order_id'], raw: true })
+    ));
+    let ids = null;
+    idSets.forEach((rows) => {
+      const set = new Set(rows.map((r) => r.work_order_id));
+      ids = ids === null ? set : new Set([...ids].filter((x) => set.has(x)));
+    });
+    where.id = { [Op.in]: [...ids] };
+  }
 
   if (dealId) where.deal_id = dealId;
   if (status) where.status = status;
@@ -286,11 +319,24 @@ const getAll = async (tenantId, filters = {}) => {
     ],
     offset,
     limit,
-    order: [['created_at', 'DESC']],
+    order: sort === 'due' ? [['created_at', 'ASC']] : [['created_at', 'DESC']],
     distinct: true,
   });
 
-  return { workOrders: rows, total: count };
+  const workOrders = rows.map((r) => {
+    const plain = r.get({ plain: true });
+    plain.taskSummary = summarizeTasks(plain.tasks || [], today);
+    return plain;
+  });
+  if (sort === 'due') {
+    workOrders.sort((a, b) => {
+      const da = a.taskSummary.nextDue || '9999-12-31';
+      const db_ = b.taskSummary.nextDue || '9999-12-31';
+      return da < db_ ? -1 : da > db_ ? 1 : 0;
+    });
+  }
+
+  return { workOrders, total: count };
 };
 
 const getById = async (tenantId, workOrderId) => {
@@ -353,7 +399,14 @@ const getById = async (tenantId, workOrderId) => {
     ],
   });
   if (!workOrder) throw ApiError.notFound('Work order not found');
-  return workOrder;
+  const plain = workOrder.get({ plain: true });
+  const today = new Date().toISOString().slice(0, 10);
+  (plain.tasks || []).forEach((t) => {
+    const end = dateKey(t.end_date);
+    t.isOverdue = t.status !== 'completed' && !!end && end < today;
+  });
+  plain.taskSummary = summarizeTasks(plain.tasks || [], today);
+  return plain;
 };
 
 const create = async (tenantId, data, scope = {}) => {
@@ -575,6 +628,34 @@ const updateTaskAssignment = async (tenantId, workOrderId, taskId, assignedToOrI
   return updated;
 };
 
+/**
+ * Replace a single task's expense lines without re-sending the whole work order.
+ * Lines already posted to the accounting ledger stay locked (see syncTaskExpenses).
+ */
+const updateTaskExpenses = async (tenantId, workOrderId, taskId, expenses, actorUser = null) => {
+  const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
+  if (!workOrder) throw ApiError.notFound('Work order not found');
+  const task = await db.WorkOrderTask.findOne({ where: { id: taskId, work_order_id: workOrderId } });
+  if (!task) throw ApiError.notFound('Task not found');
+  if (!Array.isArray(expenses)) throw ApiError.badRequest('expenses must be an array');
+
+  const { expenseLines, expenseTotal } = buildExpenseLines({ expenses });
+  await db.sequelize.transaction(async (t) => {
+    await syncTaskExpenses(taskId, expenseLines, t);
+    await task.update({ expense: expenseTotal }, { transaction: t });
+  });
+
+  if (expenseLines.length > 0) {
+    notificationService.notifyExpenseSubmitted(tenantId, workOrderId, task.type_of_work || '', actorUser).catch(() => {});
+  }
+
+  return db.WorkOrderTaskExpense.findAll({
+    where: { work_order_task_id: taskId },
+    order: [['sort_order', 'ASC'], ['id', 'ASC']],
+    include: [{ model: db.Expense, as: 'ledgerExpense', required: false, attributes: ['id', 'category', 'amount', 'expense_date', 'reference'] }],
+  });
+};
+
 const remove = async (tenantId, workOrderId) => {
   const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
   if (!workOrder) throw ApiError.notFound('Work order not found');
@@ -647,6 +728,6 @@ const linkTaskFileToCertificate = async (tenantId, workOrderId, taskId, fileId, 
 };
 
 module.exports = {
-  getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, remove,
+  getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, updateTaskExpenses, remove,
   addTaskFiles, listTaskFiles, deleteTaskFile, linkTaskFileToCertificate,
 };

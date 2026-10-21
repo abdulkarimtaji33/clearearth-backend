@@ -588,6 +588,7 @@ async function getOperationsOverview(tenantId) {
   const [
     woInProgress, overdueTasks, pendingExpenses, draftGrns, unassignedPickups, overdueTaskRows, driverActivity,
     recentServiceOrderRows, recentPurchaseOrderRows, todayTaskRows, todayCreatedWorkOrders,
+    pendingPickupQuotes, pendingPickupPos, unassignedTaskRows, grnsNew, grnsSubmitted, soAwaitingWo, poAwaitingWo,
   ] = await Promise.all([
     db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'in_progress' } }),
     db.WorkOrderTask.count({
@@ -667,10 +668,91 @@ async function getOperationsOverview(tenantId) {
       order: [['created_at', 'DESC']],
       limit: 20,
     }).catch(() => []),
+    db.Quotation.findAll({
+      where: { tenant_id: tenantId, status: 'approved', pickup_date_status: 'pending' },
+      include: [{ model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false }],
+      order: [['approved_at', 'DESC']],
+      limit: 20,
+    }).catch(() => []),
+    db.PurchaseOrder.findAll({
+      where: { tenant_id: tenantId, status: 'approved', pickup_date_status: 'pending', document_type: 'quotation' },
+      include: [
+        { model: db.Deal, as: 'deal', attributes: ['id', 'title', 'deal_number'], required: false },
+        { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+        { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+      ],
+      order: [['approved_at', 'DESC']],
+      limit: 20,
+    }).catch(() => []),
+    db.WorkOrderTask.findAll({
+      where: { assigned_to: null, status: { [Op.ne]: 'completed' } },
+      include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId, status: { [Op.in]: ['new', 'in_progress'] } }, attributes: ['id', 'title'] }],
+      order: [['start_date', 'ASC']],
+      limit: 20,
+    }).catch(() => []),
+    db.Grn.count({ where: { tenant_id: tenantId, status: 'new' } }).catch(() => 0),
+    db.Grn.count({ where: { tenant_id: tenantId, status: 'submitted' } }).catch(() => 0),
+    db.Quotation.count({
+      where: { tenant_id: tenantId, status: 'approved', '$workOrder.id$': null },
+      include: [{ model: db.WorkOrder, as: 'workOrder', attributes: [], required: false }],
+      distinct: true,
+    }).catch(() => 0),
+    db.PurchaseOrder.count({
+      where: { tenant_id: tenantId, status: 'approved', document_type: 'quotation', company_id: { [Op.ne]: null }, '$sourceWorkOrder.id$': null },
+      include: [{ model: db.WorkOrder, as: 'sourceWorkOrder', attributes: [], required: false }],
+      distinct: true,
+    }).catch(() => 0),
   ]);
+
+  const pendingPickupConfirmations = [
+    ...pendingPickupQuotes.map((q) => {
+      const p = q.get({ plain: true });
+      return {
+        entityType: 'quotation',
+        id: p.id,
+        dealId: p.deal?.id || p.deal_id,
+        dealTitle: p.deal?.title || p.deal?.deal_number || `Deal #${p.deal_id}`,
+        partyName: null,
+        requestedPickupDate: p.requested_pickup_date,
+      };
+    }),
+    ...pendingPickupPos.map((po) => {
+      const p = po.get({ plain: true });
+      return {
+        entityType: 'purchase_order',
+        id: p.id,
+        dealId: p.deal?.id || p.deal_id,
+        dealTitle: p.deal?.title || p.deal?.deal_number || (p.deal_id ? `Deal #${p.deal_id}` : null),
+        partyName: p.company?.company_name || p.supplier?.company_name || null,
+        requestedPickupDate: p.requested_pickup_date,
+      };
+    }),
+  ];
+
+  const unassignedTasks = unassignedTaskRows.map((t) => {
+    const p = t.get({ plain: true });
+    return {
+      taskId: p.id,
+      workOrderId: p.work_order_id,
+      workOrderTitle: p.workOrder?.title || `WO #${p.work_order_id}`,
+      typeOfWork: p.type_of_work,
+      startDate: p.start_date,
+      endDate: p.end_date,
+      status: p.status,
+    };
+  });
 
   return {
     role: 'operations_manager',
+    counts: {
+      ordersAwaitingWo: (soAwaitingWo || 0) + (poAwaitingWo || 0),
+      grnsNew: grnsNew || 0,
+      grnsSubmitted: grnsSubmitted || 0,
+      overdueTasks: overdueTasks || 0,
+      pendingPickupConfirmations: pendingPickupConfirmations.length,
+    },
+    pendingPickupConfirmations,
+    unassignedTasks,
     kpis: [
       { label: 'Work orders in progress', value: woInProgress, format: 'number' },
       { label: 'Overdue tasks', value: overdueTasks, format: 'number', highlight: overdueTasks > 0 },

@@ -21,4 +21,19 @@ const markAllRead = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, { ok: true });
 });
 
-module.exports = { getMine, markRead, markAllRead };
+const registerPushToken = asyncHandler(async (req, res) => {
+  const { token, platform } = req.body;
+  if (!token || typeof token !== 'string') {
+    return ApiResponse.error(res, 'token is required', 400);
+  }
+  await notificationService.registerPushToken(req.tenant.id, req.user.id, token, platform);
+  return ApiResponse.success(res, { ok: true });
+});
+
+const removePushToken = asyncHandler(async (req, res) => {
+  const { token } = req.body;
+  if (token) await notificationService.removePushToken(req.user.id, token);
+  return ApiResponse.success(res, { ok: true });
+});
+
+module.exports = { getMine, markRead, markAllRead, registerPushToken, removePushToken };

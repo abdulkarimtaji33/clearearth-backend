@@ -47,6 +47,11 @@ const listInventory = asyncHandler(async (req, res) => {
   });
 });
 
+const stockOnHand = asyncHandler(async (req, res) => {
+  const rows = await grnService.getStockOnHand(req.tenant.id);
+  return ApiResponse.success(res, rows);
+});
+
 const create = asyncHandler(async (req, res) => {
   const row = await grnService.createGrn(req.tenant.id, req.user.id, req.body);
   return ApiResponse.created(res, row, 'GRN created');
@@ -92,4 +97,4 @@ const getPdf = asyncHandler(async (req, res) => {
   res.end(pdfBuffer, 'binary');
 });
 
-module.exports = { list, listInventory, getById, create, update, uploadItemImages, approve, getPdf };
+module.exports = { list, listInventory, stockOnHand, getById, create, update, uploadItemImages, approve, getPdf };

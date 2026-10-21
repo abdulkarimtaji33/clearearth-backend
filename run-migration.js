@@ -3425,6 +3425,22 @@ async function runMigration() {
       }
     }
 
+    console.log('Creating user_push_tokens table (mobile push notifications)...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS user_push_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        user_id INT NOT NULL,
+        token VARCHAR(255) NOT NULL,
+        platform VARCHAR(20) NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY uniq_upt_token (token),
+        INDEX idx_upt_user (user_id),
+        CONSTRAINT fk_upt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

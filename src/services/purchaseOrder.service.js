@@ -68,9 +68,11 @@ const normalizePoItems = (items, existingItems = [], isBill = false) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo, scopeUserId } = filters;
+  const { offset, limit, search, supplierId, companyId, dealId, status, statusNot, side, dateFrom, dateTo, scopeUserId, hasWorkOrder } = filters;
   const where = { tenant_id: tenantId };
   const andConditions = [];
+  if (hasWorkOrder === true) where['$sourceWorkOrder.id$'] = { [Op.ne]: null };
+  if (hasWorkOrder === false) where['$sourceWorkOrder.id$'] = null;
 
   if (scopeUserId) {
     andConditions.push({
