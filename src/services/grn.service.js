@@ -361,8 +361,8 @@ const updateGrn = async (tenantId, id, body, actorUser) => {
   const updated = await getById(tenantId, id);
 
   // Sales should hear about it the moment Operations submits the GRN.
-  if (nextStatus === 'submitted' && prevStatus !== 'submitted' && updated.deal?.assigned_to) {
-    notificationService.notifyGrnSubmitted(tenantId, updated, updated.deal.assigned_to, actorUser).catch(() => {});
+  if (nextStatus === 'submitted' && prevStatus !== 'submitted') {
+    notificationService.notifyGrnSubmitted(tenantId, updated, updated.deal?.assigned_to, actorUser).catch(() => {});
   }
 
   return updated;

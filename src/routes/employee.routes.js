@@ -65,6 +65,19 @@ router.get('/designations', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// -- Work locations lookup (Job details > Work location) ----------------------
+router.get('/work-locations', async (req, res, next) => {
+  try {
+    const db = require('../models');
+    const rows = await db.WorkLocation.findAll({
+      where: { tenant_id: req.tenant.id, is_active: true },
+      attributes: ['id', 'name'],
+      order: [['name', 'ASC']],
+    });
+    res.json({ success: true, message: 'Success', data: rows });
+  } catch (e) { next(e); }
+});
+
 // -- Child-record entity controllers (HR side + self-service mirror) --------
 const entities = {
   'emergency-contacts': childRecordsService.emergencyContacts,

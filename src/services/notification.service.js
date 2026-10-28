@@ -526,12 +526,14 @@ const notifyExpenseSubmitted = async (tenantId, workOrderId, taskName, submitted
 };
 
 const notifyGrnSubmitted = async (tenantId, grn, salesUserId, submittedByUser) => {
-  if (!salesUserId) return;
+  const managerIds = await getSalesManagerUserIds(tenantId);
+  const recipientIds = [...new Set([salesUserId, ...managerIds].filter(Boolean))];
+  if (recipientIds.length === 0) return;
   const userName = submittedByUser
     ? [submittedByUser.first_name, submittedByUser.last_name].filter(Boolean).join(' ')
     : 'Operations';
   const companyName = grn.deal?.title || grn.deal?.deal_number || `Deal #${grn.deal_id}`;
-  await createForUsers(tenantId, [salesUserId], {
+  await createForUsers(tenantId, recipientIds, {
     type: 'grn_submitted',
     title: 'GRN submitted',
     message: `${userName} submitted GRN ${grn.grn_number} for ${companyName}. You can download it now.`,

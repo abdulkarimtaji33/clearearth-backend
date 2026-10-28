@@ -28,7 +28,34 @@ async function nextEmployeeCode(tenantId, transaction) {
   return `EMP-${String(seq).padStart(4, '0')}`;
 }
 
+// camelCase request field -> employees column. Shared by create and update so both accept the
+// identical set of fields (core, identity documents, addresses, job, payroll).
+const EMPLOYEE_FIELD_MAP = {
+  firstName: 'first_name', lastName: 'last_name', email: 'email', phone: 'phone',
+  departmentId: 'department_id', designationId: 'designation_id', managerId: 'manager_id',
+  employmentType: 'employment_type', dateOfJoining: 'date_of_joining', employmentStatus: 'employment_status',
+  gender: 'gender', dateOfBirth: 'date_of_birth', nationality: 'nationality', nationalId: 'national_id',
+  passportNumber: 'passport_number', address: 'address', emergencyContactName: 'emergency_contact_name',
+  emergencyContactPhone: 'emergency_contact_phone', bankName: 'bank_name', bankAccountNumber: 'bank_account_number',
+  bankIban: 'bank_iban', notes: 'notes',
+  profilePhoto: 'profile_photo', middleName: 'middle_name', preferredName: 'preferred_name', legalFullName: 'legal_full_name',
+  maritalStatus: 'marital_status', religion: 'religion', bloodGroup: 'blood_group',
+  personalEmail: 'personal_email', workEmail: 'work_email', personalPhone: 'personal_phone', workPhone: 'work_phone',
+  currentAddressLine1: 'current_address_line1', currentAddressCity: 'current_address_city',
+  currentAddressEmirate: 'current_address_emirate', currentAddressCountry: 'current_address_country', currentAddressPostal: 'current_address_postal',
+  permanentAddressLine1: 'permanent_address_line1', permanentAddressCity: 'permanent_address_city',
+  permanentAddressEmirate: 'permanent_address_emirate', permanentAddressCountry: 'permanent_address_country', permanentAddressPostal: 'permanent_address_postal',
+  workLocationId: 'work_location_id', probationStart: 'probation_start', probationEnd: 'probation_end', confirmationDate: 'confirmation_date',
+  molPersonId: 'mol_person_id', wpsPersonCode: 'wps_person_code', taxId: 'tax_id',
+  paymentMethodDetail: 'payment_method_detail', routingCode: 'routing_code', salaryVisibleToEmployee: 'salary_visible_to_employee',
+  passportIssueDate: 'passport_issue_date', passportExpiryDate: 'passport_expiry_date',
+  emiratesIdNumber: 'emirates_id_number', emiratesIdIssueDate: 'emirates_id_issue_date', emiratesIdExpiryDate: 'emirates_id_expiry_date',
+  visaNumber: 'visa_number', visaIssueDate: 'visa_issue_date', visaExpiryDate: 'visa_expiry_date',
+  labourCardNo: 'labour_card_no', labourCardIssueDate: 'labour_card_issue_date', labourCardExpiryDate: 'labour_card_expiry_date',
+};
+
 const EMPLOYEE_INCLUDE = [
+  { model: db.WorkLocation, as: 'workLocation', attributes: ['id', 'name'], required: false },
   { model: db.Department, as: 'department', attributes: ['id', 'name'], required: false },
   { model: db.Designation, as: 'designation', attributes: ['id', 'value', 'display_name'], required: false },
   { model: db.Employee, as: 'manager', attributes: ['id', 'first_name', 'last_name', 'employee_code'], required: false },
@@ -37,14 +64,7 @@ const EMPLOYEE_INCLUDE = [
 
 const create = async (tenantId, actorUserId, body) => {
   const {
-    firstName, lastName, email, phone, departmentId, designationId, managerId,
-    employmentType, dateOfJoining, gender, dateOfBirth, nationality, nationalId,
-    passportNumber, passportIssueDate, passportExpiryDate,
-    emiratesIdNumber, emiratesIdIssueDate, emiratesIdExpiryDate,
-    visaNumber, visaIssueDate, visaExpiryDate,
-    labourCardNo, labourCardIssueDate, labourCardExpiryDate,
-    address, emergencyContactName, emergencyContactPhone,
-    bankName, bankAccountNumber, bankIban, notes,
+    firstName, lastName, email, phone, dateOfJoining,
     createLoginAccount, roleId, existingUserId,
   } = body;
 
@@ -84,42 +104,11 @@ const create = async (tenantId, actorUserId, body) => {
       userId = existingUser.id;
     }
 
-    const employeeData = {
-      first_name: firstName,
-      last_name: lastName,
-      email: email || null,
-      phone: phone || null,
-      department_id: departmentId || null,
-      designation_id: designationId || null,
-      manager_id: managerId || null,
-      employment_type: employmentType || 'full_time',
-      date_of_joining: dateOfJoining,
-      employment_status: 'active',
-      gender: gender || null,
-      date_of_birth: dateOfBirth || null,
-      nationality: nationality || null,
-      national_id: nationalId || null,
-      passport_number: passportNumber || null,
-      passport_issue_date: passportIssueDate || null,
-      passport_expiry_date: passportExpiryDate || null,
-      emirates_id_number: emiratesIdNumber || null,
-      emirates_id_issue_date: emiratesIdIssueDate || null,
-      emirates_id_expiry_date: emiratesIdExpiryDate || null,
-      visa_number: visaNumber || null,
-      visa_issue_date: visaIssueDate || null,
-      visa_expiry_date: visaExpiryDate || null,
-      labour_card_no: labourCardNo || null,
-      labour_card_issue_date: labourCardIssueDate || null,
-      labour_card_expiry_date: labourCardExpiryDate || null,
-      address: address || null,
-      emergency_contact_name: emergencyContactName || null,
-      emergency_contact_phone: emergencyContactPhone || null,
-      bank_name: bankName || null,
-      bank_account_number: bankAccountNumber || null,
-      bank_iban: bankIban || null,
-      notes: notes || null,
-      created_by: actorUserId || null,
-    };
+    const employeeData = { employment_type: 'full_time', employment_status: 'active' };
+    for (const [f, col] of Object.entries(EMPLOYEE_FIELD_MAP)) {
+      if (body[f] !== undefined && body[f] !== '' && body[f] !== null) employeeData[col] = body[f];
+    }
+    employeeData.created_by = actorUserId || null;
 
     if (autoProvisionedEmployeeId) {
       // Fill in the full HR details on the employee record that user.service#create
@@ -211,47 +200,8 @@ const update = async (tenantId, id, body, actorUserId = null) => {
   const oldTrackedValues = {};
   for (const col of Object.keys(TRACKED_HISTORY_FIELDS)) oldTrackedValues[col] = employee[col];
 
-  const fields = [
-    'firstName', 'lastName', 'email', 'phone', 'departmentId', 'designationId', 'managerId',
-    'employmentType', 'dateOfJoining', 'employmentStatus', 'gender', 'dateOfBirth', 'nationality',
-    'nationalId', 'passportNumber', 'address', 'emergencyContactName', 'emergencyContactPhone',
-    'bankName', 'bankAccountNumber', 'bankIban', 'notes',
-    // Expanded profile fields
-    'profilePhoto', 'middleName', 'preferredName', 'legalFullName', 'maritalStatus', 'religion', 'bloodGroup',
-    'personalEmail', 'workEmail', 'personalPhone', 'workPhone',
-    'currentAddressLine1', 'currentAddressCity', 'currentAddressEmirate', 'currentAddressCountry', 'currentAddressPostal',
-    'permanentAddressLine1', 'permanentAddressCity', 'permanentAddressEmirate', 'permanentAddressCountry', 'permanentAddressPostal',
-    'workLocationId', 'probationStart', 'probationEnd', 'confirmationDate',
-    'labourCardNo', 'molPersonId', 'wpsPersonCode', 'taxId', 'paymentMethodDetail', 'routingCode',
-    'salaryVisibleToEmployee',
-  ];
-  const map = {
-    firstName: 'first_name', lastName: 'last_name', email: 'email', phone: 'phone',
-    departmentId: 'department_id', designationId: 'designation_id', managerId: 'manager_id',
-    employmentType: 'employment_type', dateOfJoining: 'date_of_joining', employmentStatus: 'employment_status',
-    gender: 'gender', dateOfBirth: 'date_of_birth', nationality: 'nationality', nationalId: 'national_id',
-    passportNumber: 'passport_number', address: 'address', emergencyContactName: 'emergency_contact_name',
-    emergencyContactPhone: 'emergency_contact_phone', bankName: 'bank_name', bankAccountNumber: 'bank_account_number',
-    bankIban: 'bank_iban', notes: 'notes',
-    profilePhoto: 'profile_photo', middleName: 'middle_name', preferredName: 'preferred_name', legalFullName: 'legal_full_name',
-    maritalStatus: 'marital_status', religion: 'religion', bloodGroup: 'blood_group',
-    personalEmail: 'personal_email', workEmail: 'work_email', personalPhone: 'personal_phone', workPhone: 'work_phone',
-    currentAddressLine1: 'current_address_line1', currentAddressCity: 'current_address_city',
-    currentAddressEmirate: 'current_address_emirate', currentAddressCountry: 'current_address_country', currentAddressPostal: 'current_address_postal',
-    permanentAddressLine1: 'permanent_address_line1', permanentAddressCity: 'permanent_address_city',
-    permanentAddressEmirate: 'permanent_address_emirate', permanentAddressCountry: 'permanent_address_country', permanentAddressPostal: 'permanent_address_postal',
-    workLocationId: 'work_location_id', probationStart: 'probation_start', probationEnd: 'probation_end', confirmationDate: 'confirmation_date',
-    labourCardNo: 'labour_card_no', molPersonId: 'mol_person_id', wpsPersonCode: 'wps_person_code', taxId: 'tax_id',
-    paymentMethodDetail: 'payment_method_detail', routingCode: 'routing_code', salaryVisibleToEmployee: 'salary_visible_to_employee',
-    passportIssueDate: 'passport_issue_date', passportExpiryDate: 'passport_expiry_date',
-    emiratesIdNumber: 'emirates_id_number', emiratesIdIssueDate: 'emirates_id_issue_date', emiratesIdExpiryDate: 'emirates_id_expiry_date',
-    visaNumber: 'visa_number', visaIssueDate: 'visa_issue_date', visaExpiryDate: 'visa_expiry_date',
-    labourCardIssueDate: 'labour_card_issue_date', labourCardExpiryDate: 'labour_card_expiry_date',
-  };
-  for (const f of fields) {
-    if (body[f] !== undefined) {
-      employee[map[f]] = (body[f] === '' || body[f] === undefined) ? null : body[f];
-    }
+  for (const [f, col] of Object.entries(EMPLOYEE_FIELD_MAP)) {
+    if (body[f] !== undefined) employee[col] = body[f] === '' ? null : body[f];
   }
 
   if (body.userId !== undefined) {
