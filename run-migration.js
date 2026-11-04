@@ -3330,6 +3330,7 @@ async function runMigration() {
     const certPerms = [
       ['certificates.read', 'Read Certificates', 'certificates', 'read', 'View certificate requests and issued certificates'],
       ['certificates.create', 'Create Certificate Requests', 'certificates', 'create', 'Submit certificate requests'],
+      ['certificates.update', 'Update Certificate Requests', 'certificates', 'update', 'Edit certificate requests before the certificate is issued'],
       ['certificates.verify', 'Verify & Generate Certificates', 'certificates', 'verify', 'HR verification and certificate generation'],
       ['certificates.manage', 'Manage Certificate Settings', 'certificates', 'manage', 'Manage carbon footprint factors and certificate settings'],
     ];
@@ -3342,16 +3343,18 @@ async function runMigration() {
       } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  certificates perm:', e.message); }
     }
 
-    console.log('Assigning certificates.read + certificates.create to sales, sales_manager...');
+    console.log('Assigning certificates.read + certificates.create + certificates.update to sales, sales_manager...');
     {
       const [[readPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'certificates.read' LIMIT 1`);
       const [[createPerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'certificates.create' LIMIT 1`);
+      const [[updatePerm]] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'certificates.update' LIMIT 1`);
       for (const roleName of ['sales', 'sales_manager']) {
         const [[roleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = ? AND tenant_id IS NULL LIMIT 1`, { replacements: [roleName] });
         if (roleRow?.id) {
           if (readPerm?.id) await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, readPerm.id] });
           if (createPerm?.id) await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, createPerm.id] });
-          console.log(`  Assigned certificates.read/create to ${roleName}`);
+          if (updatePerm?.id) await db.sequelize.query(`INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)`, { replacements: [roleRow.id, updatePerm.id] });
+          console.log(`  Assigned certificates.read/create/update to ${roleName}`);
         }
       }
     }

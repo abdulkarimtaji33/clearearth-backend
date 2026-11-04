@@ -247,6 +247,12 @@ const createRequest = async (tenantId, userId, body) => {
     materialTypeId, attachments = [],
   } = body;
 
+  if (!dealId) {
+    throw ApiError.badRequest('A certificate request must be linked to a deal');
+  }
+  const linkedDeal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId }, attributes: ['id'] });
+  if (!linkedDeal) throw ApiError.notFound('Linked deal not found');
+
   if (!companyName || !contactPerson || !contactNo || !contactEmail || !collectionDate || !materialWasteDetails) {
     throw ApiError.badRequest('Missing required fields for certificate request');
   }
@@ -389,6 +395,23 @@ const updateRequest = async (tenantId, requestId, body = {}) => {
   for (const [inKey, dbKey] of Object.entries(EDITABLE_REQUEST_FIELDS)) {
     if (body[inKey] !== undefined) updates[dbKey] = body[inKey];
   }
+
+  // A request always stays linked to a deal: it can be moved to another deal but never unlinked.
+  if (body.dealId !== undefined) {
+    if (!body.dealId) throw ApiError.badRequest('A certificate request must be linked to a deal');
+    const deal = await db.Deal.findOne({ where: { id: body.dealId, tenant_id: tenantId }, attributes: ['id'] });
+    if (!deal) throw ApiError.notFound('Linked deal not found');
+    updates.deal_id = deal.id;
+  }
+
+  if (body.grnId !== undefined) {
+    if (body.grnId) {
+      const grn = await db.Grn.findOne({ where: { id: body.grnId, tenant_id: tenantId }, attributes: ['id'] });
+      if (!grn) throw ApiError.notFound('Linked GRN not found');
+    }
+    updates.grn_id = body.grnId || null;
+  }
+
   if (Object.keys(updates).length === 0) {
     throw ApiError.badRequest('No editable fields provided');
   }
