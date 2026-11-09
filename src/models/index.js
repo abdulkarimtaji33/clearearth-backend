@@ -77,6 +77,7 @@ const WorkOrderTaskAssignee = require('./WorkOrderTaskAssignee')(sequelize, Data
 const WorkOrderTaskFile = require('./WorkOrderTaskFile')(sequelize, DataTypes);
 const Expense = require('./Expense')(sequelize, DataTypes);
 const ExpenseCategory = require('./ExpenseCategory')(sequelize, DataTypes);
+const VendorBill = require('./VendorBill')(sequelize, DataTypes);
 const WorkType = require('./WorkType')(sequelize, DataTypes);
 
 // Accounting / GL
@@ -194,6 +195,7 @@ const db = {
   WorkOrderTaskFile,
   Expense,
   ExpenseCategory,
+  VendorBill,
   WorkType,
   FiscalYear,
   AccountingPeriod,

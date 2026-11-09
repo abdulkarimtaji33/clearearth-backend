@@ -10,6 +10,7 @@ router.get(
   authorize('accounting.read', 'deals.read'),
   proformaInvoiceController.previewFromQuotation
 );
+router.get('/check-duplicate', authorize('accounting.read', 'deals.read'), proformaInvoiceController.checkDuplicate);
 router.get('/', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getAll);
 router.get('/:id/pdf', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getPdf);
 router.get('/:id', authorize('accounting.read', 'deals.read'), proformaInvoiceController.getById);

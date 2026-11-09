@@ -3,6 +3,7 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const { assertDueNotBeforeInvoice, dueDateFromTerms } = require('../utils/invoiceDates');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 
@@ -192,6 +193,25 @@ const create = async (tenantId, userId, body, scope = {}) => {
   });
   if (dup) throw ApiError.conflict('A tax invoice already exists for this proforma invoice');
 
+  const effectiveInvoiceDate = invoiceDate || new Date().toISOString().slice(0, 10);
+  let effectiveDueDate;
+  if (dueDate) {
+    assertDueNotBeforeInvoice(effectiveInvoiceDate, dueDate);
+    effectiveDueDate = dueDate;
+  } else {
+    // Inherited from the proforma: keep its payment terms, counted from this invoice's date.
+    effectiveDueDate = dueDateFromTerms(effectiveInvoiceDate, plain.invoice_date, plain.due_date);
+  }
+
+  // The tax invoice is the posting document: its amounts come from its own lines and VAT %,
+  // not from the proforma header (which may carry a stale VAT amount).
+  const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+  const pItems = plain.items || [];
+  const invSubtotal = round2(pItems.reduce((s, it) => s + (parseFloat(it.line_total) || 0), 0));
+  const invVatPct = parseFloat(plain.vat_percentage) || 0;
+  const invVat = round2((invSubtotal * invVatPct) / 100);
+  const invTotal = round2(invSubtotal + invVat);
+
   const t = await db.sequelize.transaction();
   let createdId;
   try {
@@ -202,13 +222,13 @@ const create = async (tenantId, userId, body, scope = {}) => {
         tenant_id: tenantId,
         proforma_invoice_id: proformaInvoiceId,
         tax_invoice_number: taxInvoiceNumber,
-        invoice_date: invoiceDate || new Date().toISOString().slice(0, 10),
-        due_date: dueDate || plain.due_date || null,
+        invoice_date: effectiveInvoiceDate,
+        due_date: effectiveDueDate,
         currency: plain.currency || 'AED',
-        subtotal: parseFloat(plain.subtotal) || 0,
-        vat_percentage: parseFloat(plain.vat_percentage) || 0,
-        vat_amount: parseFloat(plain.vat_amount) || 0,
-        total: parseFloat(plain.total) || 0,
+        subtotal: invSubtotal,
+        vat_percentage: invVatPct,
+        vat_amount: invVat,
+        total: invTotal,
         payment_status: 'unpaid',
         paid_amount: null,
         payment_method: paymentMethod || null,
@@ -221,7 +241,6 @@ const create = async (tenantId, userId, body, scope = {}) => {
     );
     createdId = header.id;
 
-    const pItems = plain.items || [];
     const rows = pItems.map((it, idx) => ({
       tax_invoice_id: header.id,
       product_service_id: it.product_service_id || null,
@@ -242,9 +261,9 @@ const create = async (tenantId, userId, body, scope = {}) => {
       const arId  = await jeService.getSystemAccountId(tenantId, '1100');
       const revId = await jeService.getSystemAccountId(tenantId, '4000');
       const vatId = await jeService.getSystemAccountId(tenantId, '2100');
-      const total    = parseFloat(plain.total) || 0;
-      const subtotal = parseFloat(plain.subtotal) || 0;
-      const vatAmt   = parseFloat(plain.vat_amount) || 0;
+      const total    = invTotal;
+      const subtotal = invSubtotal;
+      const vatAmt   = invVat;
       const jeLines = [
         { accountId: arId,  debit: total,    credit: 0,       description: `AR: ${taxInvoiceNumber}` },
         { accountId: revId, debit: 0,        credit: subtotal, description: `Revenue: ${taxInvoiceNumber}` },
@@ -253,7 +272,7 @@ const create = async (tenantId, userId, body, scope = {}) => {
         jeLines.push({ accountId: vatId, debit: 0, credit: vatAmt, description: `VAT: ${taxInvoiceNumber}` });
       }
       await jeService.createJournalEntry(tenantId, userId, {
-        entryDate: invoiceDate || new Date().toISOString().slice(0, 10),
+        entryDate: effectiveInvoiceDate,
         description: `Tax Invoice ${taxInvoiceNumber}`,
         sourceType: 'tax_invoice',
         sourceId: header.id,
@@ -276,46 +295,26 @@ const create = async (tenantId, userId, body, scope = {}) => {
   return getById(tenantId, createdId, scope);
 };
 
+/**
+ * A tax invoice is posted to the ledger the moment it is created, so its dates, lines and amounts
+ * are locked. Only non-financial notes can still be changed; corrections go through a credit note.
+ */
 const update = async (tenantId, id, body, scope = {}) => {
   await getById(tenantId, id, scope);
   const row = await db.TaxInvoice.findOne({ where: { id, tenant_id: tenantId } });
 
-  const {
-    invoiceDate,
-    dueDate,
-    paymentMethod,
-    referenceNo,
-    attachmentPath,
-    remarks,
-    items,
-  } = body;
+  const { invoiceDate, dueDate, paymentMethod, referenceNo, attachmentPath, remarks, items } = body;
 
-  if (invoiceDate !== undefined) row.invoice_date = invoiceDate;
-  if (dueDate !== undefined) row.due_date = dueDate;
+  const day = (d) => (d ? String(d).slice(0, 10) : null);
+  const dateChanged = (incoming, current) => incoming !== undefined && day(incoming) !== day(current);
+  if (dateChanged(invoiceDate, row.invoice_date) || dateChanged(dueDate, row.due_date) || (Array.isArray(items) && items.length > 0)) {
+    throw ApiError.conflict('A posted tax invoice cannot be edited. Issue a credit note to correct it.');
+  }
+
   if (paymentMethod !== undefined) row.payment_method = paymentMethod;
   if (referenceNo !== undefined) row.reference_no = referenceNo;
   if (attachmentPath !== undefined) row.attachment_path = attachmentPath;
   if (remarks !== undefined) row.remarks = remarks;
-
-  // Update line item quantities and recalculate totals
-  if (Array.isArray(items) && items.length > 0) {
-    let newSubtotal = 0;
-    for (const itemUpdate of items) {
-      if (!itemUpdate.id) continue;
-      const item = await db.TaxInvoiceItem.findOne({ where: { id: itemUpdate.id, tax_invoice_id: id } });
-      if (item) {
-        const qty = parseFloat(itemUpdate.quantity) || parseFloat(item.quantity);
-        const price = parseFloat(item.unit_price);
-        const lineTotal = qty * price;
-        await item.update({ quantity: qty, line_total: lineTotal.toFixed(2) });
-        newSubtotal += lineTotal;
-      }
-    }
-    const vatAmount = (newSubtotal * parseFloat(row.vat_percentage)) / 100;
-    row.subtotal = newSubtotal.toFixed(2);
-    row.vat_amount = vatAmount.toFixed(2);
-    row.total = (newSubtotal + vatAmount).toFixed(2);
-  }
 
   await row.save();
   return getById(tenantId, id, scope);
@@ -323,8 +322,7 @@ const update = async (tenantId, id, body, scope = {}) => {
 
 const remove = async (tenantId, id, scope = {}) => {
   await getById(tenantId, id, scope);
-  const row = await db.TaxInvoice.findOne({ where: { id, tenant_id: tenantId } });
-  await row.destroy();
+  throw ApiError.conflict('A posted tax invoice cannot be deleted. Cancel it with a credit note instead.');
 };
 
 module.exports = {

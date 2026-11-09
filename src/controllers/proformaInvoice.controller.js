@@ -12,6 +12,12 @@ const previewFromQuotation = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, data);
 });
 
+const checkDuplicate = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const rows = await proformaInvoiceService.findDuplicates(req.tenant.id, req.query.quotationId, req.query.total, scope);
+  return ApiResponse.success(res, rows);
+});
+
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
@@ -75,6 +81,7 @@ const getPdf = asyncHandler(async (req, res) => {
 
 module.exports = {
   previewFromQuotation,
+  checkDuplicate,
   getAll,
   getById,
   create,

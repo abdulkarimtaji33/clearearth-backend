@@ -9,7 +9,18 @@ const { isManagerRole } = require('../utils/leadApproval');
 const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const vendorBillService = require('./vendorBill.service');
 const { nextReferenceNumber } = require('../utils/referenceNumber');
+/** A zero-value PO would create an empty accrual and a permanent AED 0.00 'unpaid' payable. */
+function assertApprovableTotal(items) {
+  const total = (items || []).reduce((sum, it) => {
+    const line = parseFloat(it.total ?? it.line_total);
+    return sum + (Number.isFinite(line) ? line : (parseFloat(it.quantity) || 0) * (parseFloat(it.price) || 0));
+  }, 0);
+  if (!(total > 0.005)) {
+    throw ApiError.badRequest('Cannot approve a purchase order with a zero total — add priced items first');
+  }
+}
 const PURCHASE_QUOTATION_SEED = 653; // old ERP's last purchase quotation was QT/PURC/653/2
 
 const PO_STATUS = {
@@ -246,6 +257,7 @@ const create = async (tenantId, data, scope = {}) => {
   let resolvedStatus;
   if (isBill || hasS) {
     resolvedStatus = PO_STATUS.APPROVED;
+    assertApprovableTotal(items);
   } else {
     resolvedStatus = PO_STATUS.NEW;
   }
@@ -315,23 +327,13 @@ const create = async (tenantId, data, scope = {}) => {
       }
     }
 
-    // GL: Vendor bill entry — Dr Accrued Expenses (2200) / Cr Accounts Payable (2000) if created directly as 'approved'
+    // GL: Dr expense head / Cr Accrued Expenses (2200) if created directly as 'approved'.
+    // The vendor bill later moves the accrual to Accounts Payable.
     if (resolvedStatus === 'approved') {
       try {
         const poTotal = items.reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
         if (poTotal > 0.005) {
-          const accruedId = await jeService.getSystemAccountId(tenantId, '2200');
-          const apId  = await jeService.getSystemAccountId(tenantId, '2000');
-          await jeService.createJournalEntry(tenantId, 1, {
-            entryDate: poDate || new Date().toISOString().slice(0, 10),
-            description: `PO Approved — PO #${newPo.id}`,
-            sourceType: 'purchase_order_approved',
-            sourceId: newPo.id,
-            lines: [
-              { accountId: accruedId, debit: poTotal, credit: 0 },
-              { accountId: apId,      debit: 0,       credit: poTotal },
-            ],
-          }, t);
+          await vendorBillService.postPoAccrual(tenantId, newPo.id, poTotal, poDate || new Date().toISOString().slice(0, 10), t);
         }
       } catch (jeErr) {
         console.warn('[GL] purchase_order_approved (create) journal entry skipped:', jeErr.message);
@@ -447,8 +449,11 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
       }
     }
 
-    // GL: Vendor bill entry — Dr Accrued Expenses (2200) / Cr Accounts Payable (2000) — only when status transitions to 'approved'
+    // GL: Dr expense head / Cr Accrued Expenses (2200) — only when status transitions to 'approved'
     const becomingApproved = prevStatus !== PO_STATUS.APPROVED && nextStatus === PO_STATUS.APPROVED;
+    if (becomingApproved) {
+      assertApprovableTotal(items && Array.isArray(items) ? items : po.items || []);
+    }
 
     if (becomingApproved) {
       try {
@@ -457,18 +462,7 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
         const poTotal = updatedItems.reduce((s, it) => s + (parseFloat(it.total || it.line_total || 0)), 0);
 
         if (poTotal > 0.005) {
-          const accruedId = await jeService.getSystemAccountId(tenantId, '2200');
-          const apId  = await jeService.getSystemAccountId(tenantId, '2000');
-          await jeService.createJournalEntry(tenantId, 1, {
-            entryDate: poDate || po.po_date || new Date().toISOString().slice(0, 10),
-            description: `PO Approved — PO #${po.id}`,
-            sourceType: 'purchase_order_approved',
-            sourceId: po.id,
-            lines: [
-              { accountId: accruedId, debit: poTotal, credit: 0 },
-              { accountId: apId,      debit: 0,       credit: poTotal },
-            ],
-          }, t);
+          await vendorBillService.postPoAccrual(tenantId, po.id, poTotal, poDate || po.po_date || new Date().toISOString().slice(0, 10), t);
         }
       } catch (jeErr) {
         console.warn('[GL] purchase_order_approved journal entry skipped:', jeErr.message);
@@ -648,6 +642,7 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
   const po = await getById(tenantId, poId, scope);
 
   const prevStatus = po.status;
+  assertApprovableTotal(po.items || []);
   await _approveClientQuotation(po, { approvedByUserId: actor.userId, requestedPickupDate });
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;
@@ -661,18 +656,7 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
       const fullPo = await getById(tenantId, poId);
       const poTotal = (fullPo.items || []).reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
       if (poTotal > 0.005) {
-        const accruedId = await jeService.getSystemAccountId(tenantId, '2200');
-        const apId = await jeService.getSystemAccountId(tenantId, '2000');
-        await jeService.createJournalEntry(tenantId, 1, {
-          entryDate: fullPo.po_date || new Date().toISOString().slice(0, 10),
-          description: `PO Approved — PO #${poId}`,
-          sourceType: 'purchase_order_approved',
-          sourceId: poId,
-          lines: [
-            { accountId: accruedId, debit: poTotal, credit: 0 },
-            { accountId: apId, debit: 0, credit: poTotal },
-          ],
-        });
+        await vendorBillService.postPoAccrual(tenantId, poId, poTotal, fullPo.po_date || new Date().toISOString().slice(0, 10));
       }
     } catch (jeErr) {
       console.warn('[GL] purchase_order_approved (approve) journal entry skipped:', jeErr.message);

@@ -71,6 +71,28 @@ async function nextEntryNumber(tenantId, transaction) {
 }
 
 /**
+ * Period lock. Once a tenant has set up at least one fiscal year, nothing can be posted with a date
+ * inside a closed accounting period (or a closed fiscal year). Tenants with no fiscal year yet are
+ * not restricted, so existing flows keep working until fiscal years are configured.
+ */
+async function assertPostingDateOpen(tenantId, entryDate, transaction = null) {
+  const date = String(entryDate instanceof Date ? entryDate.toISOString() : entryDate).slice(0, 10);
+  const hasYears = await db.FiscalYear.count({ where: { tenant_id: tenantId }, transaction });
+  if (!hasYears) return;
+  const period = await db.AccountingPeriod.findOne({
+    where: { tenant_id: tenantId, start_date: { [Op.lte]: date }, end_date: { [Op.gte]: date } },
+    include: [{ model: db.FiscalYear, as: 'fiscalYear', attributes: ['id', 'name', 'status'] }],
+    transaction,
+  });
+  if (!period) return;
+  if (period.status === 'closed' || period.fiscalYear?.status === 'closed') {
+    throw ApiError.badRequest(
+      `The accounting period ${period.name} is closed — entries dated ${date} cannot be posted. Reopen the period or use an open date.`
+    );
+  }
+}
+
+/**
  * Core journal entry creator.
  * @param {number} tenantId
  * @param {number} userId
@@ -105,6 +127,7 @@ async function createJournalEntry(tenantId, userId, data, transaction = null) {
   const t = transaction || (await db.sequelize.transaction());
 
   try {
+    await assertPostingDateOpen(tenantId, entryDate, t);
     const entryNumber = await nextEntryNumber(tenantId, t);
 
     const entry = await db.JournalEntry.create(
@@ -121,6 +144,8 @@ async function createJournalEntry(tenantId, userId, data, transaction = null) {
         paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : null,
         received_from: receivedFrom != null && String(receivedFrom).trim() !== '' ? String(receivedFrom).trim() : null,
         created_by: userId,
+        reverses_entry_id: data.reversesEntryId || null,
+        reversal_reason: data.reversalReason || null,
       },
       { transaction: t }
     );
@@ -259,6 +284,8 @@ const getJournalEntryById = async (tenantId, id) => {
     where: { id, tenant_id: tenantId },
     include: [
       { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+      { model: db.JournalEntry, as: 'reversedByEntry', attributes: ['id', 'entry_number'], required: false },
+      { model: db.JournalEntry, as: 'reversesEntry', attributes: ['id', 'entry_number'], required: false },
       {
         model: db.JournalEntryLine,
         as: 'lines',
@@ -315,16 +342,25 @@ const createManualEntry = async (tenantId, userId, body) => {
   return getJournalEntryById(tenantId, entryId);
 };
 
-const voidJournalEntry = async (tenantId, userId, id) => {
+/**
+ * Reverse a posted entry. The original stays posted (ledgers are append-only); a new entry with
+ * every debit/credit swapped is posted, linked both ways, and the reason is recorded. An entry can
+ * be reversed once, and a reversal entry cannot itself be reversed.
+ */
+const reverseJournalEntry = async (tenantId, userId, id, { reason, reversalDate } = {}) => {
+  const why = reason != null ? String(reason).trim() : '';
+  if (!why) throw ApiError.badRequest('A reason is required to reverse a journal entry');
+
   const entry = await db.JournalEntry.findOne({ where: { id, tenant_id: tenantId }, include: [{ model: db.JournalEntryLine, as: 'lines' }] });
   if (!entry) throw ApiError.notFound('Journal entry not found');
-  if (entry.status === 'voided') throw ApiError.conflict('Entry is already voided');
+  if (entry.reversed_by_id) throw ApiError.conflict('This entry has already been reversed');
+  if (entry.reverses_entry_id) throw ApiError.conflict('A reversal entry cannot be reversed — post a new entry instead');
+  if (entry.status !== 'posted') throw ApiError.conflict('Only posted entries can be reversed');
+
+  const date = reversalDate || new Date().toISOString().slice(0, 10);
 
   const t = await db.sequelize.transaction();
   try {
-    await entry.update({ status: 'voided', voided_at: new Date(), voided_by: userId }, { transaction: t });
-
-    // Create reversing entry
     const reversingLines = entry.lines.map((l) => ({
       accountId: l.account_id,
       debit: parseFloat(l.credit) || 0,
@@ -336,16 +372,18 @@ const voidJournalEntry = async (tenantId, userId, id) => {
       tenantId,
       userId,
       {
-        entryDate: entry.entry_date,
-        description: `VOID: ${entry.description}`,
-        sourceType: entry.source_type,
-        sourceId: entry.source_id,
+        entryDate: date,
+        description: `REVERSAL of ${entry.entry_number}: ${why}`.slice(0, 500),
+        sourceType: 'reversal',
+        sourceId: entry.id,
         lines: reversingLines,
+        reversesEntryId: entry.id,
+        reversalReason: why.slice(0, 500),
       },
       t
     );
 
-    await entry.update({ reversed_by_id: revId }, { transaction: t });
+    await entry.update({ reversed_by_id: revId, reversal_reason: why.slice(0, 500) }, { transaction: t });
     await t.commit();
   } catch (e) {
     await t.rollback();
@@ -355,13 +393,20 @@ const voidJournalEntry = async (tenantId, userId, id) => {
   return getJournalEntryById(tenantId, id);
 };
 
+/** Posted entries are never voided any more — kept only so the old route answers with a clear message. */
+const voidJournalEntry = async () => {
+  throw ApiError.badRequest('Posted journal entries cannot be voided. Use "Reverse entry" and give a reason.');
+};
+
 module.exports = {
   createJournalEntry,
   createOpeningBalanceEntry,
   createManualEntry,
   listJournalEntries,
   getJournalEntryById,
+  reverseJournalEntry,
   voidJournalEntry,
+  assertPostingDateOpen,
   getSystemAccountId,
   clearAccountCache,
 };

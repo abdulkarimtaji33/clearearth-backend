@@ -15,6 +15,20 @@ const PAYMENT_METHOD_DEFAULT_ACCOUNT_CODE = {
   Other: '1000',
 };
 
+const CASH_BANK_SUB_TYPES = ['cash', 'bank'];
+
+/** Cash/bank = the default 1000 account, sub_type cash/bank, or nested under such an account. */
+async function isCashOrBank(tenantId, account) {
+  let cur = account;
+  for (let depth = 0; cur && depth < 20; depth += 1) {
+    if (CASH_BANK_SUB_TYPES.includes(cur.sub_type) || String(cur.code) === '1000') return true;
+    cur = cur.parent_id
+      ? await db.ChartOfAccounts.findOne({ where: { id: cur.parent_id, tenant_id: tenantId } })
+      : null;
+  }
+  return false;
+}
+
 function defaultAccountCodeForMethod(paymentMethod) {
   const key = paymentMethod != null ? String(paymentMethod).trim() : '';
   return PAYMENT_METHOD_DEFAULT_ACCOUNT_CODE[key] || '1000';
@@ -35,7 +49,9 @@ async function resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId
         type: 'asset',
       },
     });
-    if (!acc) throw ApiError.badRequest('Invalid payment account — choose an active asset account');
+    if (!acc || !(await isCashOrBank(tenantId, acc))) {
+      throw ApiError.badRequest('Invalid payment account — choose an active cash or bank account');
+    }
     return {
       accountId: acc.id,
       accountCode: acc.code,
@@ -83,6 +99,18 @@ async function resolveExpenseAccount(tenantId, { category, expenseAccountId } = 
     };
   }
 
+  // The category's own default account wins; only fall back to the code map if it has none.
+  const categoryRow = category
+    ? await db.ExpenseCategory.findOne({ where: { tenant_id: tenantId, value: category }, attributes: ['default_account_id'] })
+    : null;
+  if (categoryRow?.default_account_id) {
+    const acc = await db.ChartOfAccounts.findOne({
+      where: { id: categoryRow.default_account_id, tenant_id: tenantId, is_group: false, is_active: true },
+      attributes: ['id', 'code', 'name'],
+    });
+    if (acc) return { accountId: acc.id, accountCode: acc.code, accountName: acc.name, isDefault: true };
+  }
+
   const { EXPENSE_CATEGORY_TO_CODE } = require('../services/chartOfAccounts.service');
   // 5100 is now a non-postable group account — fall back to its Miscellaneous G&A child.
   const code = EXPENSE_CATEGORY_TO_CODE[category] || '5140';
@@ -104,4 +132,5 @@ module.exports = {
   defaultAccountCodeForMethod,
   resolvePaymentAccount,
   resolveExpenseAccount,
+  isCashOrBank,
 };

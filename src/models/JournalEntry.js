@@ -17,6 +17,8 @@ module.exports = (sequelize, DataTypes) => {
       auto_reverse: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       reverse_date: { type: DataTypes.DATEONLY, allowNull: true },
       reversed_by_id: { type: DataTypes.INTEGER, allowNull: true },
+      reverses_entry_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'Set on a reversal entry: the original entry it reverses' },
+      reversal_reason: { type: DataTypes.STRING(500), allowNull: true },
       voided_at: { type: DataTypes.DATE, allowNull: true },
       voided_by: { type: DataTypes.INTEGER, allowNull: true },
       paid_to: { type: DataTypes.STRING(255), allowNull: true },
@@ -40,6 +42,8 @@ module.exports = (sequelize, DataTypes) => {
     JournalEntry.belongsTo(models.Tenant, { foreignKey: 'tenant_id' });
     JournalEntry.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
     JournalEntry.hasMany(models.JournalEntryLine, { foreignKey: 'journal_entry_id', as: 'lines' });
+    JournalEntry.belongsTo(models.JournalEntry, { foreignKey: 'reversed_by_id', as: 'reversedByEntry', constraints: false });
+    JournalEntry.belongsTo(models.JournalEntry, { foreignKey: 'reverses_entry_id', as: 'reversesEntry', constraints: false });
   };
 
   return JournalEntry;

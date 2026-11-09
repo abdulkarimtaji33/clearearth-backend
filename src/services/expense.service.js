@@ -83,8 +83,11 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
     throw ApiError.conflict('Ledger entry already exists for this line');
   }
 
-  // Debit the expense head the approver selects (e.g. Fuel Expense, Vehicle Maintenance)
-  // instead of always posting to the Cost of Services roll-up account.
+  // Debit the expense head the approver selects (e.g. 5410 Fuel, 5420 Vehicle Maintenance).
+  // There is no silent fallback to the 5000 Cost of Services roll-up account.
+  if (expenseAccountId == null || expenseAccountId === '') {
+    throw ApiError.badRequest('Select the expense account (expense head) to debit for this work order expense');
+  }
   const expenseAccount = await resolveExpenseAccount(tenantId, { category: WO_EXPENSE_CATEGORY, expenseAccountId });
 
   await db.sequelize.transaction(async (t) => {
@@ -118,7 +121,7 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
       { transaction: t }
     );
 
-    // GL: Dr selected expense account (defaults to Cost of Services) / Cr Accrued Expenses (2200)
+    // GL: Dr selected expense account / Cr Accrued Expenses (2200)
     try {
       const accruId = await jeService.getSystemAccountId(tenantId, '2200');
       await jeService.createJournalEntry(tenantId, userId, {

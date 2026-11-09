@@ -32,7 +32,7 @@ function daysOpen(invoiceDateStr) {
 }
 
 const listReceivables = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dateFrom, dateTo, paymentStatus, companyId } = filters;
+  const { offset, limit, search, dateFrom, dateTo, paymentStatus, companyId, companyIds } = filters;
 
   const where = {
     tenant_id: tenantId,
@@ -44,7 +44,10 @@ const listReceivables = async (tenantId, filters = {}) => {
   }
 
   const dealWhere = {};
-  if (companyId) dealWhere.company_id = companyId;
+  // companyIds: several company rows that are the same customer (duplicate names), comma-separated
+  const idList = String(companyIds || '').split(',').map((x) => parseInt(x, 10)).filter(Number.isFinite);
+  if (idList.length) dealWhere.company_id = { [Op.in]: idList };
+  else if (companyId) dealWhere.company_id = companyId;
   if (search) {
     const s = `%${String(search).trim()}%`;
     dealWhere[Op.or] = [
@@ -213,6 +216,9 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
  */
 const receivePayment = async (tenantId, body, userId = null) => {
   const { companyId, paymentDate, paymentMethod, paymentAccountId, referenceNo, receivedFrom, allowUnapplied } = body;
+  // Duplicate company rows for one customer are merged by the UI: every id is a valid owner of the invoices.
+  const ownerIds = [...new Set([companyId, ...(Array.isArray(body.companyIds) ? body.companyIds : [])]
+    .map((x) => parseInt(x, 10)).filter(Number.isFinite))];
   const allocations = Array.isArray(body.allocations) ? body.allocations : [];
 
   if (!companyId) throw ApiError.badRequest('companyId is required');
@@ -244,7 +250,7 @@ const receivePayment = async (tenantId, body, userId = null) => {
                 model: db.Deal,
                 as: 'deal',
                 required: true,
-                where: { company_id: companyId },
+                where: { company_id: { [Op.in]: ownerIds } },
                 include: [{ model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false }],
               },
             ],

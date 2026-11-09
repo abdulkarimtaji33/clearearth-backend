@@ -9,6 +9,7 @@ router.get('/',                    authorize('accounting.read', 'deals.read'),  
 router.post('/',                   authorize('accounting.update', 'deals.update'), journalController.createManualEntry);
 router.post('/opening-balances',   authorize('accounting.update', 'deals.update'), journalController.postOpeningBalances);
 router.get('/:id',                 authorize('accounting.read', 'deals.read'),   journalController.getEntry);
+router.post('/:id/reverse',        authorize('accounting.update', 'deals.update'), journalController.reverseEntry);
 router.post('/:id/void',           authorize('accounting.update', 'deals.update'), journalController.voidEntry);
 
 module.exports = router;

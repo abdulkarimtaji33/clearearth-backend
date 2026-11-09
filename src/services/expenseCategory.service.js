@@ -58,16 +58,43 @@ const resolveCategoryValue = async (tenantId, category) => {
   return row.value;
 };
 
+/** Account by code for a tenant, only if it is a postable (non-group) expense account. */
+const postableExpenseAccountByCode = async (tenantId, code) => db.ChartOfAccounts.findOne({
+  where: { tenant_id: tenantId, code, type: 'expense', is_group: false, is_active: true },
+  attributes: ['id'],
+});
+
+/** Validates an explicit default account: must be an active, postable expense account of this tenant. */
+const assertDefaultAccount = async (tenantId, accountId) => {
+  const acc = await db.ChartOfAccounts.findOne({
+    where: { id: accountId, tenant_id: tenantId, type: 'expense', is_group: false, is_active: true },
+    attributes: ['id'],
+  });
+  if (!acc) throw ApiError.badRequest('Default account must be an active, postable expense account (not a group)');
+  return acc.id;
+};
+
+/** Default account for a category value from the built-in map; Miscellaneous G&A for anything else. */
+const mappedDefaultAccountId = async (tenantId, value) => {
+  const { EXPENSE_CATEGORY_TO_CODE } = require('./chartOfAccounts.service');
+  const acc = await postableExpenseAccountByCode(tenantId, EXPENSE_CATEGORY_TO_CODE[value] || '5140');
+  return acc ? acc.id : null;
+};
+
 const create = async (tenantId, data) => {
   const name = data.name?.trim();
   if (!name) throw ApiError.badRequest('Name is required');
   const value = data.value?.trim() ? String(data.value).trim().toLowerCase() : slugifyCategory(name);
   const existing = await db.ExpenseCategory.findOne({ where: { tenant_id: tenantId, value } });
   if (existing) throw ApiError.conflict('An expense category with this name already exists');
+  const defaultAccountId = data.defaultAccountId
+    ? await assertDefaultAccount(tenantId, data.defaultAccountId)
+    : await mappedDefaultAccountId(tenantId, value);
   return db.ExpenseCategory.create({
     tenant_id: tenantId,
     name,
     value,
+    default_account_id: defaultAccountId,
     display_order: data.displayOrder != null ? parseInt(data.displayOrder, 10) : 0,
     is_active: data.isActive !== false,
   });
@@ -82,6 +109,9 @@ const update = async (tenantId, id, data) => {
   }
   if (data.displayOrder !== undefined) row.display_order = parseInt(data.displayOrder, 10) || 0;
   if (data.isActive !== undefined) row.is_active = Boolean(data.isActive);
+  if (data.defaultAccountId !== undefined) {
+    row.default_account_id = data.defaultAccountId ? await assertDefaultAccount(tenantId, data.defaultAccountId) : null;
+  }
   await row.save();
   return row.reload();
 };
@@ -107,6 +137,7 @@ const seedDefaultsForTenant = async (tenantId) => {
         value: cat.value,
         display_order: cat.displayOrder,
         is_active: true,
+        default_account_id: await mappedDefaultAccountId(tenantId, cat.value),
       });
     }
   }

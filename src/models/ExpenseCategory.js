@@ -32,6 +32,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      default_account_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Postable expense account debited by default for this category',
+      },
     },
     {
       tableName: 'expense_categories',
@@ -47,6 +52,7 @@ module.exports = (sequelize, DataTypes) => {
 
   ExpenseCategory.associate = (models) => {
     ExpenseCategory.belongsTo(models.Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
+    ExpenseCategory.belongsTo(models.ChartOfAccounts, { foreignKey: 'default_account_id', as: 'defaultAccount' });
   };
 
   return ExpenseCategory;

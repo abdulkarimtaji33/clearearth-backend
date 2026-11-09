@@ -51,6 +51,8 @@ module.exports = (sequelize, DataTypes) => {
         comment: 'unpaid | partial | paid',
       },
       paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true },
+      bill_flow: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, comment: 'true = accrued at approval and settled via vendor bills; false = legacy (AP credited at approval)' },
+      expense_account_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'Expense head debited when the PO is approved (defaults to 5000 Cost of Services)' },
       due_date: { type: DataTypes.DATEONLY, allowNull: true },
       work_order_id: {
         type: DataTypes.INTEGER,

@@ -12,7 +12,7 @@ function sendPdf(res, pdfBuffer, fname) {
 }
 
 const list = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dateFrom, dateTo, paymentStatus, companyId } = req.query;
+  const { page, pageSize, search, dateFrom, dateTo, paymentStatus, companyId, companyIds } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await receivablesService.listReceivables(req.tenant.id, {
     ...pagination,
@@ -21,6 +21,7 @@ const list = asyncHandler(async (req, res) => {
     dateTo,
     paymentStatus,
     companyId,
+    companyIds,
   });
   return ApiResponse.paginated(res, result.receivables, {
     page: pagination.page,

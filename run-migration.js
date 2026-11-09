@@ -3156,6 +3156,104 @@ async function runMigration() {
       console.warn('  Chart of accounts sub-account hierarchy backfill:', e.message);
     }
 
+    // Each expense category gets its own default GL account (previously a hardcoded code map).
+    // Only the new, empty column is filled: existing categories, expenses and journals are untouched.
+    console.log('Adding expense_categories.default_account_id column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE expense_categories ADD COLUMN default_account_id INT NULL COMMENT 'Postable expense account debited by default for this category'`);
+      console.log('  Added expense_categories.default_account_id');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  expense_categories.default_account_id already exists, skipping');
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE expense_categories ADD CONSTRAINT fk_expense_categories_account FOREIGN KEY (default_account_id) REFERENCES chart_of_accounts (id)`);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  fk_expense_categories_account:', e.message);
+    }
+    try {
+      const { EXPENSE_CATEGORY_TO_CODE } = require('./src/services/chartOfAccounts.service');
+      const fill = async (value, code) => {
+        await db.sequelize.query(
+          `UPDATE expense_categories ec
+             JOIN chart_of_accounts c ON c.tenant_id = ec.tenant_id AND c.code = ? AND c.is_group = 0
+             SET ec.default_account_id = c.id
+           WHERE ec.default_account_id IS NULL ${value ? 'AND ec.value = ?' : ''}`,
+          { replacements: value ? [code, value] : [code] }
+        );
+      };
+      for (const [value, code] of Object.entries(EXPENSE_CATEGORY_TO_CODE)) await fill(value, code);
+      await fill(null, '5140'); // any other (custom) category -> Miscellaneous G&A
+      console.log('  expense_categories.default_account_id backfilled where empty');
+    } catch (e) {
+      console.warn('  expense_categories default account backfill:', e.message);
+    }
+
+    // Vendor bills: PO approval accrues (Dr expense / Cr 2200); the supplier's invoice is recorded as a
+    // vendor bill (Dr 2200 + Dr Input VAT / Cr 2000); payment clears AP. purchase_orders.bill_flow
+    // defaults to 0 so every PO approved before this change keeps its existing behaviour untouched.
+    console.log('Adding purchase_orders.bill_flow / expense_account_id columns...');
+    for (const [col, ddl] of [
+      ['bill_flow', `ALTER TABLE purchase_orders ADD COLUMN bill_flow TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = accrued at approval and settled via vendor bills; 0 = legacy (AP credited at approval)'`],
+      ['expense_account_id', `ALTER TABLE purchase_orders ADD COLUMN expense_account_id INT NULL COMMENT 'Expense head debited when the PO is approved'`],
+    ]) {
+      try {
+        await db.sequelize.query(ddl);
+        console.log(`  Added purchase_orders.${col}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+        console.log(`  purchase_orders.${col} already exists, skipping`);
+      }
+    }
+
+    console.log('Creating vendor_bills table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS vendor_bills (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        bill_number VARCHAR(30) NOT NULL,
+        purchase_order_id INT NOT NULL,
+        supplier_id INT NULL,
+        company_id INT NULL,
+        supplier_invoice_no VARCHAR(100) NOT NULL,
+        supplier_trn VARCHAR(50) NULL,
+        bill_date DATE NOT NULL,
+        due_date DATE NULL,
+        subtotal DECIMAL(15,2) NOT NULL,
+        vat_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total DECIMAL(15,2) NOT NULL,
+        paid_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'open',
+        attachment_path VARCHAR(500) NULL,
+        notes TEXT NULL,
+        journal_entry_id INT NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_vendor_bills_number (tenant_id, bill_number),
+        INDEX idx_vendor_bills_tenant (tenant_id),
+        INDEX idx_vendor_bills_po (purchase_order_id),
+        INDEX idx_vendor_bills_status (status),
+        CONSTRAINT fk_vendor_bills_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+        CONSTRAINT fk_vendor_bills_po FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Journal reversals: posted entries are reversed (with a reason) instead of voided.
+    console.log('Adding journal_entries.reverses_entry_id / reversal_reason columns...');
+    for (const [col, ddl] of [
+      ['reverses_entry_id', `ALTER TABLE journal_entries ADD COLUMN reverses_entry_id INT NULL COMMENT 'On a reversal entry: the original entry it reverses'`],
+      ['reversal_reason', `ALTER TABLE journal_entries ADD COLUMN reversal_reason VARCHAR(500) NULL`],
+    ]) {
+      try {
+        await db.sequelize.query(ddl);
+        console.log(`  Added journal_entries.${col}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+        console.log(`  journal_entries.${col} already exists, skipping`);
+      }
+    }
+
     console.log('Adding payment_transactions.unapplied_amount column (advance/unapplied customer receipts)...');
     try {
       await db.sequelize.query(`ALTER TABLE payment_transactions ADD COLUMN unapplied_amount DECIMAL(15,2) NOT NULL DEFAULT 0`);

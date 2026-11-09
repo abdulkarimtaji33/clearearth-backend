@@ -38,8 +38,12 @@ const postOpeningBalances = asyncHandler(async (req, res) => {
 });
 
 const voidEntry = asyncHandler(async (req, res) => {
-  const entry = await jeService.voidJournalEntry(req.tenant.id, req.user.id, req.params.id);
-  return ApiResponse.success(res, entry, 'Journal entry voided');
+  await jeService.voidJournalEntry();
 });
 
-module.exports = { listEntries, getEntry, createManualEntry, postOpeningBalances, voidEntry };
+const reverseEntry = asyncHandler(async (req, res) => {
+  const entry = await jeService.reverseJournalEntry(req.tenant.id, req.user.id, req.params.id, req.body || {});
+  return ApiResponse.success(res, entry, 'Journal entry reversed');
+});
+
+module.exports = { listEntries, getEntry, createManualEntry, postOpeningBalances, voidEntry, reverseEntry };

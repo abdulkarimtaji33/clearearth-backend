@@ -21,6 +21,15 @@ async function createFiscalYear(tenantId, userId, { name, startDate, endDate }) 
   if (!name || !startDate || !endDate) throw ApiError.badRequest('name, startDate, endDate are required');
   if (startDate >= endDate) throw ApiError.badRequest('startDate must be before endDate');
 
+  const overlap = await db.FiscalYear.findOne({
+    where: {
+      tenant_id: tenantId,
+      start_date: { [db.Sequelize.Op.lte]: endDate },
+      end_date: { [db.Sequelize.Op.gte]: startDate },
+    },
+  });
+  if (overlap) throw ApiError.conflict(`These dates overlap the existing fiscal year ${overlap.name}`);
+
   const t = await db.sequelize.transaction();
   try {
     const fy = await db.FiscalYear.create(
@@ -28,31 +37,30 @@ async function createFiscalYear(tenantId, userId, { name, startDate, endDate }) 
       { transaction: t }
     );
 
-    // Auto-create monthly periods
-    const start = new Date(`${startDate}T12:00:00`);
-    let current = new Date(start);
+    // Auto-create monthly periods (calendar months; first/last are clipped to the year's dates)
+    let year = parseInt(startDate.slice(0, 4), 10);
+    let month = parseInt(startDate.slice(5, 7), 10) - 1;
+    const pad = (n) => String(n).padStart(2, '0');
     let periodNum = 1;
-    while (toDateStr(current) <= endDate) {
-      const pStart = toDateStr(current);
-      const pEnd = toDateStr(lastDayOfMonth(current.getFullYear(), current.getMonth()));
-      const monthName = `${MONTHS[current.getMonth()]} ${current.getFullYear()}`;
-
+    for (;;) {
+      const monthStart = `${year}-${pad(month + 1)}-01`;
+      if (monthStart > endDate) break;
+      const monthEnd = `${year}-${pad(month + 1)}-${pad(lastDayOfMonth(year, month).getDate())}`;
       await db.AccountingPeriod.create(
         {
           tenant_id: tenantId,
           fiscal_year_id: fy.id,
           period_number: periodNum,
-          name: monthName,
-          start_date: pStart,
-          end_date: pEnd > endDate ? endDate : pEnd,
+          name: `${MONTHS[month]} ${year}`,
+          start_date: monthStart < startDate ? startDate : monthStart,
+          end_date: monthEnd > endDate ? endDate : monthEnd,
           status: 'open',
         },
         { transaction: t }
       );
-
-      periodNum++;
-      current = addMonths(current, 1);
-      current.setDate(1);
+      periodNum += 1;
+      month += 1;
+      if (month > 11) { month = 0; year += 1; }
       if (periodNum > 24) break; // safety cap
     }
 
@@ -112,6 +120,8 @@ const reopenPeriod = async (tenantId, periodId) => {
   const period = await db.AccountingPeriod.findOne({ where: { id: periodId, tenant_id: tenantId } });
   if (!period) throw ApiError.notFound('Period not found');
   await period.update({ status: 'open', closed_by: null, closed_at: null });
+  // A period inside a closed fiscal year is only usable if the year is open again.
+  await db.FiscalYear.update({ status: 'open' }, { where: { id: period.fiscal_year_id, tenant_id: tenantId } });
   return period;
 };
 

@@ -48,6 +48,7 @@ const listPayables = async (tenantId, filters = {}) => {
     tenant_id: tenantId,
     status: 'approved',
     payment_status: { [Op.in]: ['unpaid', 'partial'] },
+    bill_flow: false, // bill-flow POs are settled through vendor bills
   };
   applyDateOnlyColumnFilter(where, 'po_date', dateFrom, dateTo);
   if (paymentStatus && PAYMENT_STATUSES.includes(String(paymentStatus).toLowerCase())) {
@@ -55,6 +56,13 @@ const listPayables = async (tenantId, filters = {}) => {
   }
   if (supplierId) where.supplier_id = supplierId;
   if (companyId) where.company_id = companyId;
+
+  // A purchase order with no value owes nothing, so it is never a payable.
+  where[Op.and] = [
+    db.sequelize.literal(
+      '(SELECT COALESCE(SUM(CAST(poi.total AS DECIMAL(15,2))), 0) FROM purchase_order_items poi WHERE poi.purchase_order_id = `PurchaseOrder`.`id`) > 0.005'
+    ),
+  ];
 
   if (search) {
     const s = `%${String(search).trim()}%`;

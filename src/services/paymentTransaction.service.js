@@ -6,7 +6,7 @@ const ApiError = require('../utils/apiError');
 
 // 'receivable_advance' represents an unapplied/advance customer receipt — a receipt recorded
 // against a customer (source_id = companyId) that is not yet tied to a specific tax invoice.
-const SOURCE_TYPES = ['receivable', 'payable', 'expense', 'receivable_advance'];
+const SOURCE_TYPES = ['receivable', 'payable', 'expense', 'receivable_advance', 'vendor_bill'];
 const RECEIPT_NUMBERED_TYPES = ['receivable', 'receivable_advance'];
 
 async function nextReceiptNumber(tenantId, transaction) {
