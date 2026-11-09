@@ -64,6 +64,13 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
   if (!expenseDate) {
     throw ApiError.badRequest('expenseDate is required');
   }
+  // Debit the expense head the approver selects (e.g. 5410 Fuel, 5420 Vehicle Maintenance).
+  // There is no silent fallback to the 5000 Cost of Services roll-up account.
+  if (expenseAccountId == null || expenseAccountId === '') {
+    throw ApiError.badRequest('Select the expense account (expense head) to debit for this work order expense');
+  }
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, expenseDate);
 
   const te = await loadTaskExpenseInWorkOrder(tenantId, workOrderId, taskExpenseId);
 
@@ -83,11 +90,6 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
     throw ApiError.conflict('Ledger entry already exists for this line');
   }
 
-  // Debit the expense head the approver selects (e.g. 5410 Fuel, 5420 Vehicle Maintenance).
-  // There is no silent fallback to the 5000 Cost of Services roll-up account.
-  if (expenseAccountId == null || expenseAccountId === '') {
-    throw ApiError.badRequest('Select the expense account (expense head) to debit for this work order expense');
-  }
   const expenseAccount = await resolveExpenseAccount(tenantId, { category: WO_EXPENSE_CATEGORY, expenseAccountId });
 
   await db.sequelize.transaction(async (t) => {
@@ -171,6 +173,9 @@ const createManualExpense = async (tenantId, userId, body) => {
   if (!Number.isFinite(paid) || paid < 0) throw ApiError.badRequest('paidAmount must be a valid number');
   if (paid > amt) paid = amt;
 
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, expenseDate);
+
   const ps = deriveExpensePaymentStatus(amt, paid);
   const effectivePaid = ps === 'unpaid' ? null : (ps === 'paid' ? amt : paid);
 
@@ -249,6 +254,8 @@ const updateExpensePayment = async (tenantId, expenseId, body, userId = null) =>
 
   const ps = deriveExpensePaymentStatus(total, paid);
   const paidAt = body.paidAt != null && String(body.paidAt).trim() !== '' ? String(body.paidAt).trim().slice(0, 10) : exp.paid_at;
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, paidAt || new Date().toISOString().slice(0, 10));
 
   const prevPaid = parseFloat(exp.paid_amount) || 0;
   const delta    = Math.max(0, paid - prevPaid);

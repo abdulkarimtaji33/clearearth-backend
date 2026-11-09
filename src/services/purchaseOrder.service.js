@@ -234,10 +234,22 @@ const _validateParty = async (tenantId, companyId, supplierId) => {
   return { hasC, hasS };
 };
 
+/** Expense head debited when the PO is approved: an active, postable expense account (never a group). */
+const _validateExpenseHead = async (tenantId, accountId) => {
+  if (accountId == null || accountId === '') return null;
+  const acc = await db.ChartOfAccounts.findOne({
+    where: { id: accountId, tenant_id: tenantId, type: 'expense', is_group: false, is_active: true },
+    attributes: ['id'],
+  });
+  if (!acc) throw ApiError.badRequest('Invalid expense account — choose an active expense account (not a group)');
+  return acc.id;
+};
+
 const create = async (tenantId, data, scope = {}) => {
-  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, workOrderId, documentType } = data;
+  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, workOrderId, documentType, expenseAccountId } = data;
 
   await _validateParty(tenantId, companyId, supplierId);
+  const expenseHeadId = await _validateExpenseHead(tenantId, expenseAccountId);
   const hasC = companyId != null && companyId !== '';
   const hasS = supplierId != null && supplierId !== '';
 
@@ -289,6 +301,7 @@ const create = async (tenantId, data, scope = {}) => {
         expected_delivery: expectedDelivery || null,
         status: resolvedStatus,
         due_date: dueDate != null && dueDate !== '' ? dueDate : null,
+        expense_account_id: expenseHeadId,
         work_order_id: workOrderId || null,
         document_type: documentType === 'bill' ? 'bill' : 'quotation',
         created_by: scope.scopeUserId || null,
@@ -348,7 +361,10 @@ const create = async (tenantId, data, scope = {}) => {
 
 const update = async (tenantId, poId, data, actor = null, scope = {}) => {
   const po = await getById(tenantId, poId, scope);
-  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate } = data;
+  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, expenseAccountId } = data;
+  const nextExpenseHeadId = expenseAccountId !== undefined
+    ? await _validateExpenseHead(tenantId, expenseAccountId)
+    : po.expense_account_id;
 
   let nextCompanyId = po.company_id;
   let nextSupplierId = po.supplier_id;
@@ -407,6 +423,7 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
         expected_delivery: expectedDelivery !== undefined ? expectedDelivery : po.expected_delivery,
         status: nextStatus,
         due_date: dueDate !== undefined ? (dueDate || null) : po.due_date,
+        expense_account_id: nextExpenseHeadId || null,
       },
       { transaction: t }
     );

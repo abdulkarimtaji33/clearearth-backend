@@ -123,6 +123,8 @@ const recordPayment = async (tenantId, poId, body, userId = null) => {
     ],
   });
   if (!po) throw ApiError.notFound('Payable purchase order not found');
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, body.paymentDate || new Date().toISOString().slice(0, 10));
 
   const add = body.amount != null && body.amount !== '' ? parseFloat(body.amount) : NaN;
   if (!Number.isFinite(add) || add <= 0) throw ApiError.badRequest('amount must be a positive number');

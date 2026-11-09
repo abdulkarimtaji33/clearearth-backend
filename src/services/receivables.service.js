@@ -101,6 +101,8 @@ const listReceivables = async (tenantId, filters = {}) => {
 };
 
 const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, body.paymentDate || new Date().toISOString().slice(0, 10));
   const row = await db.TaxInvoice.findOne({
     where: { id: taxInvoiceId, tenant_id: tenantId },
     include: [
@@ -216,6 +218,8 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
  */
 const receivePayment = async (tenantId, body, userId = null) => {
   const { companyId, paymentDate, paymentMethod, paymentAccountId, referenceNo, receivedFrom, allowUnapplied } = body;
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, paymentDate || new Date().toISOString().slice(0, 10));
   // Duplicate company rows for one customer are merged by the UI: every id is a valid owner of the invoices.
   const ownerIds = [...new Set([companyId, ...(Array.isArray(body.companyIds) ? body.companyIds : [])]
     .map((x) => parseInt(x, 10)).filter(Number.isFinite))];
@@ -417,6 +421,8 @@ const receivePayment = async (tenantId, body, userId = null) => {
  * `unapplied_amount` on the original advance PaymentTransaction.
  */
 const applyUnappliedCredit = async (tenantId, userId, paymentTransactionId, allocations) => {
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, new Date().toISOString().slice(0, 10));
   if (!Array.isArray(allocations) || allocations.length === 0) {
     throw ApiError.badRequest('At least one invoice allocation is required');
   }

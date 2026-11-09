@@ -13,6 +13,7 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
+const { isCashOrBank } = require('../utils/paymentAccount');
 
 const EPS = 0.005;
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
@@ -241,7 +242,9 @@ const payBills = async (tenantId, userId, body = {}) => {
   const bankAcc = await db.ChartOfAccounts.findOne({
     where: { id: paymentAccountId, tenant_id: tenantId, type: 'asset', is_group: false, is_active: true },
   });
-  if (!bankAcc) throw ApiError.badRequest('Invalid payment account — choose an active, non-group asset account');
+  if (!bankAcc || !(await isCashOrBank(tenantId, bankAcc))) {
+    throw ApiError.badRequest('Invalid payment account — choose an active cash or bank account');
+  }
 
   const ids = allocations.map((a) => a.billId);
   if (new Set(ids).size !== ids.length) throw ApiError.badRequest('A bill can only appear once in a payment');

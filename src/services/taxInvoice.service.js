@@ -194,6 +194,8 @@ const create = async (tenantId, userId, body, scope = {}) => {
   if (dup) throw ApiError.conflict('A tax invoice already exists for this proforma invoice');
 
   const effectiveInvoiceDate = invoiceDate || new Date().toISOString().slice(0, 10);
+  // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
+  await jeService.assertPostingDateOpen(tenantId, effectiveInvoiceDate);
   let effectiveDueDate;
   if (dueDate) {
     assertDueNotBeforeInvoice(effectiveInvoiceDate, dueDate);
