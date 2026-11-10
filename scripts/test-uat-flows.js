@@ -29,6 +29,15 @@ const rejects = async (fn, re, label) => {
   const group = await acct('5400');
   await rejects(() => resolveExpenseAccount(tid, { expenseAccountId: group.id }), /Invalid expense account/, 'group account 5400 is rejected as an expense account');
 
+  // Category -> account group: Fuel may use fuel-group accounts only; "Other" stays free
+  const salaries = await acct('5700');
+  const vehicle = await acct('5420');
+  await rejects(() => resolveExpenseAccount(tid, { category: 'fuel', expenseAccountId: salaries.id, restrictToCategory: true }), /can only be posted to/, 'Fuel category cannot use Salaries & Wages');
+  const fuelOk = await resolveExpenseAccount(tid, { category: 'fuel', expenseAccountId: vehicle.id, restrictToCategory: true });
+  ok(fuelOk.accountCode === '5420', 'Fuel category may use another account in the Fuel & Transport group (5420)');
+  const otherAny = await resolveExpenseAccount(tid, { category: 'other', expenseAccountId: salaries.id, restrictToCategory: true });
+  ok(otherAny.accountCode === '5700', 'Other category can still use any expense account');
+
   // Item 2: work order expense needs an explicit head
   await rejects(() => expenseService.approveTaskExpense(tid, 1, 1, 1, { expenseDate: today }), /Select the expense account/, 'WO expense approval without an expense head is rejected');
 

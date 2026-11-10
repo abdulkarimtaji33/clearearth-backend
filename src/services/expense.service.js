@@ -180,7 +180,7 @@ const createManualExpense = async (tenantId, userId, body) => {
   const effectivePaid = ps === 'unpaid' ? null : (ps === 'paid' ? amt : paid);
 
   // Validate the chosen expense account (if any) before opening the transaction
-  const expenseAccount = await resolveExpenseAccount(tenantId, { category: cat, expenseAccountId });
+  const expenseAccount = await resolveExpenseAccount(tenantId, { category: cat, expenseAccountId, restrictToCategory: true });
 
   const t = await db.sequelize.transaction();
   let row;
