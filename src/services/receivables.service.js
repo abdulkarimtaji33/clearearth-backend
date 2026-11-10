@@ -18,7 +18,7 @@ function parseNum(v) {
 }
 
 function balanceDue(row) {
-  const total = parseNum(row.total);
+  const total = parseNum(row.total) - parseNum(row.credited_amount);
   const paid = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
   return Math.max(0, total - paid);
 }
@@ -126,7 +126,7 @@ const recordPayment = async (tenantId, taxInvoiceId, body, userId = null) => {
   const add = body.amount != null && body.amount !== '' ? parseFloat(body.amount) : NaN;
   if (!Number.isFinite(add) || add <= 0) throw ApiError.badRequest('amount must be a positive number');
 
-  const total = parseNum(row.total);
+  const total = parseNum(row.total) - parseNum(row.credited_amount);
   const cur = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
   const next = Math.min(total, cur + add);
 
@@ -277,7 +277,7 @@ const receivePayment = async (tenantId, body, userId = null) => {
     if (!Number.isFinite(amt) || amt <= 0) continue;
     const row = rowById[invId];
     if (!row) throw ApiError.badRequest(`Invoice ${invId} not found`);
-    const total = parseNum(row.total);
+    const total = parseNum(row.total) - parseNum(row.credited_amount);
     const cur = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
     const bal = Math.max(0, total - cur);
     if (amt - bal > 0.01) {
@@ -472,7 +472,7 @@ const applyUnappliedCredit = async (tenantId, userId, paymentTransactionId, allo
     if (!Number.isFinite(amt) || amt <= 0) continue;
     const row = rowById[invId];
     if (!row) throw ApiError.badRequest(`Invoice ${invId} not found`);
-    const total = parseNum(row.total);
+    const total = parseNum(row.total) - parseNum(row.credited_amount);
     const cur = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
     const bal = Math.max(0, total - cur);
     if (amt - bal > 0.01) {

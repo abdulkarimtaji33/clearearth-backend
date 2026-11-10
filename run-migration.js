@@ -3239,6 +3239,41 @@ async function runMigration() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Credit notes: a posted tax invoice is corrected by a credit note, never edited or deleted.
+    console.log('Adding tax_invoices.credited_amount column...');
+    try {
+      await db.sequelize.query(`ALTER TABLE tax_invoices ADD COLUMN credited_amount DECIMAL(15,2) NOT NULL DEFAULT 0 COMMENT 'Total of credit notes issued against this invoice'`);
+      console.log('  Added tax_invoices.credited_amount');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  tax_invoices.credited_amount already exists, skipping');
+    }
+
+    console.log('Creating credit_notes table...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS credit_notes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        credit_note_number VARCHAR(30) NOT NULL,
+        tax_invoice_id INT NOT NULL,
+        credit_date DATE NOT NULL,
+        reason VARCHAR(100) NOT NULL,
+        notes TEXT NULL,
+        subtotal DECIMAL(15,2) NOT NULL,
+        vat_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total DECIMAL(15,2) NOT NULL,
+        journal_entry_id INT NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_credit_notes_number (tenant_id, credit_note_number),
+        INDEX idx_credit_notes_tenant (tenant_id),
+        INDEX idx_credit_notes_invoice (tax_invoice_id),
+        CONSTRAINT fk_credit_notes_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+        CONSTRAINT fk_credit_notes_invoice FOREIGN KEY (tax_invoice_id) REFERENCES tax_invoices(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // Journal reversals: posted entries are reversed (with a reason) instead of voided.
     console.log('Adding journal_entries.reverses_entry_id / reversal_reason columns...');
     for (const [col, ddl] of [

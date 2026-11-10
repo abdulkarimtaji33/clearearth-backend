@@ -22,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
       vat_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       total: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true, defaultValue: null, comment: 'Amount received so far (null = not tracked)' },
+      credited_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0, comment: 'Total of credit notes issued against this invoice' },
       payment_status: {
         type: DataTypes.STRING(20),
         allowNull: false,
@@ -53,6 +54,7 @@ module.exports = (sequelize, DataTypes) => {
     TaxInvoice.belongsTo(models.ProformaInvoice, { foreignKey: 'proforma_invoice_id', as: 'proformaInvoice' });
     TaxInvoice.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
     TaxInvoice.hasMany(models.TaxInvoiceItem, { foreignKey: 'tax_invoice_id', as: 'items' });
+    TaxInvoice.hasMany(models.CreditNote, { foreignKey: 'tax_invoice_id', as: 'creditNotes' });
   };
 
   return TaxInvoice;

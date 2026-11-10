@@ -32,6 +32,7 @@ const accountsRoutes = require('./accounts.routes');
 const receivablesRoutes = require('./receivables.routes');
 const payablesRoutes = require('./payables.routes');
 const vendorBillRoutes = require('./vendorBill.routes');
+const creditNoteRoutes = require('./creditNote.routes');
 const chartOfAccountsRoutes = require('./chartOfAccounts.routes');
 const journalRoutes = require('./journal.routes');
 const reportsRoutes = require('./reports.routes');
@@ -82,6 +83,7 @@ router.get('/', (req, res) => {
       receivables: '/receivables',
       payables: '/payables',
       'vendor-bills': '/vendor-bills',
+      'credit-notes': '/credit-notes',
       'accounts-expenses': '/accounts/expenses',
     },
   });
@@ -114,6 +116,7 @@ router.use('/accounts', accountsRoutes);
 router.use('/receivables', receivablesRoutes);
 router.use('/payables', payablesRoutes);
 router.use('/vendor-bills', vendorBillRoutes);
+router.use('/credit-notes', creditNoteRoutes);
 router.use('/chart-of-accounts', chartOfAccountsRoutes);
 router.use('/journal', journalRoutes);
 router.use('/reports', reportsRoutes);
