@@ -157,6 +157,8 @@ const markPaid = async (tenantId, actorUserId, commissionId) => {
 
   const amount = parseFloat(commission.commission_amount) || 0;
 
+  await jeService.assertPostingDateOpen(tenantId, new Date().toISOString().slice(0, 10));
+
   await db.sequelize.transaction(async (t) => {
     await commission.update({ status: 'paid', paid_at: new Date() }, { transaction: t });
 

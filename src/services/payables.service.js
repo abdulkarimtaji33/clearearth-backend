@@ -249,7 +249,7 @@ const listPayments = async (tenantId, poId) => {
 
 const listPaymentReceipts = async (tenantId, filters = {}) => {
   const { offset, limit, search, dateFrom, dateTo } = filters;
-  const where = { tenant_id: tenantId, source_type: 'payable' };
+  const where = { tenant_id: tenantId, source_type: { [Op.in]: ['payable', 'vendor_bill'] } };
   applyDateOnlyColumnFilter(where, 'paid_at', dateFrom, dateTo);
 
   if (search) {
@@ -272,7 +272,15 @@ const listPaymentReceipts = async (tenantId, filters = {}) => {
     order: [['paid_at', 'DESC'], ['id', 'DESC']],
   });
 
-  const poIds = [...new Set(rows.map((r) => r.source_id).filter(Boolean))];
+  // Vendor-bill payments point at the bill, not the PO: resolve each bill to its PO.
+  const billIds = [...new Set(rows.filter((r) => r.source_type === 'vendor_bill').map((r) => r.source_id).filter(Boolean))];
+  const bills = billIds.length
+    ? await db.VendorBill.findAll({ where: { id: { [Op.in]: billIds }, tenant_id: tenantId }, attributes: ['id', 'bill_number', 'supplier_invoice_no', 'purchase_order_id'] })
+    : [];
+  const billMap = Object.fromEntries(bills.map((b) => [b.id, b.get({ plain: true })]));
+  const poIdOf = (tx) => (tx.source_type === 'vendor_bill' ? billMap[tx.source_id]?.purchase_order_id : tx.source_id);
+
+  const poIds = [...new Set(rows.map((r) => poIdOf(r)).filter(Boolean))];
   const pos = poIds.length
     ? await db.PurchaseOrder.findAll({
       where: { id: { [Op.in]: poIds }, tenant_id: tenantId },
@@ -287,12 +295,14 @@ const listPaymentReceipts = async (tenantId, filters = {}) => {
 
   const receipts = rows.map((r) => {
     const tx = r.get({ plain: true });
-    const po = poMap[tx.source_id] || null;
+    const poId = poIdOf(tx);
+    const po = poMap[poId] || null;
     return {
       ...tx,
       receipt_number: `PPR-${tx.id}`,
       purchase_order: po,
-      po_id: tx.source_id,
+      vendor_bill: tx.source_type === 'vendor_bill' ? billMap[tx.source_id] || null : null,
+      po_id: poId,
       party_name: po?.supplier?.company_name || po?.company?.company_name || tx.paid_to || '—',
       party_label: po?.supplier_id ? 'Vendor' : po?.company_id ? 'Client' : '—',
     };
@@ -303,7 +313,7 @@ const listPaymentReceipts = async (tenantId, filters = {}) => {
 
 const getPaymentReceipt = async (tenantId, paymentId) => {
   const tx = await db.PaymentTransaction.findOne({
-    where: { id: paymentId, tenant_id: tenantId, source_type: 'payable' },
+    where: { id: paymentId, tenant_id: tenantId, source_type: { [Op.in]: ['payable', 'vendor_bill'] } },
     include: [
       { model: db.ChartOfAccounts, as: 'paymentAccount', attributes: ['id', 'code', 'name'], required: false },
       { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
@@ -312,8 +322,16 @@ const getPaymentReceipt = async (tenantId, paymentId) => {
   if (!tx) throw ApiError.notFound('Payment receipt not found');
 
   const plain = tx.get({ plain: true });
+  let vendorBill = null;
+  let poId = plain.source_id;
+  if (plain.source_type === 'vendor_bill') {
+    const bill = await db.VendorBill.findOne({ where: { id: plain.source_id, tenant_id: tenantId }, attributes: ['id', 'bill_number', 'supplier_invoice_no', 'purchase_order_id'] });
+    if (!bill) throw ApiError.notFound('Linked vendor bill not found');
+    vendorBill = bill.get({ plain: true });
+    poId = vendorBill.purchase_order_id;
+  }
   const po = await db.PurchaseOrder.findOne({
-    where: { id: plain.source_id, tenant_id: tenantId },
+    where: { id: poId, tenant_id: tenantId },
     include: [
       { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
       { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
@@ -340,7 +358,8 @@ const getPaymentReceipt = async (tenantId, paymentId) => {
     ...plain,
     receipt_number: `PPR-${plain.id}`,
     purchase_order: poPlain,
-    po_id: plain.source_id,
+    vendor_bill: vendorBill,
+    po_id: poId,
     party_name: poPlain.supplier?.company_name || poPlain.company?.company_name || plain.paid_to || '—',
     party_label: poPlain.supplier_id ? 'Vendor' : poPlain.company_id ? 'Client' : '—',
     tenant: tenant ? tenant.get({ plain: true }) : null,

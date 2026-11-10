@@ -660,6 +660,9 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
 
   const prevStatus = po.status;
   assertApprovableTotal(po.items || []);
+  if (prevStatus !== PO_STATUS.APPROVED) {
+    await jeService.assertPostingDateOpen(tenantId, po.po_date || new Date().toISOString().slice(0, 10));
+  }
   await _approveClientQuotation(po, { approvedByUserId: actor.userId, requestedPickupDate });
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;

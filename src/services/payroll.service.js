@@ -178,6 +178,8 @@ const approve = async (tenantId, actorUserId, payrollRunId) => {
     include: [{ model: db.Employee, as: 'employee', attributes: ['id', 'employee_code', 'user_id'] }],
   });
 
+  await jeService.assertPostingDateOpen(tenantId, run.period_end);
+
   await db.sequelize.transaction(async (t) => {
     for (const payslip of payslips) {
       const basic = parseFloat(payslip.basic_salary);
@@ -247,6 +249,8 @@ const markPaid = async (tenantId, actorUserId, payrollRunId, options = {}) => {
     where,
     include: [{ model: db.Employee, as: 'employee', attributes: ['id', 'employee_code'] }],
   });
+
+  await jeService.assertPostingDateOpen(tenantId, new Date().toISOString().slice(0, 10));
 
   await db.sequelize.transaction(async (t) => {
     for (const payslip of payslips) {
