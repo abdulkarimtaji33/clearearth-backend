@@ -28,13 +28,10 @@ function deriveExpensePaymentStatus(amount, paidAmount) {
   return 'partial';
 }
 
-/** "Paid to" must be one of the tenant's vendors (suppliers). Blank is allowed; returns the vendor's name. */
+/** "Paid to" is an open field (a vendor, an employee, anyone); blank is allowed. */
 async function normalizeVendorPayee(tenantId, paidTo) {
   const name = paidTo != null ? String(paidTo).trim() : '';
-  if (!name) return null;
-  const supplier = await db.Supplier.findOne({ where: { tenant_id: tenantId, company_name: name }, attributes: ['company_name'] });
-  if (!supplier) throw ApiError.badRequest('"Paid to" must be a vendor — choose one from the vendor list');
-  return supplier.company_name;
+  return name ? name.slice(0, 255) : null;
 }
 
 async function loadTaskExpenseInWorkOrder(tenantId, workOrderId, taskExpenseId) {
@@ -192,11 +189,11 @@ const createManualExpense = async (tenantId, userId, body) => {
   // Validate the chosen expense account (if any) before opening the transaction
   const expenseAccount = await resolveExpenseAccount(tenantId, { category: cat, expenseAccountId, restrictToCategory: true });
 
-  // Paid to = a vendor only. Money paid out now needs a vendor and the bank/cash account it leaves from.
+  // Money paid out now needs a payee and the bank/cash account it leaves from.
   const payee = await normalizeVendorPayee(tenantId, paidTo);
   let payAcct = null;
   if (effectivePaid) {
-    if (!payee) throw ApiError.badRequest('Choose the vendor this expense was paid to');
+    if (!payee) throw ApiError.badRequest('Enter who this expense was paid to');
     if (paymentAccountId == null || paymentAccountId === '') {
       throw ApiError.badRequest('Select the bank / cash account the payment is made from');
     }
