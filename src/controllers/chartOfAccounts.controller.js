@@ -8,6 +8,17 @@ const listAccounts = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, accounts);
 });
 
+const nextCode = asyncHandler(async (req, res) => {
+  const { parentId, type } = req.query;
+  const result = await coaService.suggestNextCode(req.tenant.id, { parentId, type });
+  return ApiResponse.success(res, result);
+});
+
+const accountUsage = asyncHandler(async (req, res) => {
+  const result = await coaService.getAccountUsage(req.tenant.id, req.params.id);
+  return ApiResponse.success(res, result);
+});
+
 const getAccount = asyncHandler(async (req, res) => {
   const account = await coaService.getAccountById(req.tenant.id, req.params.id);
   return ApiResponse.success(res, account);
@@ -33,4 +44,4 @@ const seedAccounts = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result, result.seeded ? 'Default accounts seeded' : 'Accounts already exist');
 });
 
-module.exports = { listAccounts, getAccount, createAccount, updateAccount, deleteAccount, seedAccounts };
+module.exports = { listAccounts, getAccount, createAccount, updateAccount, deleteAccount, seedAccounts, nextCode, accountUsage };

@@ -10,6 +10,7 @@ const vb = require('../src/services/vendorBill.service');
 const jeService = require('../src/services/journalEntry.service');
 const expenseService = require('../src/services/expense.service');
 const { resolveExpenseAccount } = require('../src/utils/paymentAccount');
+const coaService = require('../src/services/chartOfAccounts.service');
 
 let failed = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) failed += 1; };
@@ -37,6 +38,19 @@ const rejects = async (fn, re, label) => {
   ok(fuelOk.accountCode === '5420', 'Fuel category may use another account in the Fuel & Transport group (5420)');
   const otherAny = await resolveExpenseAccount(tid, { category: 'other', expenseAccountId: salaries.id, restrictToCategory: true });
   ok(otherAny.accountCode === '5700', 'Other category can still use any expense account');
+
+  // Chart of accounts: suggested code, duplicate code, system account guard, list extras
+  const next = await coaService.suggestNextCode(tid, { parentId: group.id });
+  ok(/^544\d$/.test(next.code) || /^54[5-9]\d$/.test(next.code), `next code under 5400 follows its siblings (got ${next.code})`);
+  const topNext = await coaService.suggestNextCode(tid, { type: 'expense' });
+  ok(/^5\d00$/.test(topNext.code) && parseInt(topNext.code, 10) > 5720, `next top-level expense code is a free hundred (got ${topNext.code})`);
+  await rejects(() => coaService.createAccount(tid, 1, { code: '5410', name: 'Dup', type: 'expense', normalBalance: 'debit' }), /already exists/, 'duplicate account code is rejected');
+  const cashAcct = await acct('1000');
+  await rejects(() => coaService.updateAccount(tid, cashAcct.id, { isActive: false }), /System accounts cannot be disabled/, 'a system account cannot be disabled');
+  await db.sequelize.query('UPDATE chart_of_accounts SET is_active = 1 WHERE id = ?', { replacements: [cashAcct.id] }); // never leave the local cash account disabled
+  const listed = await coaService.listAccounts(tid, { withBalance: true });
+  const g = listed.find((a) => a.code === '5400');
+  ok(g && g.child_count >= 3 && typeof g.line_count === 'number', `chart list carries child_count (${g && g.child_count}) and line_count`);
 
   // Item 2: work order expense needs an explicit head
   await rejects(() => expenseService.approveTaskExpense(tid, 1, 1, 1, { expenseDate: today }), /Select the expense account/, 'WO expense approval without an expense head is rejected');

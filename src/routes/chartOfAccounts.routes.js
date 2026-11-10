@@ -8,6 +8,8 @@ router.use(authenticate);
 router.get('/',        authorize('accounting.read', 'deals.read'),   coaController.listAccounts);
 router.post('/seed',   authorize('accounting.update', 'deals.update'), coaController.seedAccounts);
 router.post('/',       authorize('accounting.update', 'deals.update'), coaController.createAccount);
+router.get('/next-code', authorize('accounting.read', 'deals.read'),   coaController.nextCode);
+router.get('/:id/usage', authorize('accounting.read', 'deals.read'),  coaController.accountUsage);
 router.get('/:id',     authorize('accounting.read', 'deals.read'),   coaController.getAccount);
 router.put('/:id',     authorize('accounting.update', 'deals.update'), coaController.updateAccount);
 router.delete('/:id',  authorize('accounting.update', 'deals.update'), coaController.deleteAccount);

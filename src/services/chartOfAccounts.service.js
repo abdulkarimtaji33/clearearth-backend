@@ -132,7 +132,9 @@ const listAccounts = async (tenantId, filters = {}) => {
     SELECT
       jel.account_id,
       SUM(jel.debit)  AS total_debit,
-      SUM(jel.credit) AS total_credit
+      SUM(jel.credit) AS total_credit,
+      COUNT(*)        AS line_count,
+      MAX(je.entry_date) AS last_posted_at
     FROM journal_entry_lines jel
     JOIN journal_entries je ON je.id = jel.journal_entry_id
       AND je.tenant_id = ? AND je.status = 'posted' ${dateFilter}
@@ -156,9 +158,15 @@ const listAccounts = async (tenantId, filters = {}) => {
       plain.total_credit = 0;
       plain.balance = 0;
     }
+    plain.line_count = bal ? parseInt(bal.line_count, 10) || 0 : 0;
+    plain.last_posted_at = bal ? bal.last_posted_at : null;
     plain.rollup_balance = plain.balance;
     return plain;
   });
+  // Number of direct sub-accounts, for the "N sub-accounts" label
+  const childCounts = {};
+  plainAccounts.forEach((a) => { if (a.parent_id != null) childCounts[a.parent_id] = (childCounts[a.parent_id] || 0) + 1; });
+  plainAccounts.forEach((a) => { a.child_count = childCounts[a.id] || 0; });
 
   // Roll each account's own balance up into every ancestor (parents show the total of their tree)
   const byId = {};
@@ -244,6 +252,7 @@ const createAccount = async (tenantId, userId, body) => {
 const updateAccount = async (tenantId, id, body) => {
   const acc = await getAccountById(tenantId, id);
   const { name, subType, description, sortOrder, isActive, parentId, isGroup } = body;
+  const wasActive = !!acc.is_active; // read before any field is assigned below
 
   if (acc.is_system) {
     // System accounts: only allow name, description, sort changes
@@ -269,7 +278,19 @@ const updateAccount = async (tenantId, id, body) => {
   if (description !== undefined) acc.description = description;
   if (sortOrder !== undefined) acc.sort_order = sortOrder;
   if (isActive !== undefined) acc.is_active = isActive;
-  if (isGroup !== undefined && !acc.is_system) acc.is_group = !!isGroup;
+  if (isGroup !== undefined && !acc.is_system) {
+    if (!!isGroup && !acc.is_group) {
+      const lines = await db.JournalEntryLine.count({ where: { account_id: acc.id } });
+      if (lines > 0) throw ApiError.badRequest('This account already has postings, so it cannot be turned into a group (groups cannot be posted to)');
+    }
+    acc.is_group = !!isGroup;
+  }
+
+  if (isActive === false && wasActive) {
+    if (acc.is_system) throw ApiError.badRequest('System accounts cannot be disabled');
+    const activeChildren = await db.ChartOfAccounts.count({ where: { tenant_id: tenantId, parent_id: acc.id, is_active: true } });
+    if (activeChildren > 0) throw ApiError.badRequest('Disable the sub-accounts first — this account still has active sub-accounts');
+  }
 
   await acc.save();
   clearAccountCache(tenantId);
@@ -292,7 +313,62 @@ const deleteAccount = async (tenantId, id) => {
   return { disabled: true };
 };
 
+const TYPE_BASE_CODE = { asset: 1000, liability: 2000, equity: 3000, revenue: 4000, expense: 5000 };
+
+/**
+ * Suggest the next free account code. Under a parent: the next step of 10 after its highest numeric
+ * sibling (5400 with 5410..5430 -> 5440). Top-level: the next hundred after the highest top-level
+ * numeric code of that type (expense up to 5720 -> 5800). Never returns a code that is already used.
+ */
+const suggestNextCode = async (tenantId, { parentId, type } = {}) => {
+  const all = await db.ChartOfAccounts.findAll({ where: { tenant_id: tenantId }, attributes: ['code', 'parent_id', 'type'] });
+  const used = new Set(all.map((a) => String(a.code).toLowerCase()));
+  const numeric = (a) => /^\d+$/.test(String(a.code));
+  const firstFree = (start, step) => {
+    let c = start;
+    for (let i = 0; i < 2000; i += 1) {
+      if (!used.has(String(c))) return String(c);
+      c += i < 50 ? step : 1;
+    }
+    return String(start);
+  };
+
+  if (parentId) {
+    const parent = await db.ChartOfAccounts.findOne({ where: { id: parentId, tenant_id: tenantId } });
+    if (!parent) throw ApiError.notFound('Parent account not found');
+    const siblings = all.filter((a) => String(a.parent_id) === String(parent.id) && numeric(a)).map((a) => parseInt(a.code, 10));
+    const base = /^\d+$/.test(String(parent.code)) ? parseInt(parent.code, 10) : null;
+    if (base == null) return { code: '', basis: 'The parent code is not numeric, enter a code manually' };
+    const start = siblings.length ? Math.max(...siblings) + 10 : base + 10;
+    return { code: firstFree(start, 10), basis: `Next free code after ${siblings.length ? Math.max(...siblings) : parent.code}` };
+  }
+
+  const t = type || 'expense';
+  const roots = all.filter((a) => a.parent_id == null && a.type === t && numeric(a)).map((a) => parseInt(a.code, 10));
+  const base = TYPE_BASE_CODE[t] || 5000;
+  const start = roots.length ? Math.floor(Math.max(...roots) / 100) * 100 + 100 : base;
+  return { code: firstFree(start, 100), basis: `Next free ${t} code` };
+};
+
+/** What an account is used for — shown in the detail drawer. */
+const getAccountUsage = async (tenantId, id) => {
+  const acc = await getAccountById(tenantId, id);
+  const [lineCount, childCount, categories] = await Promise.all([
+    db.JournalEntryLine.count({ where: { account_id: id } }),
+    db.ChartOfAccounts.count({ where: { tenant_id: tenantId, parent_id: id } }),
+    db.ExpenseCategory.findAll({ where: { tenant_id: tenantId, default_account_id: id }, attributes: ['id', 'name'] }),
+  ]);
+  return {
+    id: acc.id,
+    lineCount,
+    childCount,
+    expenseCategories: categories.map((c) => ({ id: c.id, name: c.name })),
+  };
+};
+
 module.exports = {
+  suggestNextCode,
+  getAccountUsage,
   seedDefaultAccounts,
   listAccounts,
   getAccountById,
