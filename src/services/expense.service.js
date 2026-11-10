@@ -14,7 +14,6 @@ const STATUSES = ['pending', 'approved', 'rejected'];
 
 /** Ledger linkage for work-order–sourced expenses (not user-editable) */
 const WO_EXPENSE_CATEGORY = 'work_orders';
-const WO_EXPENSE_PAID_TO = 'Operations';
 const WO_EXPENSE_REFERENCE = 'work_order';
 const MANUAL_EXPENSE_REFERENCE = 'manual';
 
@@ -27,6 +26,15 @@ function deriveExpensePaymentStatus(amount, paidAmount) {
   if (paid <= 0) return 'unpaid';
   if (paid >= total - 0.005) return 'paid';
   return 'partial';
+}
+
+/** "Paid to" must be one of the tenant's vendors (suppliers). Blank is allowed; returns the vendor's name. */
+async function normalizeVendorPayee(tenantId, paidTo) {
+  const name = paidTo != null ? String(paidTo).trim() : '';
+  if (!name) return null;
+  const supplier = await db.Supplier.findOne({ where: { tenant_id: tenantId, company_name: name }, attributes: ['company_name'] });
+  if (!supplier) throw ApiError.badRequest('"Paid to" must be a vendor — choose one from the vendor list');
+  return supplier.company_name;
 }
 
 async function loadTaskExpenseInWorkOrder(tenantId, workOrderId, taskExpenseId) {
@@ -71,6 +79,7 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
   }
   // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
   await jeService.assertPostingDateOpen(tenantId, expenseDate);
+  const payee = await normalizeVendorPayee(tenantId, paidTo);
 
   const te = await loadTaskExpenseInWorkOrder(tenantId, workOrderId, taskExpenseId);
 
@@ -100,7 +109,7 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
         category: WO_EXPENSE_CATEGORY,
         amount: amt,
         expense_date: expenseDate,
-        paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : WO_EXPENSE_PAID_TO,
+        paid_to: payee,
         payment_method: paymentMethod || null,
         notes: notes || null,
         reference: WO_EXPENSE_REFERENCE,
@@ -159,6 +168,7 @@ const createManualExpense = async (tenantId, userId, body) => {
     paidAmount,
     paidAt,
     expenseAccountId,
+    paymentAccountId,
   } = body;
 
   const cat = await expenseCategoryService.resolveCategoryValue(tenantId, category);
@@ -182,6 +192,17 @@ const createManualExpense = async (tenantId, userId, body) => {
   // Validate the chosen expense account (if any) before opening the transaction
   const expenseAccount = await resolveExpenseAccount(tenantId, { category: cat, expenseAccountId, restrictToCategory: true });
 
+  // Paid to = a vendor only. Money paid out now needs a vendor and the bank/cash account it leaves from.
+  const payee = await normalizeVendorPayee(tenantId, paidTo);
+  let payAcct = null;
+  if (effectivePaid) {
+    if (!payee) throw ApiError.badRequest('Choose the vendor this expense was paid to');
+    if (paymentAccountId == null || paymentAccountId === '') {
+      throw ApiError.badRequest('Select the bank / cash account the payment is made from');
+    }
+    payAcct = await resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId });
+  }
+
   const t = await db.sequelize.transaction();
   let row;
   try {
@@ -192,7 +213,7 @@ const createManualExpense = async (tenantId, userId, body) => {
         category: cat,
         amount: amt,
         expense_date: expenseDate,
-        paid_to: paidTo != null && String(paidTo).trim() !== '' ? String(paidTo).trim() : null,
+        paid_to: payee,
         payment_method: paymentMethod || null,
         notes: notes || null,
         reference: ref,
@@ -206,10 +227,10 @@ const createManualExpense = async (tenantId, userId, body) => {
       { transaction: t }
     );
 
-    // GL: Dr expense account (user-chosen or category default) / Cr Accrued Expenses (2200) or Cash (1000) if paid immediately
+    // GL: Dr expense account (user-chosen or category default) / Cr Accrued Expenses (2200).
+    // If something is paid now: Dr 2200 / Cr the chosen bank or cash account (also a payment record).
     try {
-      const creditCode = ps === 'paid' ? '1000' : '2200';
-      const creditId   = await jeService.getSystemAccountId(tenantId, creditCode);
+      const accruId = await jeService.getSystemAccountId(tenantId, '2200');
       await jeService.createJournalEntry(tenantId, userId, {
         entryDate: expenseDate,
         description: `Manual Expense — ${cat}`,
@@ -218,9 +239,34 @@ const createManualExpense = async (tenantId, userId, body) => {
         paidTo: row.paid_to || null,
         lines: [
           { accountId: expenseAccount.accountId, debit: amt, credit: 0 },
-          { accountId: creditId, debit: 0,   credit: amt },
+          { accountId: accruId, debit: 0, credit: amt },
         ],
       }, t);
+
+      if (payAcct && effectivePaid > 0.005) {
+        const payDate = row.paid_at || expenseDate;
+        const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId, {
+          sourceType: 'expense',
+          sourceId: row.id,
+          amount: effectivePaid,
+          paymentMethod: paymentMethod || null,
+          paymentAccountId: payAcct.accountId,
+          paidTo: row.paid_to || null,
+          paidAt: payDate,
+        }, t);
+        const payEntryId = await jeService.createJournalEntry(tenantId, userId, {
+          entryDate: payDate,
+          description: `Expense Payment — ${cat}`,
+          sourceType: 'expense_payment',
+          sourceId: row.id,
+          paidTo: row.paid_to || null,
+          lines: [
+            { accountId: accruId, debit: effectivePaid, credit: 0 },
+            { accountId: payAcct.accountId, debit: 0, credit: effectivePaid },
+          ],
+        }, t);
+        await paymentTx.update({ journal_entry_id: payEntryId }, { transaction: t });
+      }
     } catch (jeErr) {
       console.warn('[GL] manual expense journal entry skipped:', jeErr.message);
     }
