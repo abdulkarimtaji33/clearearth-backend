@@ -69,6 +69,24 @@ const rejects = async (fn, re, label) => {
   ok(!je.some((x) => x.code === '2200'), 'a paid expense posts nothing through 2200 Accrued Expenses');
   ok(exp.payment_status === 'paid' && Math.abs(parseFloat(exp.amount) - 105) < 0.01, 'expense is saved as paid for the total incl. VAT');
 
+  // Supplier bill without a PO (unpaid expense): Dr expense (+ Dr 1200) / Cr 2000, then paid from the bank
+  const dSup = (await q('SELECT id FROM suppliers WHERE tenant_id=? LIMIT 1', [tid]))[0]
+    || (await db.Supplier.create({ tenant_id: tid, company_name: 'UAT Test Supplier' }));
+  const dBase = { supplierId: dSup.id, expenseAccountId: fuelAcct.id, netAmount: 200, vatRate: 5, supplierInvoiceNo: `DIRECT-${Date.now()}`, supplierTrn: '100123456700003', billDate: today };
+  await rejects(() => vb.createDirectBill(tid, 1, { ...dBase, supplierId: undefined }), /Select the supplier/, 'a supplier bill needs the supplier');
+  await rejects(() => vb.createDirectBill(tid, 1, { ...dBase, expenseAccountId: group.id }), /Invalid expense account/, 'a supplier bill cannot debit a group account');
+  await rejects(() => vb.createDirectBill(tid, 1, { ...dBase, supplierTrn: '' }), /TRN/, 'recoverable VAT on a supplier bill needs the TRN');
+  const dBill = await vb.createDirectBill(tid, 1, dBase);
+  ok(dBill.purchase_order_id == null && Math.abs(parseFloat(dBill.total) - 210) < 0.01, 'supplier bill without a PO is created for the total incl. VAT');
+  const dLines = await q("SELECT l.debit, l.credit, a.code FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='vendor_bill' AND e.source_id=? ORDER BY l.id", [dBill.id]);
+  const dd = (c) => dLines.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.debit), 0);
+  const dc = (c) => dLines.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.credit), 0);
+  ok(Math.abs(dd('5410') - 200) < 0.01 && Math.abs(dd('1200') - 10) < 0.01 && Math.abs(dc('2000') - 210) < 0.01 && !dLines.some((x) => x.code === '2200'),
+    `supplier bill posts Dr 5410 200 + Dr 1200 10 / Cr 2000 210, nothing through 2200 (got ${JSON.stringify(dLines)})`);
+  await rejects(() => vb.createDirectBill(tid, 1, dBase), /already recorded/, 'the same supplier invoice cannot be recorded twice');
+  const dPaid = await vb.payBills(tid, 1, { allocations: [{ billId: dBill.id, amount: 210 }], paymentAccountId: cashId, paymentDate: today });
+  ok(dPaid.bills[0].status === 'paid', 'a supplier bill without a PO is paid from the bank (Dr 2000 / Cr cash)');
+
   // Item 2: work order expense needs an explicit head
   await rejects(() => expenseService.approveTaskExpense(tid, 1, 1, 1, { expenseDate: today }), /Select the expense account/, 'WO expense approval without an expense head is rejected');
 
