@@ -152,53 +152,70 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
   return workOrderService.getById(tenantId, workOrderId);
 };
 
+const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+
+/**
+ * Add Expense = a PAID expense. One entry: Dr expense sub-head (+ Dr 1200 Input VAT) / Cr the chosen
+ * cash or bank account. Nothing goes through 2200. Unpaid expenses are entered as supplier bills.
+ */
 const createManualExpense = async (tenantId, userId, body) => {
   const {
-    category,
+    netAmount,
     amount,
+    vatRate,
     expenseDate,
     paidTo,
     paymentMethod,
     notes,
     reference,
     referenceId,
-    paidAmount,
-    paidAt,
+    receiptNo,
+    supplierTrn,
+    attachmentPath,
     expenseAccountId,
     paymentAccountId,
   } = body;
 
-  const cat = await expenseCategoryService.resolveCategoryValue(tenantId, category);
   if (!expenseDate) throw ApiError.badRequest('expenseDate is required');
-  const amt = parseFloat(amount);
-  if (!Number.isFinite(amt) || amt <= 0) throw ApiError.badRequest('Amount must be greater than zero');
+  const net = round2(netAmount != null && netAmount !== '' ? netAmount : amount);
+  if (!Number.isFinite(net) || net <= 0) throw ApiError.badRequest('Amount before VAT must be greater than zero');
 
-  const ref = reference != null && String(reference).trim() !== '' ? String(reference).trim() : MANUAL_EXPENSE_REFERENCE;
-  const refId = referenceId != null && String(referenceId).trim() !== '' ? String(referenceId).trim() : null;
+  const rate = vatRate == null || vatRate === '' ? 0 : parseFloat(vatRate);
+  if (![0, 5].includes(rate)) throw ApiError.badRequest('VAT must be 5% or none');
+  const vat = round2((net * rate) / 100);
+  const total = round2(net + vat);
 
-  let paid = paidAmount != null && paidAmount !== '' ? parseFloat(paidAmount) : 0;
-  if (!Number.isFinite(paid) || paid < 0) throw ApiError.badRequest('paidAmount must be a valid number');
-  if (paid > amt) paid = amt;
+  const receipt = receiptNo != null ? String(receiptNo).trim() : '';
+  const trn = supplierTrn != null ? String(supplierTrn).trim() : '';
+  if (vat > 0 && (!receipt || !trn)) {
+    throw ApiError.badRequest('Recoverable VAT needs the supplier receipt / invoice number and the supplier TRN');
+  }
+
+  if (expenseAccountId == null || expenseAccountId === '') {
+    throw ApiError.badRequest('Select the expense head and sub-head');
+  }
+  if (paymentAccountId == null || paymentAccountId === '') {
+    throw ApiError.badRequest('Select the bank / cash account the expense is paid from');
+  }
 
   // Period lock: fail loudly instead of saving the record and silently skipping its ledger entry.
   await jeService.assertPostingDateOpen(tenantId, expenseDate);
 
-  const ps = deriveExpensePaymentStatus(amt, paid);
-  const effectivePaid = ps === 'unpaid' ? null : (ps === 'paid' ? amt : paid);
-
-  // Validate the chosen expense account (if any) before opening the transaction
-  const expenseAccount = await resolveExpenseAccount(tenantId, { category: cat, expenseAccountId, restrictToCategory: true });
-
-  // Money paid out now needs a payee and the bank/cash account it leaves from.
+  // Only an active, postable expense account can be debited (groups are rejected), and only an
+  // active cash/bank account can be credited.
+  const expenseAccount = await resolveExpenseAccount(tenantId, { expenseAccountId });
+  const payAcct = await resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId });
   const payee = await normalizeVendorPayee(tenantId, paidTo);
-  let payAcct = null;
-  if (effectivePaid) {
-    if (!payee) throw ApiError.badRequest('Enter who this expense was paid to');
-    if (paymentAccountId == null || paymentAccountId === '') {
-      throw ApiError.badRequest('Select the bank / cash account the payment is made from');
-    }
-    payAcct = await resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId });
-  }
+
+  const acc = await db.ChartOfAccounts.findOne({ where: { id: expenseAccount.accountId, tenant_id: tenantId }, attributes: ['id', 'name', 'parent_id'] });
+  const head = acc && acc.parent_id
+    ? await db.ChartOfAccounts.findOne({ where: { id: acc.parent_id, tenant_id: tenantId }, attributes: ['name'] })
+    : null;
+  const category = String((head || acc || {}).name || 'expense')
+    .trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 100) || 'expense';
+
+  const ref = reference != null && String(reference).trim() !== '' ? String(reference).trim() : MANUAL_EXPENSE_REFERENCE;
+  const refId = referenceId != null && String(referenceId).trim() !== '' ? String(referenceId).trim() : null;
 
   const t = await db.sequelize.transaction();
   let row;
@@ -207,8 +224,14 @@ const createManualExpense = async (tenantId, userId, body) => {
       {
         tenant_id: tenantId,
         work_order_task_expense_id: null,
-        category: cat,
-        amount: amt,
+        category,
+        amount: total,
+        net_amount: net,
+        vat_amount: vat,
+        vat_rate: rate,
+        receipt_no: receipt || null,
+        supplier_trn: trn || null,
+        attachment_path: attachmentPath || null,
         expense_date: expenseDate,
         paid_to: payee,
         payment_method: paymentMethod || null,
@@ -216,57 +239,39 @@ const createManualExpense = async (tenantId, userId, body) => {
         reference: ref,
         reference_id: refId,
         created_by: userId,
-        payment_status: ps,
-        paid_amount: effectivePaid,
-        paid_at: paidAt || (ps !== 'unpaid' ? expenseDate : null),
+        payment_status: 'paid',
+        paid_amount: total,
+        paid_at: expenseDate,
         expense_account_id: expenseAccount.accountId,
       },
       { transaction: t }
     );
 
-    // GL: Dr expense account (user-chosen or category default) / Cr Accrued Expenses (2200).
-    // If something is paid now: Dr 2200 / Cr the chosen bank or cash account (also a payment record).
-    try {
-      const accruId = await jeService.getSystemAccountId(tenantId, '2200');
-      await jeService.createJournalEntry(tenantId, userId, {
-        entryDate: expenseDate,
-        description: `Manual Expense — ${cat}`,
-        sourceType: 'expense',
-        sourceId: row.id,
-        paidTo: row.paid_to || null,
-        lines: [
-          { accountId: expenseAccount.accountId, debit: amt, credit: 0 },
-          { accountId: accruId, debit: 0, credit: amt },
-        ],
-      }, t);
-
-      if (payAcct && effectivePaid > 0.005) {
-        const payDate = row.paid_at || expenseDate;
-        const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId, {
-          sourceType: 'expense',
-          sourceId: row.id,
-          amount: effectivePaid,
-          paymentMethod: paymentMethod || null,
-          paymentAccountId: payAcct.accountId,
-          paidTo: row.paid_to || null,
-          paidAt: payDate,
-        }, t);
-        const payEntryId = await jeService.createJournalEntry(tenantId, userId, {
-          entryDate: payDate,
-          description: `Expense Payment — ${cat}`,
-          sourceType: 'expense_payment',
-          sourceId: row.id,
-          paidTo: row.paid_to || null,
-          lines: [
-            { accountId: accruId, debit: effectivePaid, credit: 0 },
-            { accountId: payAcct.accountId, debit: 0, credit: effectivePaid },
-          ],
-        }, t);
-        await paymentTx.update({ journal_entry_id: payEntryId }, { transaction: t });
-      }
-    } catch (jeErr) {
-      console.warn('[GL] manual expense journal entry skipped:', jeErr.message);
+    const lines = [{ accountId: expenseAccount.accountId, debit: net, credit: 0 }];
+    if (vat > 0.005) {
+      lines.push({ accountId: await jeService.getSystemAccountId(tenantId, '1200'), debit: vat, credit: 0 });
     }
+    lines.push({ accountId: payAcct.accountId, debit: 0, credit: total });
+
+    const entryId = await jeService.createJournalEntry(tenantId, userId, {
+      entryDate: expenseDate,
+      description: `Expense — ${expenseAccount.accountCode} ${expenseAccount.accountName}${receipt ? ` (${receipt})` : ''}`,
+      sourceType: 'expense',
+      sourceId: row.id,
+      paidTo: payee,
+      lines,
+    }, t);
+
+    const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId, {
+      sourceType: 'expense',
+      sourceId: row.id,
+      amount: total,
+      paymentMethod: paymentMethod || null,
+      paymentAccountId: payAcct.accountId,
+      paidTo: payee,
+      paidAt: expenseDate,
+    }, t);
+    await paymentTx.update({ journal_entry_id: entryId }, { transaction: t });
 
     await t.commit();
   } catch (e) {
@@ -371,9 +376,17 @@ const updateExpensePayment = async (tenantId, expenseId, body, userId = null) =>
 };
 
 const listLedgerExpenses = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dateFrom, dateTo, category, paymentStatus } = filters;
+  const { offset, limit, search, dateFrom, dateTo, category, paymentStatus, expenseHeadId, expenseAccountId } = filters;
   const where = { tenant_id: tenantId };
   applyDateOnlyColumnFilter(where, 'expense_date', dateFrom, dateTo);
+  if (expenseAccountId) {
+    where.expense_account_id = parseInt(expenseAccountId, 10);
+  } else if (expenseHeadId) {
+    // A head matches itself and every sub-head under it.
+    const headId = parseInt(expenseHeadId, 10);
+    const kids = await db.ChartOfAccounts.findAll({ where: { tenant_id: tenantId, parent_id: headId }, attributes: ['id'] });
+    where.expense_account_id = { [Op.in]: [headId, ...kids.map((k) => k.id)] };
+  }
   if (category && String(category).trim() !== '') {
     where.category = String(category).trim();
   }
@@ -393,7 +406,7 @@ const listLedgerExpenses = async (tenantId, filters = {}) => {
 
   const include = [
     { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
-    { model: db.ChartOfAccounts, as: 'expenseAccount', attributes: ['id', 'code', 'name'], required: false },
+    { model: db.ChartOfAccounts, as: 'expenseAccount', attributes: ['id', 'code', 'name', 'parent_id'], required: false },
     {
       model: db.WorkOrderTaskExpense,
       as: 'taskExpense',

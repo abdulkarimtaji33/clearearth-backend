@@ -31,6 +31,12 @@ module.exports = (sequelize, DataTypes) => {
       paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true },
       paid_at: { type: DataTypes.DATEONLY, allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } },
+      net_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: true, comment: 'Amount before VAT; null on older rows' },
+      vat_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
+      vat_rate: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
+      receipt_no: { type: DataTypes.STRING(100), allowNull: true },
+      supplier_trn: { type: DataTypes.STRING(50), allowNull: true },
+      attachment_path: { type: DataTypes.STRING(500), allowNull: true },
       expense_account_id: {
         type: DataTypes.INTEGER,
         allowNull: true,

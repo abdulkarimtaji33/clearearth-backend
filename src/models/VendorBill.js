@@ -9,7 +9,8 @@ module.exports = (sequelize, DataTypes) => {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       tenant_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'tenants', key: 'id' } },
       bill_number: { type: DataTypes.STRING(30), allowNull: false },
-      purchase_order_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'purchase_orders', key: 'id' } },
+      purchase_order_id: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'purchase_orders', key: 'id' }, comment: 'Null for a supplier bill entered without a PO' },
+      expense_account_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'Expense account debited when there is no PO' },
       supplier_id: { type: DataTypes.INTEGER, allowNull: true },
       company_id: { type: DataTypes.INTEGER, allowNull: true },
       supplier_invoice_no: { type: DataTypes.STRING(100), allowNull: false },
@@ -39,6 +40,7 @@ module.exports = (sequelize, DataTypes) => {
     VendorBill.belongsTo(models.PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder' });
     VendorBill.belongsTo(models.Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
     VendorBill.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
+    VendorBill.belongsTo(models.ChartOfAccounts, { foreignKey: 'expense_account_id', as: 'expenseAccount' });
   };
 
   return VendorBill;

@@ -3274,6 +3274,41 @@ async function runMigration() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Supplier bills without a purchase order (unpaid expenses): Dr expense (+ Input VAT) / Cr 2000.
+    console.log('Allowing vendor_bills without a purchase order...');
+    try {
+      await db.sequelize.query('ALTER TABLE vendor_bills MODIFY purchase_order_id INT NULL');
+      console.log('  vendor_bills.purchase_order_id is now nullable');
+    } catch (e) {
+      console.log('  vendor_bills.purchase_order_id: ' + e.message);
+    }
+    try {
+      await db.sequelize.query(`ALTER TABLE vendor_bills ADD COLUMN expense_account_id INT NULL COMMENT 'Expense account debited by a bill entered without a PO'`);
+      console.log('  Added vendor_bills.expense_account_id');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  vendor_bills.expense_account_id already exists, skipping');
+    }
+
+    // Manual expenses are paid-only postings with VAT + receipt details.
+    console.log('Adding expenses VAT / receipt columns...');
+    for (const [col, ddl] of [
+      ['net_amount', `ALTER TABLE expenses ADD COLUMN net_amount DECIMAL(15,2) NULL COMMENT 'Amount before VAT (null on older rows: amount is the net)'`],
+      ['vat_amount', `ALTER TABLE expenses ADD COLUMN vat_amount DECIMAL(15,2) NOT NULL DEFAULT 0 COMMENT 'Recoverable input VAT posted to 1200'`],
+      ['vat_rate', `ALTER TABLE expenses ADD COLUMN vat_rate DECIMAL(5,2) NULL`],
+      ['receipt_no', `ALTER TABLE expenses ADD COLUMN receipt_no VARCHAR(100) NULL`],
+      ['supplier_trn', `ALTER TABLE expenses ADD COLUMN supplier_trn VARCHAR(50) NULL`],
+      ['attachment_path', `ALTER TABLE expenses ADD COLUMN attachment_path VARCHAR(500) NULL`],
+    ]) {
+      try {
+        await db.sequelize.query(ddl);
+        console.log(`  Added expenses.${col}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+        console.log(`  expenses.${col} already exists, skipping`);
+      }
+    }
+
     // Journal reversals: posted entries are reversed (with a reason) instead of voided.
     console.log('Adding journal_entries.reverses_entry_id / reversal_reason columns...');
     for (const [col, ddl] of [

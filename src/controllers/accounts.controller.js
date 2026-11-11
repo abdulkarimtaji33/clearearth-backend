@@ -26,7 +26,7 @@ const getWorkOrder = asyncHandler(async (req, res) => {
 });
 
 const listExpenses = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dateFrom, dateTo, category, paymentStatus } = req.query;
+  const { page, pageSize, search, dateFrom, dateTo, category, paymentStatus, expenseHeadId, expenseAccountId } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await expenseService.listLedgerExpenses(req.tenant.id, {
     ...pagination,
@@ -34,6 +34,8 @@ const listExpenses = asyncHandler(async (req, res) => {
     dateFrom,
     dateTo,
     category,
+    expenseHeadId,
+    expenseAccountId,
     paymentStatus,
   });
   return ApiResponse.paginated(res, result.expenses, {

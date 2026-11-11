@@ -52,6 +52,23 @@ const rejects = async (fn, re, label) => {
   const g = listed.find((a) => a.code === '5400');
   ok(g && g.child_count >= 3 && typeof g.line_count === 'number', `chart list carries child_count (${g && g.child_count}) and line_count`);
 
+  // Add Expense = paid-only: Dr expense sub-head (+ Dr 1200 VAT) / Cr bank, nothing through 2200
+  const cashId = (await acct('1000')).id;
+  const fuelAcct = await acct('5410');
+  const base = { expenseDate: today, expenseAccountId: fuelAcct.id, paymentAccountId: cashId, netAmount: 100, vatRate: 5, receiptNo: 'R-1', supplierTrn: '100123456700003' };
+  await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, paymentAccountId: undefined }), /bank \/ cash account/, 'a paid expense needs the Paid from account');
+  await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, expenseAccountId: group.id }), /Invalid expense account/, 'a group account cannot be debited from Add Expense');
+  await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, receiptNo: '' }), /receipt \/ invoice number/, 'recoverable VAT needs the receipt number and TRN');
+  const arAcct = await acct('1100');
+  await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, paymentAccountId: arAcct.id }), /Invalid payment account/, 'Paid from must be a cash or bank account');
+  const exp = await expenseService.createManualExpense(tid, 1, base);
+  const je = (await q("SELECT l.debit, l.credit, a.code FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='expense' AND e.source_id=? ORDER BY l.id", [exp.id]));
+  const dr = (c) => je.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.debit), 0);
+  const cr = (c) => je.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.credit), 0);
+  ok(Math.abs(dr('5410') - 100) < 0.01 && Math.abs(dr('1200') - 5) < 0.01 && Math.abs(cr('1000') - 105) < 0.01, `paid expense posts Dr 5410 100 + Dr 1200 5 / Cr 1000 105 (got ${JSON.stringify(je)})`);
+  ok(!je.some((x) => x.code === '2200'), 'a paid expense posts nothing through 2200 Accrued Expenses');
+  ok(exp.payment_status === 'paid' && Math.abs(parseFloat(exp.amount) - 105) < 0.01, 'expense is saved as paid for the total incl. VAT');
+
   // Item 2: work order expense needs an explicit head
   await rejects(() => expenseService.approveTaskExpense(tid, 1, 1, 1, { expenseDate: today }), /Select the expense account/, 'WO expense approval without an expense head is rejected');
 

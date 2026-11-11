@@ -13,7 +13,7 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
-const { isCashOrBank } = require('../utils/paymentAccount');
+const { isCashOrBank, resolveExpenseAccount } = require('../utils/paymentAccount');
 
 const EPS = 0.005;
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
@@ -48,6 +48,7 @@ const billIncludes = [
   { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name', 'vat_number'], required: false },
   { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
   { model: db.PurchaseOrder, as: 'purchaseOrder', attributes: ['id', 'po_date', 'deal_id'], required: false },
+  { model: db.ChartOfAccounts, as: 'expenseAccount', attributes: ['id', 'code', 'name'], required: false },
 ];
 
 const withBalance = (row) => {
@@ -231,6 +232,91 @@ const createBill = async (tenantId, userId, body = {}) => {
 };
 
 /**
+ * Supplier bill entered WITHOUT a purchase order (an unpaid expense):
+ *   Dr expense account (+ Dr 1200 Input VAT) / Cr 2000 Accounts Payable, payable under the supplier's name.
+ * It is paid later like any other bill (Dr 2000 / Cr the chosen bank or cash account).
+ */
+const createDirectBill = async (tenantId, userId, body = {}) => {
+  const { supplierId, supplierInvoiceNo, supplierTrn, billDate, dueDate, attachmentPath, notes, expenseAccountId } = body;
+  const net = round2(body.netAmount);
+  const rate = body.vatRate == null || body.vatRate === '' ? 0 : parseFloat(body.vatRate);
+
+  if (!supplierId) throw ApiError.badRequest('Select the supplier');
+  if (!supplierInvoiceNo || !String(supplierInvoiceNo).trim()) throw ApiError.badRequest('Supplier invoice number is required');
+  if (!billDate) throw ApiError.badRequest('Bill date is required');
+  if (!expenseAccountId) throw ApiError.badRequest('Select the expense head and sub-head');
+  if (!(net > EPS)) throw ApiError.badRequest('Amount before VAT must be greater than zero');
+  if (![0, 5].includes(rate)) throw ApiError.badRequest('VAT must be 5% or none');
+  if (dueDate && String(dueDate).slice(0, 10) < String(billDate).slice(0, 10)) {
+    throw ApiError.badRequest('The due date cannot be before the bill date');
+  }
+  const vat = round2((net * rate) / 100);
+  const trn = supplierTrn ? String(supplierTrn).trim() : '';
+  if (vat > EPS && !trn) throw ApiError.badRequest('Recoverable VAT needs the supplier TRN');
+
+  // Period lock first: nothing is saved if the month is closed.
+  await jeService.assertPostingDateOpen(tenantId, billDate);
+
+  const supplier = await db.Supplier.findOne({ where: { id: supplierId, tenant_id: tenantId }, attributes: ['id', 'company_name'] });
+  if (!supplier) throw ApiError.notFound('Supplier not found');
+  const expenseAcc = await resolveExpenseAccount(tenantId, { expenseAccountId });
+
+  const invNo = String(supplierInvoiceNo).trim();
+  const dup = await db.VendorBill.findOne({
+    where: { tenant_id: tenantId, supplier_id: supplier.id, supplier_invoice_no: invNo, status: { [Op.ne]: 'void' } },
+  });
+  if (dup) throw ApiError.conflict(`Supplier invoice ${invNo} is already recorded (${dup.bill_number})`);
+
+  const total = round2(net + vat);
+  const apId = await jeService.getSystemAccountId(tenantId, '2000');
+  const inputVatId = vat > EPS ? await jeService.getSystemAccountId(tenantId, '1200') : null;
+
+  const t = await db.sequelize.transaction();
+  try {
+    const billNumber = await nextBillNumber(tenantId, t);
+    const bill = await db.VendorBill.create({
+      tenant_id: tenantId,
+      bill_number: billNumber,
+      purchase_order_id: null,
+      expense_account_id: expenseAcc.accountId,
+      supplier_id: supplier.id,
+      company_id: null,
+      supplier_invoice_no: invNo,
+      supplier_trn: trn || null,
+      bill_date: billDate,
+      due_date: dueDate || null,
+      subtotal: net,
+      vat_amount: vat,
+      total,
+      paid_amount: 0,
+      status: 'open',
+      attachment_path: attachmentPath || null,
+      notes: notes || null,
+      created_by: userId || null,
+    }, { transaction: t });
+
+    const lines = [{ accountId: expenseAcc.accountId, debit: net, credit: 0 }];
+    if (inputVatId) lines.push({ accountId: inputVatId, debit: vat, credit: 0 });
+    lines.push({ accountId: apId, debit: 0, credit: total });
+    const entryId = await jeService.createJournalEntry(tenantId, userId || 1, {
+      entryDate: billDate,
+      description: `Supplier Bill ${billNumber} — ${supplier.company_name} (invoice ${invNo})`,
+      sourceType: 'vendor_bill',
+      sourceId: bill.id,
+      paidTo: supplier.company_name,
+      lines,
+    }, t);
+    await bill.update({ journal_entry_id: entryId }, { transaction: t });
+
+    await t.commit();
+    return getBill(tenantId, bill.id);
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
+};
+
+/**
  * One supplier payment covering several bills of the same party:
  * Dr 2000 AP / Cr the chosen bank account. The bank account must be picked explicitly.
  */
@@ -306,7 +392,7 @@ const payBills = async (tenantId, userId, body = {}) => {
       await bill.update({ paid_amount: paid, status: settled ? 'paid' : 'partial' }, { transaction: t });
 
       // Keep the PO's own payment summary in step for dashboards that still read it.
-      const po = await db.PurchaseOrder.findOne({
+      const po = bill.purchase_order_id == null ? null : await db.PurchaseOrder.findOne({
         where: { id: bill.purchase_order_id, tenant_id: tenantId },
         include: [{ model: db.PurchaseOrderItem, as: 'items', required: false }],
         transaction: t,
@@ -328,4 +414,4 @@ const payBills = async (tenantId, userId, body = {}) => {
   }
 };
 
-module.exports = { postPoAccrual, listAwaitingBill, listBills, getBill, createBill, payBills };
+module.exports = { postPoAccrual, listAwaitingBill, listBills, getBill, createBill, createDirectBill, payBills };
