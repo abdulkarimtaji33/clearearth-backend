@@ -122,6 +122,10 @@ async function cashAccountIds(tenantId) {
     // eslint-disable-next-line no-await-in-loop
     if (await isCashOrBank(tenantId, a)) ids.push(a.id);
   }
+  // A parent such as "Bank Accounts" that holds bank accounts is bank money too.
+  const parentIds = new Set(assets.filter((a) => ids.includes(a.id) && a.parent_id).map((a) => a.parent_id));
+  const parents = await db.ChartOfAccounts.findAll({ where: { tenant_id: tenantId, id: [...parentIds], type: 'asset' }, attributes: ['id'] });
+  parents.forEach((p) => { if (!ids.includes(p.id)) ids.push(p.id); });
   return ids;
 }
 
