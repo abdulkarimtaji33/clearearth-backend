@@ -3392,6 +3392,22 @@ async function runMigration() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Customer refunds on credit notes.
+    for (const [col, ddl] of [
+      ['refund_amount', `ALTER TABLE credit_notes ADD COLUMN refund_amount DECIMAL(15,2) NOT NULL DEFAULT 0`],
+      ['refund_account_id', `ALTER TABLE credit_notes ADD COLUMN refund_account_id INT NULL`],
+      ['refund_method', `ALTER TABLE credit_notes ADD COLUMN refund_method VARCHAR(100) NULL`],
+      ['refund_reference', `ALTER TABLE credit_notes ADD COLUMN refund_reference VARCHAR(100) NULL`],
+    ]) {
+      try {
+        await db.sequelize.query(ddl);
+        console.log(`  Added credit_notes.${col}`);
+      } catch (e) {
+        if (!isDuplicateSchemaError(e)) throw e;
+        console.log(`  credit_notes.${col} already exists, skipping`);
+      }
+    }
+
     // Cash/bank transfers and bank reconciliation.
     await db.sequelize.query(`
       CREATE TABLE IF NOT EXISTS cash_bank_transfers (

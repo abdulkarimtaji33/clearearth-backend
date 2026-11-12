@@ -630,6 +630,61 @@ async function generateTaxInvoicePdf(taxInvoiceId, tenantId) {
   return htmlToPdf(html);
 }
 
+/** Credit note PDF, laid out like the tax invoice it corrects. */
+async function generateCreditNotePdf(creditNoteId, tenantId) {
+  const note = await db.CreditNote.findOne({ where: { id: creditNoteId, tenant_id: tenantId } });
+  if (!note) return null;
+  const invoice = await db.TaxInvoice.findOne({
+    where: { id: note.tax_invoice_id, tenant_id: tenantId },
+    include: [{ model: db.ProformaInvoice, as: 'proformaInvoice', include: [{ model: db.Deal, as: 'deal', include: [{ model: db.Company, as: 'company' }] }] }],
+  });
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!invoice || !tenant) return null;
+
+  const company = invoice.proformaInvoice?.deal?.company;
+  const currency = invoice.currency || 'AED';
+  const subtotal = parseFloat(note.subtotal) || 0;
+  const vat = parseFloat(note.vat_amount) || 0;
+  const total = parseFloat(note.total) || 0;
+  const vatPct = parseFloat(invoice.vat_percentage) || 0;
+  const showTax = vat > 0.005;
+  const desc = escapeHtml(`${note.reason}${note.notes ? ` — ${note.notes}` : ''} (credit against invoice ${invoice.tax_invoice_number})`);
+
+  const headerCols = showTax
+    ? '<th style="width:5%">#</th><th style="width:47%">Description</th><th style="width:16%">Taxable Amount</th><th style="width:16%">Tax</th><th style="width:16%">Amount</th>'
+    : '<th style="width:5%">#</th><th style="width:61%">Description</th><th style="width:17%">Taxable Amount</th><th style="width:17%">Amount</th>';
+  const row = showTax
+    ? `<tr><td>1</td><td>${desc}</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(vat)}<br>${vatPct.toFixed(2)}%</td><td class="text-right">${formatNum(total)}</td></tr>`
+    : `<tr><td>1</td><td>${desc}</td><td class="text-right">${formatNum(subtotal)}</td><td class="text-right">${formatNum(total)}</td></tr>`;
+  const refundRow = parseFloat(note.refund_amount) > 0.004
+    ? `<tr class="subtotal-row"><td colspan="${showTax ? 4 : 3}">Refunded to customer</td><td class="text-right">${formatNum(note.refund_amount)}</td></tr>`
+    : '';
+  const itemsTableHtml = `<table class="items-table"><thead><tr>${headerCols}</tr></thead><tbody>${row}${refundRow}</tbody></table>`;
+
+  const html = renderTemplate(path.join(__dirname, '../templates/credit-note.html'), {
+    logoDataUri: getLogoDataUri(),
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: tenant.address || '-',
+    fromCity: [tenant.city, tenant.country].filter(Boolean).join(', ') || '-',
+    fromPhone: tenant.phone || '-',
+    fromEmail: tenant.email || '-',
+    fromVat: getVat(tenant),
+    invoiceNumber: note.credit_note_number,
+    toCompany: company?.company_name || '-',
+    toAddress: company?.address || '-',
+    toCity: [company?.city, company?.country].filter(Boolean).join(', ') || '-',
+    toVat: company?.vat_number || '-',
+    invoiceDate: formatDate(note.credit_date),
+    refNo: invoice.tax_invoice_number,
+    projectLineHtml: '',
+    itemsTableHtml,
+    itemsInTotalLabel: 'Credit note',
+    totalDisplay: formatMoneyWithSymbol(currency, total),
+    amountInWords: amountInWords(total, currency),
+  });
+  return htmlToPdf(html);
+}
+
 async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
   const invoice = await db.ProformaInvoice.findOne({
     where: { id: proformaInvoiceId, tenant_id: tenantId },
@@ -1030,6 +1085,7 @@ module.exports = {
   generatePurchaseOrderPdf,
   generateProformaInvoicePdf,
   generateTaxInvoicePdf,
+  generateCreditNotePdf,
   generateReceivableReceiptPdf,
   generateStatementOfAccountPdf,
   generateGrnPdf,

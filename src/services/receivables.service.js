@@ -636,7 +636,7 @@ function paymentEntryDate(p) {
   return (created instanceof Date ? created : new Date(created)).toISOString().slice(0, 10);
 }
 
-const DOC_TYPE_SORT_RANK = { Invoice: 0, 'Payment Received': 1 };
+const DOC_TYPE_SORT_RANK = { Invoice: 0, 'Payment Received': 1, 'Credit Note': 2, 'Refund Paid': 3 };
 
 /**
  * Customer-facing statement: opening balance + dated ledger of invoices/receipts + running
@@ -755,6 +755,55 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
     });
   });
 
+  // Credit notes reduce what the customer owes; a refund paid out increases it again.
+  const creditNotes = invoiceIds.length
+    ? await db.CreditNote.findAll({ where: { tenant_id: tenantId, tax_invoice_id: { [Op.in]: invoiceIds } }, order: [['credit_date', 'ASC'], ['id', 'ASC']] })
+    : [];
+  const creditsByInvoice = {};
+  creditNotes.forEach((cn) => {
+    (creditsByInvoice[cn.tax_invoice_id] = creditsByInvoice[cn.tax_invoice_id] || []).push(cn);
+    const inv = invoiceById[cn.tax_invoice_id];
+    entries.push({
+      date: String(cn.credit_date).slice(0, 10),
+      docType: 'Credit Note',
+      details: `${cn.credit_note_number}\n${cn.reason} (against ${inv?.tax_invoice_number || ''})`.trim(),
+      amount: 0,
+      receipts: parseNum(cn.total),
+      breakdown: {
+        sourceType: 'credit_note',
+        creditNoteId: cn.id,
+        creditNoteNumber: cn.credit_note_number,
+        invoiceId: inv?.id || null,
+        invoiceNumber: inv?.tax_invoice_number || null,
+        reason: cn.reason,
+        subtotal: parseNum(cn.subtotal),
+        vatAmount: parseNum(cn.vat_amount),
+        total: parseNum(cn.total),
+        refundAmount: parseNum(cn.refund_amount),
+        currency: inv?.currency || 'AED',
+      },
+    });
+    if (parseNum(cn.refund_amount) > 0.004) {
+      entries.push({
+        date: String(cn.credit_date).slice(0, 10),
+        docType: 'Refund Paid',
+        details: `Refund of ${inv?.currency || 'AED'}${parseNum(cn.refund_amount).toFixed(2)} for ${cn.credit_note_number}`,
+        amount: parseNum(cn.refund_amount),
+        receipts: 0,
+        breakdown: {
+          sourceType: 'credit_note_refund',
+          creditNoteId: cn.id,
+          creditNoteNumber: cn.credit_note_number,
+          invoiceNumber: inv?.tax_invoice_number || null,
+          amount: parseNum(cn.refund_amount),
+          paymentMethod: cn.refund_method || null,
+          referenceNo: cn.refund_reference || null,
+          currency: inv?.currency || 'AED',
+        },
+      });
+    }
+  });
+
   entries.sort((a, b) => {
     const dateDiff = new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`);
     if (dateDiff !== 0) return dateDiff;
@@ -798,7 +847,14 @@ const getStatementOfAccount = async (tenantId, companyId, { dateFrom, dateTo } =
     const paidAsOfTo = (paymentsByInvoice[inv.id] || [])
       .filter((p) => (paymentEntryDate(p) || '9999-99-99') <= to)
       .reduce((s, p) => s + parseNum(p.amount), 0);
-    const bal = Math.max(0, total - paidAsOfTo);
+    const creditsAsOf = (creditsByInvoice[inv.id] || [])
+      .filter((cn) => String(cn.credit_date).slice(0, 10) <= to)
+      .reduce((s, cn) => s + parseNum(cn.total) - parseNum(cn.refund_amount), 0);
+    // credit notes cancel the invoice; the refunded part is cash handed back, so it is added to what was received
+    const refundsAsOf = (creditsByInvoice[inv.id] || [])
+      .filter((cn) => String(cn.credit_date).slice(0, 10) <= to)
+      .reduce((s, cn) => s + parseNum(cn.refund_amount), 0);
+    const bal = Math.max(0, total - (paidAsOfTo - refundsAsOf) - creditsAsOf - refundsAsOf);
     if (bal <= 0.005) return;
     const dOverdue = daysOverdue(inv.due_date, asOfDate);
     const bucket = agingBucketByDueDate(dOverdue);

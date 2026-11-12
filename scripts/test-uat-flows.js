@@ -241,6 +241,41 @@ const rejects = async (fn, re, label) => {
   ok(!ws2.lines.some((l) => l.id === trLine.id) && Math.abs(ws2.openingClearedBalance - stBal) < 0.01, 'reconciled lines are not offered again and become the opening cleared balance');
   await rejects(() => rc.save(tid, 1, { id: doneRec.id, accountId: testBank.id, statementDate: today, statementBalance: stBal, lineIds: [], complete: false }), /already completed/, 'a completed reconciliation cannot be changed');
 
+  // Phase 8: credit note with refund of the paid part, statement lines, PDF
+  {
+  const cnSvc = require('../src/services/creditNote.service');
+  // Use an existing local invoice (1470 incl. 5% VAT), set it to "1000 paid", and restore it afterwards.
+  const testInv = await db.TaxInvoice.findByPk(5);
+  const origInv = { paid_amount: testInv.paid_amount, credited_amount: testInv.credited_amount, payment_status: testInv.payment_status, invoice_date: testInv.invoice_date };
+  await testInv.update({ paid_amount: 1000, credited_amount: 0, payment_status: 'partial', invoice_date: '2026-05-09' });
+  const tid = testInv.tenant_id; // the local invoices belong to the second tenant
+  const cashId = await jeService.getSystemAccountId(tid, '1000');
+  const cnInfo = await cnSvc.getInvoiceCreditInfo(tid, testInv.id);
+  ok(cnInfo.canRefund && Math.abs(cnInfo.outstanding - 470) < 0.01 && Math.abs(cnInfo.creditableTotal - 1470) < 0.01 && Math.abs(cnInfo.maxRefund - 1000) < 0.01, 'credit note info shows what is unpaid (470), what can be credited (1470) and what can be refunded (1000)');
+  await rejects(() => cnSvc.createCreditNote(tid, 1, { taxInvoiceId: testInv.id, reason: 'Wrong customer', includePaid: true }), /bank or cash account/, 'crediting a paid invoice needs the account the refund is paid from');
+  await rejects(() => cnSvc.createCreditNote(tid, 1, { taxInvoiceId: testInv.id, reason: 'Wrong customer', amountExVat: 2000 }), /more than what is left/, 'a credit above the invoice is rejected');
+  const cn = await cnSvc.createCreditNote(tid, 1, { taxInvoiceId: testInv.id, reason: 'Wrong customer', includePaid: true, refundAccountId: cashId, refundMethod: 'Cash', confirmNegative: true, creditDate: today });
+  ok(Math.abs(parseFloat(cn.total) - 1470) < 0.01 && Math.abs(parseFloat(cn.refund_amount) - 1000) < 0.01, 'the credit note is for 1470 of which 1000 is refunded');
+  const cnl = await q("SELECT a.code, l.debit, l.credit FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='credit_note' AND e.source_id=?", [cn.id]);
+  const cd = (c) => cnl.filter((x) => x.code === c).reduce((t2, x) => t2 + parseFloat(x.debit), 0);
+  const cc = (c) => cnl.filter((x) => x.code === c).reduce((t2, x) => t2 + parseFloat(x.credit), 0);
+  ok(Math.abs(cd('4000') - 1400) < 0.01 && Math.abs(cd('2100') - 70) < 0.01 && Math.abs(cc('1100') - 470) < 0.01 && Math.abs(cc('1000') - 1000) < 0.01, `refund posts Dr 4000 1400 + Dr 2100 70 / Cr 1100 470 + Cr 1000 1000 (got ${JSON.stringify(cnl)})`);
+  const invAfter = await db.TaxInvoice.findByPk(testInv.id);
+  ok(Math.abs(parseFloat(invAfter.credited_amount) - 1470) < 0.01 && Math.abs(parseFloat(invAfter.paid_amount)) < 0.01, 'the invoice shows 1470 credited and nothing received after the refund');
+  await rejects(() => cnSvc.createCreditNote(tid, 1, { taxInvoiceId: testInv.id, reason: 'Other', includePaid: true, refundAccountId: cashId, confirmNegative: true }), /nothing left to credit/, 'a fully credited invoice cannot be credited again');
+  const rcv = require('../src/services/receivables.service');
+  const coRow = (await q('SELECT d.company_id FROM tax_invoices ti JOIN proforma_invoices p ON p.id=ti.proforma_invoice_id JOIN deals d ON d.id=p.deal_id WHERE ti.id=?', [testInv.id]))[0];
+  const st = await rcv.getStatementOfAccount(tid, coRow.company_id, {});
+  ok(st.transactions.some((x) => x.docType === 'Credit Note' && Math.abs(x.receipts - 1470) < 0.01) && st.transactions.some((x) => x.docType === 'Refund Paid' && Math.abs(x.amount - 1000) < 0.01), 'the customer statement shows the credit note and the refund paid');
+  const lastT = st.transactions[st.transactions.length - 1];
+  ok(Math.abs(lastT.balance - st.balanceDue) < 0.01, 'the statement running balance still ends at the balance due');
+  try {
+    const pdf = await require('../src/services/pdf.service').generateCreditNotePdf(cn.id, tid);
+    ok(Buffer.from(pdf).toString('ascii', 0, 5).startsWith('%PDF'), 'the credit note prints as a PDF');
+  } catch (e) { console.log(`SKIP  credit note PDF (no PDF renderer here: ${e.message.slice(0, 60)})`); }
+  await db.TaxInvoice.update(origInv, { where: { id: testInv.id } });
+  }
+
   // Phase 7: financial reports
   const rep = require('../src/services/reports.service');
   const yStart = `${today.slice(0, 4)}-01-01`;

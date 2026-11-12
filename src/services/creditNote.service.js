@@ -10,6 +10,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
+const { resolvePaymentAccount, assertNotOverdrawn } = require('../utils/paymentAccount');
 
 const EPS = 0.01;
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
@@ -54,7 +55,14 @@ const getInvoiceCreditInfo = async (tenantId, taxInvoiceId) => {
   const inv = await loadInvoice(tenantId, taxInvoiceId);
   const n = invoiceNumbers(inv);
   const full = splitInclusive(n.outstanding, n.vatPct);
+  const creditableTotal = Math.max(0, round2(n.total - n.credited));
+  const all = splitInclusive(creditableTotal, n.vatPct);
   return {
+    creditableTotal,
+    maxSubtotalAll: all.subtotal,
+    maxVatAll: all.vat,
+    maxRefund: Math.min(n.paid, creditableTotal),
+    canRefund: n.paid > EPS,
     taxInvoiceId: inv.id,
     taxInvoiceNumber: inv.tax_invoice_number,
     invoiceDate: inv.invoice_date,
@@ -67,12 +75,21 @@ const getInvoiceCreditInfo = async (tenantId, taxInvoiceId) => {
     maxSubtotal: full.subtotal,
     maxVat: full.vat,
     reasons: REASONS,
-    canCredit: n.outstanding > EPS,
+    canCredit: creditableTotal > EPS,
   };
 };
 
+async function customerNameOf(tenantId, taxInvoiceId, transaction) {
+  const inv = await db.TaxInvoice.findOne({
+    where: { id: taxInvoiceId, tenant_id: tenantId },
+    include: [{ model: db.ProformaInvoice, as: 'proformaInvoice', include: [{ model: db.Deal, as: 'deal', include: [{ model: db.Company, as: 'company' }] }] }],
+    transaction,
+  });
+  return inv?.proformaInvoice?.deal?.company?.company_name || null;
+}
+
 const createCreditNote = async (tenantId, userId, body = {}) => {
-  const { taxInvoiceId, reason, notes, creditDate, amountExVat } = body;
+  const { taxInvoiceId, reason, notes, creditDate, amountExVat, includePaid, refundAmount, refundAccountId, refundMethod, refundReference, confirmNegative } = body;
   if (!taxInvoiceId) throw ApiError.badRequest('Choose the tax invoice to credit');
   if (!reason || !String(reason).trim()) throw ApiError.badRequest('Select a reason for the credit note');
 
@@ -89,25 +106,42 @@ const createCreditNote = async (tenantId, userId, body = {}) => {
     }
 
     const n = invoiceNumbers(inv);
-    if (n.outstanding <= EPS) {
-      throw ApiError.badRequest('This invoice has nothing left to credit — it is already fully paid or fully credited');
+    const creditable = Math.max(0, round2(n.total - n.credited));
+    if (creditable <= EPS) {
+      throw ApiError.badRequest('This invoice has nothing left to credit — it is already fully credited');
     }
 
-    // Blank amount = credit everything still owed; otherwise a partial amount excluding VAT.
+    // Blank amount = credit everything still owed (or, with includePaid, the whole invoice); otherwise a partial amount excluding VAT.
     let subtotal;
     let vat;
     if (amountExVat === undefined || amountExVat === null || amountExVat === '') {
-      ({ subtotal, vat } = splitInclusive(n.outstanding, n.vatPct));
+      const basis = includePaid ? creditable : n.outstanding;
+      if (basis <= EPS) throw ApiError.badRequest('There is no unpaid balance left to credit. Choose to include what the customer already paid and refund it.');
+      ({ subtotal, vat } = splitInclusive(basis, n.vatPct));
     } else {
       subtotal = round2(amountExVat);
       if (!(subtotal > 0)) throw ApiError.badRequest('Enter an amount greater than zero');
       vat = round2((subtotal * n.vatPct) / 100);
     }
     const total = round2(subtotal + vat);
-    if (total > n.outstanding + EPS) {
-      throw ApiError.badRequest(
-        `The credit (AED ${total.toFixed(2)} incl. VAT) is more than the customer still owes on this invoice (AED ${n.outstanding.toFixed(2)})`
-      );
+    if (total > creditable + EPS) {
+      throw ApiError.badRequest(`The credit (AED ${total.toFixed(2)} incl. VAT) is more than what is left on the invoice (AED ${creditable.toFixed(2)})`);
+    }
+
+    // Anything above the unpaid balance is money the customer already paid, so it has to be refunded.
+    const required = Math.max(0, round2(total - n.outstanding));
+    let refund = refundAmount === undefined || refundAmount === null || refundAmount === '' ? required : round2(refundAmount);
+    if (refund < required - EPS) {
+      throw ApiError.badRequest(`This credit includes AED ${required.toFixed(2)} the customer has already paid, which must be refunded`);
+    }
+    if (refund > n.paid + EPS) throw ApiError.badRequest(`Only AED ${n.paid.toFixed(2)} has been paid on this invoice, so that is the most that can be refunded`);
+    if (refund > total + EPS) throw ApiError.badRequest('The refund cannot be more than the credit note');
+    if (refund < 0.005) refund = 0;
+    let refundAcc = null;
+    if (refund > 0) {
+      if (!refundAccountId) throw ApiError.badRequest('Choose the bank or cash account the refund is paid from');
+      refundAcc = await resolvePaymentAccount(tenantId, { paymentMethod: refundMethod, paymentAccountId: refundAccountId });
+      await assertNotOverdrawn(tenantId, refundAcc.accountId, refund, confirmNegative);
     }
 
     const creditNoteNumber = await nextNumber(tenantId, t);
@@ -122,6 +156,10 @@ const createCreditNote = async (tenantId, userId, body = {}) => {
         subtotal,
         vat_amount: vat,
         total,
+        refund_amount: refund,
+        refund_account_id: refundAcc ? refundAcc.accountId : null,
+        refund_method: refund > 0 ? refundMethod || null : null,
+        refund_reference: refund > 0 ? refundReference || null : null,
         created_by: userId,
       },
       { transaction: t }
@@ -136,28 +174,34 @@ const createCreditNote = async (tenantId, userId, body = {}) => {
       const vatId = await jeService.getSystemAccountId(tenantId, '2100');
       lines.push({ accountId: vatId, debit: vat, credit: 0, description: `VAT reversed: ${creditNoteNumber}` });
     }
-    lines.push({ accountId: arId, debit: 0, credit: total, description: `AR: ${creditNoteNumber} (${inv.tax_invoice_number})` });
+    const toAr = round2(total - refund);
+    if (toAr > 0.004) lines.push({ accountId: arId, debit: 0, credit: toAr, description: `AR: ${creditNoteNumber} (${inv.tax_invoice_number})` });
+    if (refund > 0) lines.push({ accountId: refundAcc.accountId, debit: 0, credit: refund, description: `Refund to customer: ${creditNoteNumber}` });
+    const customerName = refund > 0 ? await customerNameOf(tenantId, inv.id, t) : null;
 
     const entryId = await jeService.createJournalEntry(
       tenantId,
       userId,
       {
         entryDate: date,
-        description: `Credit Note ${creditNoteNumber} — ${inv.tax_invoice_number} (${String(reason).trim()})`,
+        description: `Credit Note ${creditNoteNumber} — ${inv.tax_invoice_number} (${String(reason).trim()})${refund > 0 ? ` — refunded AED ${refund.toFixed(2)}` : ''}`,
         sourceType: 'credit_note',
         sourceId: note.id,
+        paidTo: customerName,
         lines,
       },
       t
     );
     await note.update({ journal_entry_id: entryId }, { transaction: t });
 
+    // A refund hands money back, so the invoice's received amount goes down by the same amount.
     const credited = round2(n.credited + total);
-    const balance = round2(n.total - n.paid - credited);
+    const paidAfter = round2(n.paid - refund);
+    const balance = round2(n.total - paidAfter - credited);
     let ps = 'unpaid';
     if (balance <= EPS) ps = 'paid';
-    else if (n.paid > 0) ps = 'partial';
-    await inv.update({ credited_amount: credited, payment_status: ps }, { transaction: t });
+    else if (paidAfter > 0) ps = 'partial';
+    await inv.update({ credited_amount: credited, paid_amount: refund > 0 ? paidAfter : inv.paid_amount, payment_status: ps }, { transaction: t });
 
     await t.commit();
     return getCreditNote(tenantId, note.id);
