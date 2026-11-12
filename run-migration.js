@@ -3392,6 +3392,61 @@ async function runMigration() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Cash/bank transfers and bank reconciliation.
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS cash_bank_transfers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        transfer_number VARCHAR(30) NOT NULL,
+        transfer_date DATE NOT NULL,
+        from_account_id INT NOT NULL,
+        to_account_id INT NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        reference_no VARCHAR(100) NULL,
+        notes TEXT NULL,
+        journal_entry_id INT NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_cbt_number (tenant_id, transfer_number),
+        INDEX idx_cbt_tenant (tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS bank_reconciliations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        account_id INT NOT NULL,
+        statement_date DATE NOT NULL,
+        statement_balance DECIMAL(15,2) NOT NULL,
+        opening_cleared_balance DECIMAL(15,2) NOT NULL DEFAULT 0,
+        cleared_balance DECIMAL(15,2) NOT NULL DEFAULT 0,
+        difference DECIMAL(15,2) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        notes TEXT NULL,
+        completed_at DATETIME NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_br_tenant (tenant_id),
+        INDEX idx_br_account (account_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS bank_reconciliation_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        reconciliation_id INT NOT NULL,
+        journal_entry_line_id INT NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_bri_tenant (tenant_id),
+        INDEX idx_bri_recon (reconciliation_id),
+        INDEX idx_bri_line (journal_entry_line_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // Journal reversals: posted entries are reversed (with a reason) instead of voided.
     console.log('Adding journal_entries.reverses_entry_id / reversal_reason columns...');
     for (const [col, ddl] of [

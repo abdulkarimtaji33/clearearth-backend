@@ -217,6 +217,30 @@ const rejects = async (fn, re, label) => {
   const stmt3 = await sp.getSupplierStatement(tid, dSup.id, {});
   ok(stmt3.transactions.some((t) => t.docType === 'Advance'), 'the advance appears on the supplier statement');
 
+  // Phase 6: cash/bank transfer and bank reconciliation
+  const tr = require('../src/services/cashBankTransfer.service');
+  const rc = require('../src/services/bankReconciliation.service');
+  let testBank = (await q("SELECT id FROM chart_of_accounts WHERE tenant_id=? AND code='1099'", [tid]))[0];
+  if (!testBank) testBank = await db.ChartOfAccounts.create({ tenant_id: tid, code: '1099', name: 'UAT Test Bank', type: 'asset', sub_type: 'bank', normal_balance: 'debit', is_group: false, is_active: true, sort_order: 90 });
+  await rejects(() => tr.createTransfer(tid, 1, { fromAccountId: cashId, toAccountId: cashId, amount: 10 }), /different/, 'a transfer needs two different accounts');
+  await rejects(() => tr.createTransfer(tid, 1, { fromAccountId: cashId, toAccountId: testBank.id, amount: 0 }), /greater than zero/, 'a transfer needs an amount');
+  await rejects(() => tr.createTransfer(tid, 1, { fromAccountId: cashId, toAccountId: arAcct.id, amount: 10, confirmNegative: true }), /Invalid payment account/, 'a transfer can only go to a cash or bank account');
+  const trf = await tr.createTransfer(tid, 1, { fromAccountId: cashId, toAccountId: testBank.id, amount: 50, confirmNegative: true, transferDate: today, referenceNo: 'TRF-T' });
+  const tl = await q("SELECT a.code, l.debit, l.credit FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='cash_bank_transfer' AND e.source_id=?", [trf.id]);
+  ok(tl.some((x) => x.code === '1099' && Math.abs(parseFloat(x.debit) - 50) < 0.01) && tl.some((x) => x.code === '1000' && Math.abs(parseFloat(x.credit) - 50) < 0.01), `transfer ${trf.transfer_number} posts Dr 1099 50 / Cr 1000 50`);
+  const ws = await rc.getWorkspace(tid, { accountId: testBank.id, statementDate: today });
+  const trLine = ws.lines.find((l) => Math.abs(l.debit - 50) < 0.01 && /Transfer/.test(l.description));
+  ok(!!trLine, 'the transfer appears as an unreconciled line on the bank account');
+  const stBal = Math.round((ws.openingClearedBalance + 50) * 100) / 100;
+  const draftRec = await rc.save(tid, 1, { accountId: testBank.id, statementDate: today, statementBalance: stBal + 5, lineIds: [trLine.id], complete: false });
+  ok(draftRec.status === 'draft' && Math.abs(draftRec.difference - 5) < 0.01, 'a reconciliation with a difference is saved as a draft with the difference shown');
+  await rejects(() => rc.save(tid, 1, { id: draftRec.id, accountId: testBank.id, statementDate: today, statementBalance: stBal + 5, lineIds: [trLine.id], complete: true }), /difference/, 'a reconciliation cannot be completed while there is a difference');
+  const doneRec = await rc.save(tid, 1, { id: draftRec.id, accountId: testBank.id, statementDate: today, statementBalance: stBal, lineIds: [trLine.id], complete: true });
+  ok(doneRec.status === 'completed' && doneRec.cleared.length === 1, 'the reconciliation completes once the difference is zero');
+  const ws2 = await rc.getWorkspace(tid, { accountId: testBank.id, statementDate: today });
+  ok(!ws2.lines.some((l) => l.id === trLine.id) && Math.abs(ws2.openingClearedBalance - stBal) < 0.01, 'reconciled lines are not offered again and become the opening cleared balance');
+  await rejects(() => rc.save(tid, 1, { id: doneRec.id, accountId: testBank.id, statementDate: today, statementBalance: stBal, lineIds: [], complete: false }), /already completed/, 'a completed reconciliation cannot be changed');
+
   // A7: period lock (restores state afterwards)
   const hadYear = (await q('SELECT COUNT(*) c FROM fiscal_years WHERE tenant_id=? AND deleted_at IS NULL', [tid]))[0].c > 0;
   const lockDate = '2025-03-15';

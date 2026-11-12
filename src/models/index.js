@@ -80,6 +80,9 @@ const ExpenseCategory = require('./ExpenseCategory')(sequelize, DataTypes);
 const VendorBill = require('./VendorBill')(sequelize, DataTypes);
 const CreditNote = require('./CreditNote')(sequelize, DataTypes);
 const SupplierDebitNote = require('./SupplierDebitNote')(sequelize, DataTypes);
+const CashBankTransfer = require('./CashBankTransfer')(sequelize, DataTypes);
+const BankReconciliation = require('./BankReconciliation')(sequelize, DataTypes);
+const BankReconciliationItem = require('./BankReconciliationItem')(sequelize, DataTypes);
 const SupplierAdvance = require('./SupplierAdvance')(sequelize, DataTypes);
 const SupplierAdvanceApplication = require('./SupplierAdvanceApplication')(sequelize, DataTypes);
 const WorkType = require('./WorkType')(sequelize, DataTypes);
@@ -202,6 +205,9 @@ const db = {
   VendorBill,
   CreditNote,
   SupplierDebitNote,
+  CashBankTransfer,
+  BankReconciliation,
+  BankReconciliationItem,
   SupplierAdvance,
   SupplierAdvanceApplication,
   WorkType,
