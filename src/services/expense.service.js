@@ -9,6 +9,7 @@ const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount, resolveExpenseAccount, assertNotOverdrawn } = require('../utils/paymentAccount');
 const expenseCategoryService = require('./expenseCategory.service');
+const { resolveVat } = require('../utils/vat');
 
 const STATUSES = ['pending', 'approved', 'rejected'];
 
@@ -64,6 +65,9 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
     paidTo,
     notes,
     expenseAccountId,
+    paidNow,
+    paymentAccountId,
+    confirmNegative,
   } = body;
 
   if (!expenseDate) {
@@ -98,6 +102,15 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
 
   const expenseAccount = await resolveExpenseAccount(tenantId, { category: WO_EXPENSE_CATEGORY, expenseAccountId });
 
+  // Paid at the time: Dr expense / Cr cash or bank, with no accrual. Otherwise it accrues (Cr 2200) until billed.
+  const isPaidNow = paidNow === true || paidNow === 'true';
+  let payAcct = null;
+  if (isPaidNow) {
+    if (paymentAccountId == null || paymentAccountId === '') throw ApiError.badRequest('Select the bank / cash account the expense is paid from');
+    payAcct = await resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId });
+    await assertNotOverdrawn(tenantId, payAcct.accountId, amt, confirmNegative);
+  }
+
   await db.sequelize.transaction(async (t) => {
     const exp = await db.Expense.create(
       {
@@ -112,9 +125,9 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
         reference: WO_EXPENSE_REFERENCE,
         reference_id: String(workOrderId),
         created_by: userId,
-        payment_status: 'unpaid',
-        paid_amount: null,
-        paid_at: null,
+        payment_status: isPaidNow ? 'paid' : 'unpaid',
+        paid_amount: isPaidNow ? amt : null,
+        paid_at: isPaidNow ? expenseDate : null,
         expense_account_id: expenseAccount.accountId,
       },
       { transaction: t }
@@ -128,6 +141,27 @@ const approveTaskExpense = async (tenantId, userId, workOrderId, taskExpenseId, 
       },
       { transaction: t }
     );
+
+    if (isPaidNow) {
+      // Paid at the time: one entry, Dr expense / Cr the chosen cash or bank account.
+      const payEntryId = await jeService.createJournalEntry(tenantId, userId, {
+        entryDate: expenseDate,
+        description: `Work Order Expense Paid — WO #${workOrderId}`,
+        sourceType: 'expense',
+        sourceId: exp.id,
+        paidTo: exp.paid_to || null,
+        lines: [
+          { accountId: expenseAccount.accountId, debit: amt, credit: 0 },
+          { accountId: payAcct.accountId, debit: 0, credit: amt },
+        ],
+      }, t);
+      const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId, {
+        sourceType: 'expense', sourceId: exp.id, amount: amt, paymentMethod: paymentMethod || null,
+        paymentAccountId: payAcct.accountId, paidTo: exp.paid_to || null, paidAt: expenseDate,
+      }, t);
+      await paymentTx.update({ journal_entry_id: payEntryId }, { transaction: t });
+      return;
+    }
 
     // GL: Dr selected expense account / Cr Accrued Expenses (2200)
     try {
@@ -163,6 +197,7 @@ const createManualExpense = async (tenantId, userId, body) => {
     netAmount,
     amount,
     vatRate,
+    vatAmount,
     expenseDate,
     paidTo,
     paymentMethod,
@@ -181,9 +216,7 @@ const createManualExpense = async (tenantId, userId, body) => {
   const net = round2(netAmount != null && netAmount !== '' ? netAmount : amount);
   if (!Number.isFinite(net) || net <= 0) throw ApiError.badRequest('Amount before VAT must be greater than zero');
 
-  const rate = vatRate == null || vatRate === '' ? 0 : parseFloat(vatRate);
-  if (![0, 5].includes(rate)) throw ApiError.badRequest('VAT must be 5% or none');
-  const vat = round2((net * rate) / 100);
+  const { vat, rate } = resolveVat(net, vatRate, vatAmount);
   const total = round2(net + vat);
 
   const receipt = receiptNo != null ? String(receiptNo).trim() : '';

@@ -340,17 +340,9 @@ const create = async (tenantId, data, scope = {}) => {
       }
     }
 
-    // GL: Dr expense head / Cr Accrued Expenses (2200) if created directly as 'approved'.
-    // The vendor bill later moves the accrual to Accounts Payable.
+    // Approval posts nothing: it needs the expense head / sub-head and sends the PO to "Awaiting bill".
     if (resolvedStatus === 'approved') {
-      try {
-        const poTotal = items.reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
-        if (poTotal > 0.005) {
-          await vendorBillService.postPoAccrual(tenantId, newPo.id, poTotal, poDate || new Date().toISOString().slice(0, 10), t);
-        }
-      } catch (jeErr) {
-        console.warn('[GL] purchase_order_approved (create) journal entry skipped:', jeErr.message);
-      }
+      await vendorBillService.approvePoForBilling(tenantId, newPo.id, t);
     }
 
     return newPo;
@@ -473,17 +465,7 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
     }
 
     if (becomingApproved) {
-      try {
-        // Re-fetch updated items for accurate total
-        const updatedItems = items && Array.isArray(items) ? items : po.items || [];
-        const poTotal = updatedItems.reduce((s, it) => s + (parseFloat(it.total || it.line_total || 0)), 0);
-
-        if (poTotal > 0.005) {
-          await vendorBillService.postPoAccrual(tenantId, po.id, poTotal, poDate || po.po_date || new Date().toISOString().slice(0, 10), t);
-        }
-      } catch (jeErr) {
-        console.warn('[GL] purchase_order_approved journal entry skipped:', jeErr.message);
-      }
+      await vendorBillService.approvePoForBilling(tenantId, po.id, t);
     }
   });
 
@@ -661,7 +643,8 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
   const prevStatus = po.status;
   assertApprovableTotal(po.items || []);
   if (prevStatus !== PO_STATUS.APPROVED) {
-    await jeService.assertPostingDateOpen(tenantId, po.po_date || new Date().toISOString().slice(0, 10));
+    // The expense head / sub-head is mandatory before approval; nothing is posted at approval.
+    await vendorBillService.assertPoHead(tenantId, po.expense_account_id);
   }
   await _approveClientQuotation(po, { approvedByUserId: actor.userId, requestedPickupDate });
 
@@ -672,15 +655,7 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
   }
 
   if (prevStatus !== PO_STATUS.APPROVED) {
-    try {
-      const fullPo = await getById(tenantId, poId);
-      const poTotal = (fullPo.items || []).reduce((s, it) => s + (parseFloat(it.total || 0)), 0);
-      if (poTotal > 0.005) {
-        await vendorBillService.postPoAccrual(tenantId, poId, poTotal, fullPo.po_date || new Date().toISOString().slice(0, 10));
-      }
-    } catch (jeErr) {
-      console.warn('[GL] purchase_order_approved (approve) journal entry skipped:', jeErr.message);
-    }
+    await vendorBillService.approvePoForBilling(tenantId, poId);
   }
 
   return getById(tenantId, poId);

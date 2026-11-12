@@ -34,9 +34,19 @@ const createDirect = asyncHandler(async (req, res) => {
   return ApiResponse.created(res, row, 'Supplier bill recorded');
 });
 
+const awaitingWoExpenses = asyncHandler(async (req, res) => {
+  const rows = await vendorBillService.listAwaitingWoExpenses(req.tenant.id);
+  return ApiResponse.success(res, rows);
+});
+
+const createWoExpenseBill = asyncHandler(async (req, res) => {
+  const row = await vendorBillService.createWorkOrderExpenseBill(req.tenant.id, req.user.id, req.body);
+  return ApiResponse.created(res, row, 'Supplier bill recorded');
+});
+
 const pay = asyncHandler(async (req, res) => {
   const result = await vendorBillService.payBills(req.tenant.id, req.user.id, req.body);
   return ApiResponse.success(res, result, 'Supplier payment recorded');
 });
 
-module.exports = { awaitingBill, list, getById, create, createDirect, pay };
+module.exports = { awaitingBill, awaitingWoExpenses, list, getById, create, createDirect, createWoExpenseBill, pay };

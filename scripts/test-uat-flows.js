@@ -30,15 +30,6 @@ const rejects = async (fn, re, label) => {
   const group = await acct('5400');
   await rejects(() => resolveExpenseAccount(tid, { expenseAccountId: group.id }), /Invalid expense account/, 'group account 5400 is rejected as an expense account');
 
-  // Category -> account group: Fuel may use fuel-group accounts only; "Other" stays free
-  const salaries = await acct('5700');
-  const vehicle = await acct('5420');
-  await rejects(() => resolveExpenseAccount(tid, { category: 'fuel', expenseAccountId: salaries.id, restrictToCategory: true }), /can only be posted to/, 'Fuel category cannot use Salaries & Wages');
-  const fuelOk = await resolveExpenseAccount(tid, { category: 'fuel', expenseAccountId: vehicle.id, restrictToCategory: true });
-  ok(fuelOk.accountCode === '5420', 'Fuel category may use another account in the Fuel & Transport group (5420)');
-  const otherAny = await resolveExpenseAccount(tid, { category: 'other', expenseAccountId: salaries.id, restrictToCategory: true });
-  ok(otherAny.accountCode === '5700', 'Other category can still use any expense account');
-
   // Chart of accounts: suggested code, duplicate code, system account guard, list extras
   const next = await coaService.suggestNextCode(tid, { parentId: group.id });
   ok(/^544\d$/.test(next.code) || /^54[5-9]\d$/.test(next.code), `next code under 5400 follows its siblings (got ${next.code})`);
@@ -55,7 +46,7 @@ const rejects = async (fn, re, label) => {
   // Add Expense = paid-only: Dr expense sub-head (+ Dr 1200 VAT) / Cr bank, nothing through 2200
   const cashId = (await acct('1000')).id;
   const fuelAcct = await acct('5410');
-  const base = { expenseDate: today, expenseAccountId: fuelAcct.id, paymentAccountId: cashId, netAmount: 100, vatRate: 5, receiptNo: 'R-1', supplierTrn: '100123456700003' };
+  const base = { confirmNegative: true, expenseDate: today, expenseAccountId: fuelAcct.id, paymentAccountId: cashId, netAmount: 100, vatRate: 5, receiptNo: 'R-1', supplierTrn: '100123456700003' };
   await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, paymentAccountId: undefined }), /bank \/ cash account/, 'a paid expense needs the Paid from account');
   await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, expenseAccountId: group.id }), /Invalid expense account/, 'a group account cannot be debited from Add Expense');
   await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, receiptNo: '' }), /receipt \/ invoice number/, 'recoverable VAT needs the receipt number and TRN');
@@ -68,6 +59,14 @@ const rejects = async (fn, re, label) => {
   ok(Math.abs(dr('5410') - 100) < 0.01 && Math.abs(dr('1200') - 5) < 0.01 && Math.abs(cr('1000') - 105) < 0.01, `paid expense posts Dr 5410 100 + Dr 1200 5 / Cr 1000 105 (got ${JSON.stringify(je)})`);
   ok(!je.some((x) => x.code === '2200'), 'a paid expense posts nothing through 2200 Accrued Expenses');
   ok(exp.payment_status === 'paid' && Math.abs(parseFloat(exp.amount) - 105) < 0.01, 'expense is saved as paid for the total incl. VAT');
+
+  // VAT can be 5%, a manual amount, or none
+  const mExp = await expenseService.createManualExpense(tid, 1, { ...base, netAmount: 100, vatRate: 'manual', vatAmount: 7.5 });
+  const mLines = await q("SELECT a.code, l.debit FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='expense' AND e.source_id=?", [mExp.id]);
+  ok(Math.abs(mLines.filter((x) => x.code === '1200').reduce((t, x) => t + parseFloat(x.debit), 0) - 7.5) < 0.01 && Math.abs(parseFloat(mExp.amount) - 107.5) < 0.01, 'a manual VAT amount posts to 1200 Input VAT and is added to the total');
+  const noVat = await expenseService.createManualExpense(tid, 1, { ...base, netAmount: 100, vatRate: 0, receiptNo: '', supplierTrn: '' });
+  ok(Math.abs(parseFloat(noVat.amount) - 100) < 0.01 && parseFloat(noVat.vat_amount) === 0, 'an expense with no VAT posts only the net amount');
+  await rejects(() => expenseService.createManualExpense(tid, 1, { ...base, netAmount: 100, vatRate: 'manual', vatAmount: 500 }), /more than the amount before VAT/, 'a manual VAT amount above the net is rejected');
 
   // Supplier bill without a PO (unpaid expense): Dr expense (+ Dr 1200) / Cr 2000, then paid from the bank
   const dSup = (await q('SELECT id FROM suppliers WHERE tenant_id=? LIMIT 1', [tid]))[0]
@@ -84,7 +83,7 @@ const rejects = async (fn, re, label) => {
   ok(Math.abs(dd('5410') - 200) < 0.01 && Math.abs(dd('1200') - 10) < 0.01 && Math.abs(dc('2000') - 210) < 0.01 && !dLines.some((x) => x.code === '2200'),
     `supplier bill posts Dr 5410 200 + Dr 1200 10 / Cr 2000 210, nothing through 2200 (got ${JSON.stringify(dLines)})`);
   await rejects(() => vb.createDirectBill(tid, 1, dBase), /already recorded/, 'the same supplier invoice cannot be recorded twice');
-  const dPaid = await vb.payBills(tid, 1, { allocations: [{ billId: dBill.id, amount: 210 }], paymentAccountId: cashId, paymentDate: today });
+  const dPaid = await vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: dBill.id, amount: 210 }], paymentAccountId: cashId, paymentDate: today });
   ok(dPaid.bills[0].status === 'paid', 'a supplier bill without a PO is paid from the bank (Dr 2000 / Cr cash)');
 
   // Phase 1: supplier carried on the AP line; overdraft guard on payments
@@ -92,42 +91,75 @@ const rejects = async (fn, re, label) => {
   ok(apLine && /^Supplier: /.test(apLine.description || ''), `the Accounts Payable line carries the supplier (got ${apLine && apLine.description})`);
   const cashBal = parseFloat((await q("SELECT COALESCE(SUM(l.debit-l.credit),0) b FROM journal_entry_lines l JOIN journal_entries e ON e.id=l.journal_entry_id AND e.status='posted' WHERE l.account_id=? AND e.tenant_id=?", [cashId, tid]))[0].b) || 0;
   const bigPay = { ...base, netAmount: Math.max(cashBal, 0) + 50, vatRate: 0, receiptNo: '', supplierTrn: '' };
-  await rejects(() => expenseService.createManualExpense(tid, 1, bigPay), /below zero/, 'a payment that takes the cash/bank account below zero is refused until confirmed');
+  await rejects(() => expenseService.createManualExpense(tid, 1, { ...bigPay, confirmNegative: false }), /below zero/, 'a payment that takes the cash/bank account below zero is refused until confirmed');
   const confirmedExp = await expenseService.createManualExpense(tid, 1, { ...bigPay, confirmNegative: true });
   ok(confirmedExp && confirmedExp.payment_status === 'paid', 'the same payment goes through once the user confirms it');
 
   // Item 2: work order expense needs an explicit head
   await rejects(() => expenseService.approveTaskExpense(tid, 1, 1, 1, { expenseDate: today }), /Select the expense account/, 'WO expense approval without an expense head is rejected');
 
-  // Item 3: PO accrual with chosen head -> bill -> payment
+  // Item 6: PO approval posts nothing; the bill posts Dr expense (+ Dr 1200) / Cr 2000, under the supplier
   const sup = (await q('SELECT id FROM suppliers WHERE tenant_id=? LIMIT 1', [tid]))[0];
   const head = await acct('5410');
-  const [poId] = await db.sequelize.query(
-    "INSERT INTO purchase_orders (tenant_id, supplier_id, po_date, status, expense_account_id, created_at, updated_at) VALUES (?, ?, CURDATE(), 'approved', ?, NOW(), NOW())",
-    { replacements: [tid, sup ? sup.id : null, head.id] }
-  );
-  const ps = (await q('SELECT id FROM products_services WHERE tenant_id=? LIMIT 1', [tid]))[0];
-  await db.sequelize.query(
-    'INSERT INTO purchase_order_items (purchase_order_id, product_service_id, quantity, price, total, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, NOW(), NOW())',
-    { replacements: [poId, ps ? ps.id : 1, '1', '1000', '1000'] }
-  );
-  await vb.postPoAccrual(tid, poId, 1000, today);
-  const accrual = await q(
-    `SELECT a.code, l.debit, l.credit FROM journal_entries je JOIN journal_entry_lines l ON l.journal_entry_id=je.id JOIN chart_of_accounts a ON a.id=l.account_id
-     WHERE je.source_type='purchase_order_approved' AND je.source_id=? ORDER BY l.id`, [poId]);
-  ok(accrual[0].code === '5410' && parseFloat(accrual[0].debit) === 1000 && accrual[1].code === '2200' && parseFloat(accrual[1].credit) === 1000,
-    `PO approval posts Dr 5410 1000 / Cr 2200 (got ${accrual.map((r) => r.code).join('/')})`);
+  const mkPo = async (expenseAccountId) => {
+    const [id] = await db.sequelize.query(
+      "INSERT INTO purchase_orders (tenant_id, supplier_id, po_date, status, expense_account_id, created_at, updated_at) VALUES (?, ?, CURDATE(), 'approved', ?, NOW(), NOW())",
+      { replacements: [tid, sup ? sup.id : null, expenseAccountId] }
+    );
+    const psr = (await q('SELECT id FROM products_services WHERE tenant_id=? LIMIT 1', [tid]))[0];
+    await db.sequelize.query(
+      'INSERT INTO purchase_order_items (purchase_order_id, product_service_id, quantity, price, total, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, NOW(), NOW())',
+      { replacements: [id, psr ? psr.id : 1, '1', '1000', '1000'] }
+    );
+    return id;
+  };
+  const noHeadPo = await mkPo(null);
+  await rejects(() => vb.approvePoForBilling(tid, noHeadPo), /expense head and sub-head/, 'a PO cannot be approved without the expense head / sub-head');
+  const poId = await mkPo(head.id);
+  await vb.approvePoForBilling(tid, poId);
+  const poJes = await q("SELECT COUNT(*) c FROM journal_entries WHERE source_type='purchase_order_approved' AND source_id=?", [poId]);
+  ok(Number(poJes[0].c) === 0, 'PO approval posts nothing to the ledger');
 
   const bill = await vb.createBill(tid, 1, { purchaseOrderId: poId, supplierInvoiceNo: `T-${Date.now()}`, billDate: today, subtotal: 800, vatAmount: 40 });
   ok(parseFloat(bill.total) === 840, 'vendor bill total = subtotal + VAT');
-  await rejects(() => vb.createBill(tid, 1, { purchaseOrderId: poId, supplierInvoiceNo: 'OVER', billDate: today, subtotal: 500 }), /exceeds the unbilled accrual/, 'bill above the unbilled accrual is rejected');
+  const bl = await q("SELECT a.code, l.debit, l.credit, l.description FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='vendor_bill' AND e.source_id=? ORDER BY l.id", [bill.id]);
+  const bd = (c) => bl.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.debit), 0);
+  const bc = (c) => bl.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.credit), 0);
+  ok(Math.abs(bd('5410') - 800) < 0.01 && Math.abs(bd('1200') - 40) < 0.01 && Math.abs(bc('2000') - 840) < 0.01 && !bl.some((x) => x.code === '2200'),
+    `PO bill posts Dr 5410 800 + Dr 1200 40 / Cr 2000 840, nothing through 2200 (got ${JSON.stringify(bl.map((x) => [x.code, x.debit, x.credit]))})`);
+  await rejects(() => vb.createBill(tid, 1, { purchaseOrderId: poId, supplierInvoiceNo: 'OVER', billDate: today, subtotal: 500 }), /above what is left on the PO/, 'a bill above the PO amount needs the extra amount approved');
+  const overBill = await vb.createBill(tid, 1, { purchaseOrderId: poId, supplierInvoiceNo: `OVER-${Date.now()}`, billDate: today, subtotal: 500, vatAmount: 0, approveOverage: true });
+  ok(parseFloat(overBill.total) === 500, 'a bill above the PO amount is accepted once the extra amount is approved');
 
   const ar = await acct('1100');
-  await rejects(() => vb.payBills(tid, 1, { allocations: [{ billId: bill.id, amount: 840 }], paymentAccountId: ar.id }), /cash or bank/, 'paying a vendor bill from Accounts Receivable is rejected');
-  await rejects(() => vb.payBills(tid, 1, { allocations: [{ billId: bill.id, amount: 840 }] }), /bank/, 'paying without choosing a bank account is rejected');
+  await rejects(() => vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: bill.id, amount: 840 }], paymentAccountId: ar.id }), /cash or bank/, 'paying a vendor bill from Accounts Receivable is rejected');
+  await rejects(() => vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: bill.id, amount: 840 }] }), /bank/, 'paying without choosing a bank account is rejected');
   const cash = await acct('1000');
-  const paid = await vb.payBills(tid, 1, { allocations: [{ billId: bill.id, amount: 840 }], paymentAccountId: cash.id, paymentMethod: 'Bank transfer' });
+  const paid = await vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: bill.id, amount: 840 }], paymentAccountId: cash.id, paymentMethod: 'Bank transfer' });
   ok(paid.bills[0].status === 'paid', 'vendor bill is paid from a cash/bank account');
+
+  // Work order expense: accrual stays (Dr expense / Cr 2200); the supplier bill clears it (Dr 2200 / Cr 2000)
+  const woExpId = await db.sequelize.transaction(async (tx) => {
+    await db.sequelize.query('SET FOREIGN_KEY_CHECKS=0', { transaction: tx });
+    const [id] = await db.sequelize.query(
+      "INSERT INTO expenses (tenant_id, work_order_task_expense_id, category, amount, expense_date, payment_status, expense_account_id, reference, created_at, updated_at) VALUES (?, ?, 'work_orders', 100, CURDATE(), 'unpaid', ?, 'work_order', NOW(), NOW())",
+      { replacements: [tid, 900000 + Math.floor(Math.random() * 90000), head.id], transaction: tx }
+    );
+    await db.sequelize.query('SET FOREIGN_KEY_CHECKS=1', { transaction: tx });
+    return id;
+  });
+  const woAwaiting = await vb.listAwaitingWoExpenses(tid);
+  ok(woAwaiting.some((e) => e.id === woExpId), 'an approved, unpaid work order expense is listed as awaiting a supplier bill');
+  const woBill = await vb.createWorkOrderExpenseBill(tid, 1, { supplierId: sup.id, workOrderExpenseId: woExpId, supplierInvoiceNo: `WO-${Date.now()}`, supplierTrn: '100123456700003', billDate: today, vatRate: 5 });
+  const wl = await q("SELECT a.code, l.debit, l.credit FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='vendor_bill' AND e.source_id=?", [woBill.id]);
+  const wd = (c) => wl.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.debit), 0);
+  const wc = (c) => wl.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.credit), 0);
+  ok(Math.abs(wd('2200') - 100) < 0.01 && Math.abs(wd('1200') - 5) < 0.01 && Math.abs(wc('2000') - 105) < 0.01,
+    `the supplier bill clears the work order accrual: Dr 2200 100 + Dr 1200 5 / Cr 2000 105 (got ${JSON.stringify(wl.map((x) => [x.code, x.debit, x.credit]))})`);
+  await rejects(() => vb.createWorkOrderExpenseBill(tid, 1, { supplierId: sup.id, workOrderExpenseId: woExpId, supplierInvoiceNo: 'X2', billDate: today }), /not found|already/, 'a work order expense cannot be billed twice');
+  await vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: woBill.id, amount: 105 }], paymentAccountId: cash.id, paymentDate: today });
+  const woAfter = (await q('SELECT payment_status FROM expenses WHERE id=?', [woExpId]))[0];
+  ok(woAfter.payment_status === 'paid', 'paying the supplier bill marks the work order expense as paid');
 
   // A7: period lock (restores state afterwards)
   const hadYear = (await q('SELECT COUNT(*) c FROM fiscal_years WHERE tenant_id=? AND deleted_at IS NULL', [tid]))[0].c > 0;

@@ -5,6 +5,8 @@ const { authenticate, authorize } = require('../middlewares/auth');
 
 router.use(authenticate);
 
+router.get('/awaiting-wo-expenses', authorize('accounting.read', 'deals.read'), vendorBillController.awaitingWoExpenses);
+router.post('/work-order-expense', authorize('accounting.create'), vendorBillController.createWoExpenseBill);
 router.get('/awaiting-bill', authorize('accounting.read', 'deals.read'), vendorBillController.awaitingBill);
 router.get('/', authorize('accounting.read', 'deals.read'), vendorBillController.list);
 router.get('/:id', authorize('accounting.read', 'deals.read'), vendorBillController.getById);

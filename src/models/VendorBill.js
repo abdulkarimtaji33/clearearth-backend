@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       bill_number: { type: DataTypes.STRING(30), allowNull: false },
       purchase_order_id: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'purchase_orders', key: 'id' }, comment: 'Null for a supplier bill entered without a PO' },
       expense_account_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'Expense account debited when there is no PO' },
+      expense_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'Work order expense cleared by this bill' },
       supplier_id: { type: DataTypes.INTEGER, allowNull: true },
       company_id: { type: DataTypes.INTEGER, allowNull: true },
       supplier_invoice_no: { type: DataTypes.STRING(100), allowNull: false },

@@ -3290,6 +3290,15 @@ async function runMigration() {
       console.log('  vendor_bills.expense_account_id already exists, skipping');
     }
 
+    // A supplier bill can clear a work order expense accrual (Dr 2200 / Cr 2000).
+    try {
+      await db.sequelize.query(`ALTER TABLE vendor_bills ADD COLUMN expense_id INT NULL COMMENT 'Work order expense this bill clears (Dr 2200 / Cr 2000)'`);
+      console.log('  Added vendor_bills.expense_id');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  vendor_bills.expense_id already exists, skipping');
+    }
+
     // Manual expenses are paid-only postings with VAT + receipt details.
     console.log('Adding expenses VAT / receipt columns...');
     for (const [col, ddl] of [
