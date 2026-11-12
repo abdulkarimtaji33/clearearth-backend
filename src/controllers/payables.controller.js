@@ -1,4 +1,5 @@
 const payablesService = require('../services/payables.service');
+const supplierPayablesService = require('../services/supplierPayables.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
@@ -58,4 +59,17 @@ const agingSummary = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, data);
 });
 
-module.exports = { list, recordPayment, listPayments, listPaymentReceipts, getPaymentReceipt, agingSummary };
+const bySupplier = asyncHandler(async (req, res) => {
+  const result = await supplierPayablesService.listBySupplier(req.tenant.id, { asOf: req.query.asOf, search: req.query.search });
+  return ApiResponse.success(res, result);
+});
+
+const supplierStatement = asyncHandler(async (req, res) => {
+  const result = await supplierPayablesService.getSupplierStatement(req.tenant.id, req.params.supplierId, {
+    dateFrom: req.query.dateFrom,
+    dateTo: req.query.dateTo,
+  });
+  return ApiResponse.success(res, result);
+});
+
+module.exports = { list, recordPayment, listPayments, listPaymentReceipts, getPaymentReceipt, agingSummary, bySupplier, supplierStatement };

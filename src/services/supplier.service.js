@@ -54,6 +54,10 @@ const getAll = async (tenantId, filters) => {
     distinct: true,
   });
 
+  // Outstanding balance per supplier (what we owe them), for the list's Balance column.
+  const balances = await require('./supplierPayables.service').balancesBySupplier(tenantId);
+  rows.forEach((r) => r.setDataValue('balance_due', balances[r.id] || 0));
+
   return { suppliers: rows, total: count };
 };
 

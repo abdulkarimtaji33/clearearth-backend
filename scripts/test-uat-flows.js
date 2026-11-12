@@ -138,6 +138,20 @@ const rejects = async (fn, re, label) => {
   const paid = await vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: bill.id, amount: 840 }], paymentAccountId: cash.id, paymentMethod: 'Bank transfer' });
   ok(paid.bills[0].status === 'paid', 'vendor bill is paid from a cash/bank account');
 
+  // Supplier-wise payables: grouped list, aging and the statement of account
+  const sp = require('../src/services/supplierPayables.service');
+  const openBill = await vb.createDirectBill(tid, 1, { ...dBase, supplierInvoiceNo: `OPEN-${Date.now()}`, netAmount: 100, vatRate: 0, supplierTrn: '' });
+  const bySup = await sp.listBySupplier(tid, {});
+  const grp = bySup.suppliers.find((g) => g.supplierId === dSup.id);
+  ok(grp && grp.total >= 100 - 0.01 && grp.items.some((i) => i.id === openBill.id), 'payables are grouped by supplier with the open bill and its total');
+  ok(grp && grp.buckets.b0_30 >= 100 - 0.01, 'a bill that is not yet due is counted in the 0-30 bucket');
+  const stmt = await sp.getSupplierStatement(tid, dSup.id, {});
+  const lastTxn = stmt.transactions[stmt.transactions.length - 1];
+  ok(stmt.balanceDue >= 100 - 0.01 && lastTxn && Math.abs(lastTxn.balance - stmt.balanceDue) < 0.01, `the supplier statement running balance ends at the balance due (${stmt.balanceDue})`);
+  ok(stmt.transactions.some((t) => t.docType === 'Bill') && stmt.transactions.some((t) => t.docType === 'Payment'), 'the statement lists bills and payments');
+  const balMap = await sp.balancesBySupplier(tid);
+  ok(Math.abs((balMap[dSup.id] || 0) - grp.total) < 0.01, 'the Suppliers list balance equals the supplier total in payables');
+
   // Work order expense: accrual stays (Dr expense / Cr 2200); the supplier bill clears it (Dr 2200 / Cr 2000)
   const woExpId = await db.sequelize.transaction(async (tx) => {
     await db.sequelize.query('SET FOREIGN_KEY_CHECKS=0', { transaction: tx });
