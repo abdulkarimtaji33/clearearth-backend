@@ -11,6 +11,7 @@ router.get('/income-statement',   authorize('reports.read', 'accounting.read', '
 router.get('/balance-sheet',      authorize('reports.read', 'accounting.read', 'deals.read'), reportsController.getBalanceSheet);
 router.get('/cash-flow',          authorize('reports.read', 'accounting.read', 'deals.read'), reportsController.getCashFlowStatement);
 router.get('/changes-in-equity',  authorize('reports.read', 'accounting.read', 'deals.read'), reportsController.getChangesInEquity);
-router.get('/vat-report',         authorize('reports.read', 'accounting.read', 'deals.read'), reportsController.getVatReport);
+router.get('/vat-report/export', authorize('reports.read', 'accounting.read', 'deals.read'), reportsController.exportVatReport);
+router.get('/vat-report',        authorize('reports.read', 'accounting.read', 'deals.read'), reportsController.getVatReport);
 
 module.exports = router;

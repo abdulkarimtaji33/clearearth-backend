@@ -241,6 +241,30 @@ const rejects = async (fn, re, label) => {
   ok(!ws2.lines.some((l) => l.id === trLine.id) && Math.abs(ws2.openingClearedBalance - stBal) < 0.01, 'reconciled lines are not offered again and become the opening cleared balance');
   await rejects(() => rc.save(tid, 1, { id: doneRec.id, accountId: testBank.id, statementDate: today, statementBalance: stBal, lineIds: [], complete: false }), /already completed/, 'a completed reconciliation cannot be changed');
 
+  // Phase 7: financial reports
+  const rep = require('../src/services/reports.service');
+  const yStart = `${today.slice(0, 4)}-01-01`;
+  for (const [f, t2] of [[yStart, today], [today, today], ['2020-01-01', today]]) {
+    const cf = await rep.getCashFlowStatement(tid, { dateFrom: f, dateTo: t2 });
+    ok(cf.reconciled && Math.abs(cf.opening_cash + cf.net_change - cf.closing_cash) < 0.05,
+      `cash flow ${f}..${t2} reconciles: opening ${cf.opening_cash} + change ${cf.net_change} = closing ${cf.closing_cash}`);
+  }
+  const cfY = await rep.getCashFlowStatement(tid, { dateFrom: yStart, dateTo: today });
+  ok(cfY.operating.items.length > 0, `cash flow lists the working-capital movements it found (${cfY.operating.items.length} lines)`);
+  const isr = await rep.getIncomeStatement(tid, { dateFrom: yStart, dateTo: today, comparativeDateFrom: `${Number(today.slice(0, 4)) - 1}-01-01`, comparativeDateTo: `${Number(today.slice(0, 4)) - 1}-12-31` });
+  const allItems = ['revenue', 'cogs', 'opex', 'finance'].flatMap((k) => isr.sections[k].groups.flatMap((g) => g.items));
+  ok(allItems.every((i) => Math.abs(i.amount) > 0.004 || Math.abs(i.comparative) > 0.004), 'income statement hides lines that are zero in both periods');
+  const headGrp = isr.sections.opex.groups.find((g) => g.head && g.items.length > 0);
+  ok(!headGrp || Math.abs(headGrp.total - headGrp.items.reduce((s, i) => s + i.amount, 0)) < 0.01, 'income statement head subtotal equals the sum of its sub-heads');
+  ok(Math.abs(isr.totals.current.netIncome - (isr.sections.revenue.total - isr.sections.cogs.total - isr.sections.opex.total - isr.sections.finance.total)) < 0.02, 'income statement net income = revenue - costs');
+  const vr = await rep.getVatReport(tid, { dateFrom: yStart, dateTo: today });
+  const box = (b) => vr.boxes.find((x) => x.box === b);
+  ok(Math.abs(box('12').vat - box('8').vat) < 0.01 && Math.abs(box('13').vat - box('11').vat) < 0.01, 'VAT return: box 12 = total output tax, box 13 = total input tax');
+  ok(Math.abs(Math.abs(vr.net_vat_due) - box('14').vat) < 0.01, 'VAT return: box 14 = output tax - input tax');
+  ok(vr.transactions.every((x) => x.entry_number), 'VAT return drill-down lists the journal entries behind each figure');
+  const xl = await rep.exportVatReport(tid, { dateFrom: yStart, dateTo: today });
+  ok(Buffer.isBuffer(xl) && xl.length > 1000, 'VAT return exports to an Excel file');
+
   // A7: period lock (restores state afterwards)
   const hadYear = (await q('SELECT COUNT(*) c FROM fiscal_years WHERE tenant_id=? AND deleted_at IS NULL', [tid]))[0].c > 0;
   const lockDate = '2025-03-15';

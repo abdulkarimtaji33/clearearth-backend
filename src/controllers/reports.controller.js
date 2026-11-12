@@ -62,7 +62,17 @@ const getVatReport = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, result);
 });
 
+const exportVatReport = asyncHandler(async (req, res) => {
+  const { dateFrom, dateTo } = req.query;
+  requireDateRange(dateFrom, dateTo);
+  const buf = await reportsService.exportVatReport(req.tenant.id, { dateFrom, dateTo });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="vat-return-${dateFrom}-to-${dateTo}.xlsx"`);
+  return res.send(buf);
+});
+
 module.exports = {
+  exportVatReport,
   getTrialBalance,
   getGeneralLedger,
   getIncomeStatement,

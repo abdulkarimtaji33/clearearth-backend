@@ -607,12 +607,17 @@ const getVatReport = async (tenantId, { dateFrom, dateTo }) => {
   };
 };
 
+const financial = require('./financialReports.service');
+
 module.exports = {
   getTrialBalance,
   getGeneralLedger,
-  getIncomeStatement,
+  getIncomeStatement: financial.getIncomeStatement,
   getBalanceSheet,
-  getCashFlowStatement,
+  getCashFlowStatement: financial.getCashFlowStatement,
   getChangesInEquity,
-  getVatReport,
+  getVatReport: financial.getVatReport,
+  exportVatReport: financial.exportVatReport,
+  // previous implementations kept for reference / internal comparison
+  legacy: { getIncomeStatement, getCashFlowStatement, getVatReport },
 };
