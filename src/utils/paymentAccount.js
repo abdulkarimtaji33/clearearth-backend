@@ -102,6 +102,28 @@ async function assertAccountMatchesCategory(tenantId, category, acc) {
   throw ApiError.badRequest(`${categoryRow?.name || category} expenses can only be posted to ${groupLabel} accounts — choose one of those or change the category`);
 }
 
+/**
+ * Refuse a payment that would take a cash/bank account below zero unless the caller confirmed it
+ * (`confirmNegative`). The screens warn first and send the flag when the user ticks "Pay anyway".
+ */
+async function assertNotOverdrawn(tenantId, accountId, amount, confirmNegative = false) {
+  if (confirmNegative === true || confirmNegative === 'true') return;
+  const [rows] = await db.sequelize.query(
+    `SELECT COALESCE(SUM(l.debit - l.credit), 0) AS bal
+       FROM journal_entry_lines l JOIN journal_entries e ON e.id = l.journal_entry_id AND e.status = 'posted'
+      WHERE l.account_id = ? AND e.tenant_id = ?`,
+    { replacements: [accountId, tenantId] }
+  );
+  const bal = parseFloat(rows[0] && rows[0].bal) || 0;
+  const after = Math.round((bal - (parseFloat(amount) || 0)) * 100) / 100;
+  if (after < -0.004) {
+    const acc = await db.ChartOfAccounts.findOne({ where: { id: accountId, tenant_id: tenantId }, attributes: ['code', 'name'] });
+    throw ApiError.badRequest(
+      `This payment takes ${acc ? `${acc.code} ${acc.name}` : 'the account'} below zero (balance AED ${bal.toFixed(2)}, it would become ${after.toFixed(2)}). Confirm it to continue.`
+    );
+  }
+}
+
 async function resolveExpenseAccount(tenantId, { category, expenseAccountId, restrictToCategory = false } = {}) {
   if (expenseAccountId != null && expenseAccountId !== '') {
     const acc = await db.ChartOfAccounts.findOne({
@@ -156,5 +178,6 @@ module.exports = {
   defaultAccountCodeForMethod,
   resolvePaymentAccount,
   resolveExpenseAccount,
+  assertNotOverdrawn,
   isCashOrBank,
 };

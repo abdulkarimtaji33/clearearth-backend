@@ -7,7 +7,7 @@ const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
-const { resolvePaymentAccount, resolveExpenseAccount } = require('../utils/paymentAccount');
+const { resolvePaymentAccount, resolveExpenseAccount, assertNotOverdrawn } = require('../utils/paymentAccount');
 const expenseCategoryService = require('./expenseCategory.service');
 
 const STATUSES = ['pending', 'approved', 'rejected'];
@@ -174,6 +174,7 @@ const createManualExpense = async (tenantId, userId, body) => {
     attachmentPath,
     expenseAccountId,
     paymentAccountId,
+    confirmNegative,
   } = body;
 
   if (!expenseDate) throw ApiError.badRequest('expenseDate is required');
@@ -205,6 +206,7 @@ const createManualExpense = async (tenantId, userId, body) => {
   // active cash/bank account can be credited.
   const expenseAccount = await resolveExpenseAccount(tenantId, { expenseAccountId });
   const payAcct = await resolvePaymentAccount(tenantId, { paymentMethod, paymentAccountId });
+  await assertNotOverdrawn(tenantId, payAcct.accountId, total, confirmNegative);
   const payee = await normalizeVendorPayee(tenantId, paidTo);
 
   const acc = await db.ChartOfAccounts.findOne({ where: { id: expenseAccount.accountId, tenant_id: tenantId }, attributes: ['id', 'name', 'parent_id'] });
@@ -326,6 +328,7 @@ const updateExpensePayment = async (tenantId, expenseId, body, userId = null) =>
         paymentMethod: body.paymentMethod ?? exp.payment_method,
         paymentAccountId: body.paymentAccountId,
       });
+      await assertNotOverdrawn(tenantId, payAcct.accountId, delta, body.confirmNegative);
 
       const paymentTx = await paymentTxService.createPaymentTransaction(tenantId, userId || exp.created_by || 1, {
         sourceType: 'expense',

@@ -87,6 +87,15 @@ const rejects = async (fn, re, label) => {
   const dPaid = await vb.payBills(tid, 1, { allocations: [{ billId: dBill.id, amount: 210 }], paymentAccountId: cashId, paymentDate: today });
   ok(dPaid.bills[0].status === 'paid', 'a supplier bill without a PO is paid from the bank (Dr 2000 / Cr cash)');
 
+  // Phase 1: supplier carried on the AP line; overdraft guard on payments
+  const apLine = (await q("SELECT l.description FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='vendor_bill' AND e.source_id=? AND a.code='2000'", [dBill.id]))[0];
+  ok(apLine && /^Supplier: /.test(apLine.description || ''), `the Accounts Payable line carries the supplier (got ${apLine && apLine.description})`);
+  const cashBal = parseFloat((await q("SELECT COALESCE(SUM(l.debit-l.credit),0) b FROM journal_entry_lines l JOIN journal_entries e ON e.id=l.journal_entry_id AND e.status='posted' WHERE l.account_id=? AND e.tenant_id=?", [cashId, tid]))[0].b) || 0;
+  const bigPay = { ...base, netAmount: Math.max(cashBal, 0) + 50, vatRate: 0, receiptNo: '', supplierTrn: '' };
+  await rejects(() => expenseService.createManualExpense(tid, 1, bigPay), /below zero/, 'a payment that takes the cash/bank account below zero is refused until confirmed');
+  const confirmedExp = await expenseService.createManualExpense(tid, 1, { ...bigPay, confirmNegative: true });
+  ok(confirmedExp && confirmedExp.payment_status === 'paid', 'the same payment goes through once the user confirms it');
+
   // Item 2: work order expense needs an explicit head
   await rejects(() => expenseService.approveTaskExpense(tid, 1, 1, 1, { expenseDate: today }), /Select the expense account/, 'WO expense approval without an expense head is rejected');
 

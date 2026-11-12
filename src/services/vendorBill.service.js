@@ -13,7 +13,7 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
-const { isCashOrBank, resolveExpenseAccount } = require('../utils/paymentAccount');
+const { isCashOrBank, resolveExpenseAccount, assertNotOverdrawn } = require('../utils/paymentAccount');
 
 const EPS = 0.005;
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
@@ -157,9 +157,14 @@ const createBill = async (tenantId, userId, body = {}) => {
 
   const po = await db.PurchaseOrder.findOne({
     where: { id: purchaseOrderId, tenant_id: tenantId, status: 'approved' },
-    include: [{ model: db.PurchaseOrderItem, as: 'items', required: false }],
+    include: [
+      { model: db.PurchaseOrderItem, as: 'items', required: false },
+      { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name'], required: false },
+      { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
+    ],
   });
   if (!po) throw ApiError.notFound('Approved purchase order not found');
+  const partyName = (po.supplier && po.supplier.company_name) || (po.company && po.company.company_name) || null;
   if (!po.bill_flow) {
     throw ApiError.badRequest('This purchase order was approved before vendor bills were introduced and is paid directly from Payables');
   }
@@ -213,12 +218,13 @@ const createBill = async (tenantId, userId, body = {}) => {
 
     const lines = [{ accountId: accruedId, debit: subtotal, credit: 0 }];
     if (inputVatId) lines.push({ accountId: inputVatId, debit: vat, credit: 0 });
-    lines.push({ accountId: apId, debit: 0, credit: total });
+    lines.push({ accountId: apId, debit: 0, credit: total, description: partyName ? `Supplier: ${partyName}` : undefined });
     const entryId = await jeService.createJournalEntry(tenantId, userId || 1, {
       entryDate: billDate,
       description: `Vendor Bill ${billNumber} — Supplier invoice ${bill.supplier_invoice_no} (PO #${po.id})`,
       sourceType: 'vendor_bill',
       sourceId: bill.id,
+      paidTo: partyName,
       lines,
     }, t);
     await bill.update({ journal_entry_id: entryId }, { transaction: t });
@@ -297,7 +303,7 @@ const createDirectBill = async (tenantId, userId, body = {}) => {
 
     const lines = [{ accountId: expenseAcc.accountId, debit: net, credit: 0 }];
     if (inputVatId) lines.push({ accountId: inputVatId, debit: vat, credit: 0 });
-    lines.push({ accountId: apId, debit: 0, credit: total });
+    lines.push({ accountId: apId, debit: 0, credit: total, description: `Supplier: ${supplier.company_name}` });
     const entryId = await jeService.createJournalEntry(tenantId, userId || 1, {
       entryDate: billDate,
       description: `Supplier Bill ${billNumber} — ${supplier.company_name} (invoice ${invNo})`,
@@ -321,7 +327,7 @@ const createDirectBill = async (tenantId, userId, body = {}) => {
  * Dr 2000 AP / Cr the chosen bank account. The bank account must be picked explicitly.
  */
 const payBills = async (tenantId, userId, body = {}) => {
-  const { allocations, paymentAccountId, paymentMethod, paymentDate, referenceNo, notes } = body;
+  const { allocations, paymentAccountId, paymentMethod, paymentDate, referenceNo, notes, confirmNegative } = body;
   if (!Array.isArray(allocations) || allocations.length === 0) throw ApiError.badRequest('Select at least one bill to pay');
   if (!paymentAccountId) throw ApiError.badRequest('Select the bank / cash account the payment is made from');
 
@@ -356,6 +362,7 @@ const payBills = async (tenantId, userId, body = {}) => {
     return { bill, amount };
   });
   const totalPaid = round2(rows.reduce((s, r) => s + r.amount, 0));
+  await assertNotOverdrawn(tenantId, bankAcc.id, totalPaid, confirmNegative);
   const payDate = paymentDate || new Date().toISOString().slice(0, 10);
   const paidTo = rows[0].bill.supplier?.company_name || rows[0].bill.company?.company_name || null;
   const apId = await jeService.getSystemAccountId(tenantId, '2000');

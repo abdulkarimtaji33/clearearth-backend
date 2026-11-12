@@ -62,7 +62,7 @@ const getAll = async (tenantId, filters) => {
       {
         model: db.DealItem,
         as: 'items',
-        attributes: ['id'],
+        attributes: ['id', 'line_total'],
         required: false,
       },
     ],
@@ -84,7 +84,17 @@ const getAll = async (tenantId, filters) => {
     subQuery: false,
   });
 
-  return { quotations: rows, total: count };
+  return { quotations: rows.map(withLineTotal), total: count };
+};
+
+/** The quotation total comes from its lines when it has any (the stored header amount can be stale/0). */
+const withLineTotal = (quotation) => {
+  const items = (quotation && quotation.deal && quotation.deal.items) || [];
+  if (items.length) {
+    const sum = Math.round(items.reduce((s, it) => s + (parseFloat(it.line_total) || 0), 0) * 100) / 100;
+    if (sum > 0) quotation.setDataValue('quotation_amount', sum.toFixed(2));
+  }
+  return quotation;
 };
 
 const getById = async (tenantId, quotationId, scope = {}) => {
@@ -110,7 +120,7 @@ const getById = async (tenantId, quotationId, scope = {}) => {
     ],
   });
   if (!quotation) throw ApiError.notFound('Quotation not found');
-  return quotation;
+  return withLineTotal(quotation);
 };
 
 const create = async (tenantId, data, scope = {}) => {

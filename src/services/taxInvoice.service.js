@@ -285,6 +285,13 @@ const create = async (tenantId, userId, body, scope = {}) => {
       console.warn('[GL] tax_invoice journal entry skipped:', jeErr.message);
     }
 
+    if (plain.quotation_id) {
+      await db.Quotation.update(
+        { status: 'approved' },
+        { where: { id: plain.quotation_id, tenant_id: tenantId, status: { [db.Sequelize.Op.in]: ['new', 'sent', 'under_review', 'revised', 'pending_approval'] } }, transaction: t }
+      );
+    }
+
     await t.commit();
   } catch (e) {
     await t.rollback();

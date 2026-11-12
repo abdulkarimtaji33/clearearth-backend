@@ -250,6 +250,12 @@ const create = async (tenantId, userId, body, scope = {}) => {
       await db.ProformaInvoiceItem.bulkCreate(rows, { transaction: t });
     }
 
+    // A quotation that has been invoiced is no longer "new": move it to approved.
+    await db.Quotation.update(
+      { status: 'approved' },
+      { where: { id: quotationId, tenant_id: tenantId, status: { [db.Sequelize.Op.in]: ['new', 'sent', 'under_review', 'revised', 'pending_approval'] } }, transaction: t }
+    );
+
     await t.commit();
   } catch (e) {
     await t.rollback();
