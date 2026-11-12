@@ -79,6 +79,9 @@ const Expense = require('./Expense')(sequelize, DataTypes);
 const ExpenseCategory = require('./ExpenseCategory')(sequelize, DataTypes);
 const VendorBill = require('./VendorBill')(sequelize, DataTypes);
 const CreditNote = require('./CreditNote')(sequelize, DataTypes);
+const SupplierDebitNote = require('./SupplierDebitNote')(sequelize, DataTypes);
+const SupplierAdvance = require('./SupplierAdvance')(sequelize, DataTypes);
+const SupplierAdvanceApplication = require('./SupplierAdvanceApplication')(sequelize, DataTypes);
 const WorkType = require('./WorkType')(sequelize, DataTypes);
 
 // Accounting / GL
@@ -198,6 +201,9 @@ const db = {
   ExpenseCategory,
   VendorBill,
   CreditNote,
+  SupplierDebitNote,
+  SupplierAdvance,
+  SupplierAdvanceApplication,
   WorkType,
   FiscalYear,
   AccountingPeriod,

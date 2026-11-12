@@ -72,7 +72,7 @@ const billIncludes = [
 
 const withBalance = (row) => {
   const o = row.get ? row.get({ plain: true }) : row;
-  o.balance_due = Math.max(0, round2(parseFloat(o.total) - parseFloat(o.paid_amount || 0)));
+  o.balance_due = Math.max(0, round2(parseFloat(o.total) - parseFloat(o.paid_amount || 0) - parseFloat(o.debit_note_amount || 0)));
   o.party_name = o.supplier?.company_name || o.company?.company_name || '—';
   return o;
 };
@@ -515,7 +515,7 @@ const payBills = async (tenantId, userId, body = {}) => {
   const rows = allocations.map((a) => {
     const bill = byId[a.billId];
     const amount = round2(a.amount);
-    const balance = round2(parseFloat(bill.total) - parseFloat(bill.paid_amount || 0));
+    const balance = round2(parseFloat(bill.total) - parseFloat(bill.paid_amount || 0) - parseFloat(bill.debit_note_amount || 0));
     if (bill.status === 'void' || bill.status === 'paid') throw ApiError.badRequest(`${bill.bill_number} is not payable`);
     if (!(amount > EPS)) throw ApiError.badRequest(`Enter an amount for ${bill.bill_number}`);
     if (amount > balance + 0.01) throw ApiError.badRequest(`Amount for ${bill.bill_number} exceeds its balance (AED ${balance.toFixed(2)})`);
@@ -555,7 +555,7 @@ const payBills = async (tenantId, userId, body = {}) => {
       }, t).then((tx) => tx.update({ journal_entry_id: entryId }, { transaction: t }));
 
       const paid = round2(parseFloat(bill.paid_amount || 0) + amount);
-      const settled = paid >= parseFloat(bill.total) - 0.01;
+      const settled = paid + parseFloat(bill.debit_note_amount || 0) >= parseFloat(bill.total) - 0.01;
       await bill.update({ paid_amount: paid, status: settled ? 'paid' : 'partial' }, { transaction: t });
       if (settled && bill.expense_id) {
         await db.Expense.update(

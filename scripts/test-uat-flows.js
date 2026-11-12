@@ -174,6 +174,48 @@ const rejects = async (fn, re, label) => {
   await vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: woBill.id, amount: 105 }], paymentAccountId: cash.id, paymentDate: today });
   const woAfter = (await q('SELECT payment_status FROM expenses WHERE id=?', [woExpId]))[0];
   ok(woAfter.payment_status === 'paid', 'paying the supplier bill marks the work order expense as paid');
+  // the fixture used a made-up task expense id; detach it so the foreign key can be re-created later
+  await db.sequelize.query('UPDATE expenses SET work_order_task_expense_id = NULL WHERE id = ?', { replacements: [woExpId] });
+
+  // Phase 5: supplier debit notes
+  const dn = require('../src/services/supplierDebitNote.service');
+  const dnBill = await vb.createDirectBill(tid, 1, { ...dBase, supplierInvoiceNo: `DN-${Date.now()}`, netAmount: 400, vatRate: 5 });
+  const dnInfo = await dn.getBillDebitInfo(tid, dnBill.id);
+  ok(Math.abs(dnInfo.outstanding - 420) < 0.01 && Math.abs(dnInfo.maxSubtotal - 400) < 0.01, 'debit note info shows the unpaid balance and the most that can be debited');
+  await rejects(() => dn.createDebitNote(tid, 1, { vendorBillId: dnBill.id, reason: '', amountExVat: 100 }), /reason/, 'a debit note needs a reason');
+  await rejects(() => dn.createDebitNote(tid, 1, { vendorBillId: dnBill.id, reason: 'Goods returned', amountExVat: 500 }), /more than the unpaid balance/, 'a debit note above the unpaid balance is rejected');
+  const note = await dn.createDebitNote(tid, 1, { vendorBillId: dnBill.id, reason: 'Goods returned', amountExVat: 100, noteDate: today });
+  ok(Math.abs(parseFloat(note.total) - 105) < 0.01 && /^DN\/CE\//.test(note.debit_note_number), `debit note ${note.debit_note_number} is for 105 incl. VAT`);
+  const nl = await q("SELECT a.code, l.debit, l.credit FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='supplier_debit_note' AND e.source_id=?", [note.id]);
+  const nd = (c) => nl.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.debit), 0);
+  const nc = (c) => nl.filter((x) => x.code === c).reduce((t, x) => t + parseFloat(x.credit), 0);
+  ok(Math.abs(nd('2000') - 105) < 0.01 && Math.abs(nc('5410') - 100) < 0.01 && Math.abs(nc('1200') - 5) < 0.01, `debit note posts Dr 2000 105 / Cr 5410 100 + Cr 1200 5 (got ${JSON.stringify(nl)})`);
+  const dnAfter = await vb.getBill(tid, dnBill.id);
+  ok(Math.abs(dnAfter.balance_due - 315) < 0.01, `the bill balance drops by the debit note (now ${dnAfter.balance_due})`);
+  await rejects(() => vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: dnBill.id, amount: 420 }], paymentAccountId: cash.id }), /exceeds its balance/, 'a bill cannot be paid for more than its balance after the debit note');
+  const stmt2 = await sp.getSupplierStatement(tid, dSup.id, {});
+  ok(stmt2.transactions.some((t) => t.docType === 'Debit note' && Math.abs(t.paid - 105) < 0.01), 'the debit note appears on the supplier statement');
+  await vb.payBills(tid, 1, { confirmNegative: true, allocations: [{ billId: dnBill.id, amount: 315 }], paymentAccountId: cash.id, paymentDate: today });
+  ok((await vb.getBill(tid, dnBill.id)).status === 'paid', 'paying the rest after a debit note settles the bill');
+  await rejects(() => dn.createDebitNote(tid, 1, { vendorBillId: dnBill.id, reason: 'Other' }), /nothing left to debit/, 'a settled bill cannot be debited');
+
+  // Phase 5: supplier advances
+  const adv = require('../src/services/supplierAdvance.service');
+  await rejects(() => adv.recordAdvance(tid, 1, { supplierId: dSup.id, amount: 200 }), /cash or bank account/, 'an advance needs the account it is paid from');
+  const a1 = await adv.recordAdvance(tid, 1, { supplierId: dSup.id, amount: 200, paymentAccountId: cash.id, confirmNegative: true, advanceDate: today, referenceNo: 'ADV-REF' });
+  ok(Math.abs(a1.remaining - 200) < 0.01 && /^ADV\/CE\//.test(a1.advance_number), `advance ${a1.advance_number} recorded for 200`);
+  const al = await q("SELECT a.code, l.debit, l.credit FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='supplier_advance' AND e.source_id=?", [a1.id]);
+  ok(al.some((x) => x.code === '1350' && Math.abs(parseFloat(x.debit) - 200) < 0.01) && al.some((x) => x.code === '1000' && Math.abs(parseFloat(x.credit) - 200) < 0.01), `advance posts Dr 1350 200 / Cr 1000 200 (got ${JSON.stringify(al)})`);
+  const advBill = await vb.createDirectBill(tid, 1, { ...dBase, supplierInvoiceNo: `ADVB-${Date.now()}`, netAmount: 120, vatRate: 5 });
+  const opts = await adv.getApplyOptions(tid, dSup.id);
+  ok(opts.availableTotal >= 200 - 0.01 && opts.bills.some((b) => b.id === advBill.id), 'apply options list the unused advance and the open bills of the supplier');
+  await rejects(() => adv.applyAdvance(tid, 1, a1.id, { vendorBillId: advBill.id, amount: 500 }), /Only AED/, 'an advance cannot be applied for more than what is left of it');
+  const a2 = await adv.applyAdvance(tid, 1, a1.id, { vendorBillId: advBill.id });
+  ok(Math.abs(a2.remaining - 74) < 0.01 && (await vb.getBill(tid, advBill.id)).status === 'paid', 'applying the advance settles the bill (126) and leaves 74');
+  const apl = await q("SELECT a.code, l.debit, l.credit FROM journal_entries e JOIN journal_entry_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.source_type='supplier_advance_applied' AND e.source_id=?", [a1.id]);
+  ok(apl.some((x) => x.code === '2000' && Math.abs(parseFloat(x.debit) - 126) < 0.01) && apl.some((x) => x.code === '1350' && Math.abs(parseFloat(x.credit) - 126) < 0.01), 'applying posts Dr 2000 126 / Cr 1350 126');
+  const stmt3 = await sp.getSupplierStatement(tid, dSup.id, {});
+  ok(stmt3.transactions.some((t) => t.docType === 'Advance'), 'the advance appears on the supplier statement');
 
   // A7: period lock (restores state afterwards)
   const hadYear = (await q('SELECT COUNT(*) c FROM fiscal_years WHERE tenant_id=? AND deleted_at IS NULL', [tid]))[0].c > 0;

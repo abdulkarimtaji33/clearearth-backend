@@ -236,8 +236,34 @@ const getSupplierStatement = async (tenantId, supplierId, { dateFrom, dateTo } =
 };
 
 // Extended by debit notes / advances (phase 5); returns extra statement entries for a supplier.
-async function supplierExtraEntries() {
-  return [];
+async function supplierExtraEntries(tenantId, supplierId) {
+  const entries = [];
+  const notes = await db.SupplierDebitNote.findAll({
+    where: { tenant_id: tenantId, supplier_id: supplierId },
+    include: [{ model: db.VendorBill, as: 'vendorBill', attributes: ['bill_number'], required: false }],
+  });
+  notes.forEach((n) => {
+    entries.push({
+      date: String(n.note_date).slice(0, 10),
+      docType: 'Debit note',
+      details: `${n.debit_note_number} · ${n.vendorBill ? n.vendorBill.bill_number : ''} · ${n.reason}`,
+      amount: 0,
+      paid: round2(n.total),
+      link: { type: 'debit_note', id: n.id },
+    });
+  });
+  const advances = await db.SupplierAdvance.findAll({ where: { tenant_id: tenantId, supplier_id: supplierId } });
+  advances.forEach((a) => {
+    entries.push({
+      date: String(a.advance_date).slice(0, 10),
+      docType: 'Advance',
+      details: `${a.advance_number}${a.reference_no ? ` · ref ${a.reference_no}` : ''}`,
+      amount: 0,
+      paid: round2(a.amount),
+      link: { type: 'advance', id: a.id },
+    });
+  });
+  return entries;
 }
 
 module.exports = { listBySupplier, balancesBySupplier, getSupplierStatement, openItems, BUCKETS, bucketFor, emptyBuckets };

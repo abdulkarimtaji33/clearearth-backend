@@ -22,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
       vat_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       total: { type: DataTypes.DECIMAL(15, 2), allowNull: false },
       paid_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
+      debit_note_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0, comment: 'Total of supplier debit notes' },
       status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'open', comment: 'open | partial | paid | void' },
       attachment_path: { type: DataTypes.STRING(500), allowNull: true },
       notes: { type: DataTypes.TEXT, allowNull: true },

@@ -3318,6 +3318,80 @@ async function runMigration() {
       }
     }
 
+    // Supplier debit notes and advances.
+    console.log('Adding vendor_bills.debit_note_amount...');
+    try {
+      await db.sequelize.query(`ALTER TABLE vendor_bills ADD COLUMN debit_note_amount DECIMAL(15,2) NOT NULL DEFAULT 0 COMMENT 'Total of supplier debit notes against this bill'`);
+      console.log('  Added vendor_bills.debit_note_amount');
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) throw e;
+      console.log('  vendor_bills.debit_note_amount already exists, skipping');
+    }
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS supplier_debit_notes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        debit_note_number VARCHAR(30) NOT NULL,
+        vendor_bill_id INT NOT NULL,
+        supplier_id INT NULL,
+        company_id INT NULL,
+        note_date DATE NOT NULL,
+        reason VARCHAR(100) NOT NULL,
+        notes TEXT NULL,
+        subtotal DECIMAL(15,2) NOT NULL,
+        vat_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total DECIMAL(15,2) NOT NULL,
+        credit_account_id INT NULL,
+        journal_entry_id INT NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_sdn_number (tenant_id, debit_note_number),
+        INDEX idx_sdn_tenant (tenant_id),
+        INDEX idx_sdn_bill (vendor_bill_id),
+        INDEX idx_sdn_supplier (supplier_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS supplier_advances (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        advance_number VARCHAR(30) NOT NULL,
+        supplier_id INT NOT NULL,
+        advance_date DATE NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        applied_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        payment_account_id INT NULL,
+        payment_method VARCHAR(100) NULL,
+        reference_no VARCHAR(100) NULL,
+        notes TEXT NULL,
+        journal_entry_id INT NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_sadv_number (tenant_id, advance_number),
+        INDEX idx_sadv_tenant (tenant_id),
+        INDEX idx_sadv_supplier (supplier_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS supplier_advance_applications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        advance_id INT NOT NULL,
+        vendor_bill_id INT NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        applied_at DATE NOT NULL,
+        journal_entry_id INT NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_saa_tenant (tenant_id),
+        INDEX idx_saa_advance (advance_id),
+        INDEX idx_saa_bill (vendor_bill_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // Journal reversals: posted entries are reversed (with a reason) instead of voided.
     console.log('Adding journal_entries.reverses_entry_id / reversal_reason columns...');
     for (const [col, ddl] of [
