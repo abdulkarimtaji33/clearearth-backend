@@ -32,59 +32,71 @@ function startOfWeek(d) {
   return dt;
 }
 
-/**
- * Computes the current and immediately-preceding date range for a
- * dashboard "period" selector (today / week / month), plus a nominal
- * `periodEnd` (used only for the human-readable label — queries are
- * always capped at `now`, since nothing can have a future timestamp).
- */
-function startOfPeriod(period = 'week') {
-  const now = new Date();
-  let from, periodEnd, prevFrom, prevTo;
+const PERIODS = ['today', 'week', 'month', 'last_month', '3months', '6months', 'year', 'custom'];
+const DAY_MS = 86400000;
 
+function parseYmd(str) {
+  if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return null;
+  const [y, m, d] = str.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+/**
+ * Resolves the dashboard date filter into a current range plus the equally long
+ * range immediately before it (used for "vs last period"). `to` is capped at now.
+ * Presets: today, week, month (default), last_month, 3months, 6months, year, custom (+ dateFrom/dateTo).
+ */
+function startOfPeriod(period = 'month', dateFrom, dateTo) {
+  const now = new Date();
+  const sod = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  const eod = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+  let from;
+  let periodEnd;
+
+  if (period === 'custom') {
+    const f = parseYmd(dateFrom);
+    const t = parseYmd(dateTo);
+    if (f && t) {
+      from = sod(f);
+      periodEnd = eod(t < f ? f : t);
+    } else {
+      period = 'month';
+    }
+  }
   if (period === 'today') {
-    from = new Date(now);
-    from.setHours(0, 0, 0, 0);
-    periodEnd = new Date(from);
-    periodEnd.setHours(23, 59, 59, 999);
-    prevTo = new Date(from);
-    prevFrom = new Date(from);
-    prevFrom.setDate(prevFrom.getDate() - 1);
-  } else if (period === 'month') {
+    from = sod(now); periodEnd = eod(now);
+  } else if (period === 'week') {
+    from = startOfWeek(now); periodEnd = eod(new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6));
+  } else if (period === 'last_month') {
+    from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    periodEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+  } else if (period === '3months') {
+    from = sod(new Date(now.getFullYear(), now.getMonth() - 2, 1)); periodEnd = eod(now);
+  } else if (period === '6months') {
+    from = sod(new Date(now.getFullYear(), now.getMonth() - 5, 1)); periodEnd = eod(now);
+  } else if (period === 'year') {
+    from = new Date(now.getFullYear(), 0, 1); periodEnd = eod(now);
+  } else if (period !== 'custom') {
+    period = 'month';
     from = new Date(now.getFullYear(), now.getMonth(), 1);
     periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    prevTo = new Date(from);
-    prevFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  } else {
-    from = startOfWeek(now);
-    periodEnd = new Date(from);
-    periodEnd.setDate(periodEnd.getDate() + 6);
-    periodEnd.setHours(23, 59, 59, 999);
-    prevTo = new Date(from);
-    prevFrom = new Date(from);
-    prevFrom.setDate(prevFrom.getDate() - 7);
   }
 
-  return { period, from, to: now, periodEnd, prevFrom, prevTo };
+  const to = periodEnd < now ? periodEnd : now;
+  const spanMs = periodEnd.getTime() - from.getTime() + 1;
+  const prevTo = new Date(from);
+  const prevFrom = new Date(from.getTime() - spanMs);
+  return { period, from, to, periodEnd, prevFrom, prevTo };
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function formatPeriodLabel({ period, from, periodEnd }) {
-  if (period === 'today') {
-    return `${from.getDate()} ${MONTH_NAMES[from.getMonth()]} ${from.getFullYear()}`;
-  }
-  if (period === 'month') {
-    return `${MONTH_NAMES[from.getMonth()]} ${from.getFullYear()}`;
-  }
-  const sameMonth = from.getMonth() === periodEnd.getMonth();
-  const left = `${from.getDate()}`;
-  const right = sameMonth
-    ? `${periodEnd.getDate()} ${MONTH_NAMES[periodEnd.getMonth()]} ${periodEnd.getFullYear()}`
-    : `${periodEnd.getDate()} ${MONTH_NAMES[periodEnd.getMonth()]} ${periodEnd.getFullYear()}`;
-  return sameMonth
-    ? `${left} – ${right}`
-    : `${left} ${MONTH_NAMES[from.getMonth()]} – ${right}`;
+  const fmt = (d) => `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  if (period === 'today') return fmt(from);
+  if (period === 'month' || period === 'last_month') return `${MONTH_NAMES[from.getMonth()]} ${from.getFullYear()}`;
+  return `${fmt(from)} – ${fmt(periodEnd < new Date() ? periodEnd : new Date())}`;
 }
 
 function pctDelta(cur, prev) {
@@ -94,71 +106,53 @@ function pctDelta(cur, prev) {
   return Math.round(((c - p) / p) * 1000) / 10;
 }
 
-/**
- * Buckets a model's rows into `weeks` (default 13, ~3 months) consecutive
- * 7-day windows ending "now", summing `valueField` (or counting rows when
- * omitted) per bucket. One query per metric — simple and correct.
- */
-async function weeklyTrend(model, tenantId, dateField, extraWhere = {}, valueField = null, weeks = 13) {
-  const since = new Date();
-  since.setDate(since.getDate() - weeks * 7);
-  since.setHours(0, 0, 0, 0);
+/** Splits [from,to] into ~12 equal buckets (min 1 day each). */
+function trendBuckets(range) {
+  const spanDays = Math.max(1, Math.ceil((range.to.getTime() - range.from.getTime()) / DAY_MS));
+  const stepDays = Math.max(1, Math.ceil(spanDays / 12));
+  const stepMs = stepDays * DAY_MS;
+  const count = Math.max(1, Math.ceil((range.to.getTime() - range.from.getTime()) / stepMs));
+  return { since: range.from, stepMs, count };
+}
 
+/** Sums `valueField` (or counts rows) per bucket across the selected range. */
+async function rangeTrend(model, tenantId, range, dateField, extraWhere = {}, valueField = null) {
+  const { since, stepMs, count } = trendBuckets(range);
   const rows = await model.findAll({
-    where: { tenant_id: tenantId, ...extraWhere, [dateField]: { [Op.gte]: since } },
+    where: { tenant_id: tenantId, ...extraWhere, [dateField]: { [Op.gte]: range.from, [Op.lte]: range.to } },
     attributes: [dateField, ...(valueField ? [valueField] : [])],
     raw: true,
   }).catch(() => []);
 
-  const buckets = [];
-  for (let i = 0; i < weeks; i += 1) {
-    const start = new Date(since);
-    start.setDate(start.getDate() + i * 7);
-    buckets.push({ start, value: 0 });
-  }
-
+  const buckets = Array.from({ length: count }, (_, i) => ({ start: new Date(since.getTime() + i * stepMs), value: 0 }));
   rows.forEach((r) => {
-    const raw = r[dateField];
-    const d = raw instanceof Date ? raw : new Date(raw);
+    const d = r[dateField] instanceof Date ? r[dateField] : new Date(r[dateField]);
     if (Number.isNaN(d.getTime())) return;
-    const idx = Math.floor((d.getTime() - since.getTime()) / (7 * 86400000));
-    if (idx >= 0 && idx < weeks) {
-      buckets[idx].value += valueField ? (parseFloat(r[valueField]) || 0) : 1;
-    }
+    const idx = Math.floor((d.getTime() - since.getTime()) / stepMs);
+    if (idx >= 0 && idx < count) buckets[idx].value += valueField ? (parseFloat(r[valueField]) || 0) : 1;
   });
-
   return buckets.map((b) => ({ date: b.start.toISOString().slice(0, 10), value: b.value }));
 }
 
-/** Same idea as `weeklyTrend` but buckets Deal rows into otc/otp/foc counts per week in one pass. */
-async function weeklyDealTypeTrend(tenantId, weeks = 13) {
-  const since = new Date();
-  since.setDate(since.getDate() - weeks * 7);
-  since.setHours(0, 0, 0, 0);
-
+/** Deal rows bucketed into otc/otp/foc counts across the selected range. */
+async function rangeDealTypeTrend(tenantId, range) {
+  const { since, stepMs, count } = trendBuckets(range);
   const rows = await db.Deal.findAll({
-    where: { tenant_id: tenantId, created_at: { [Op.gte]: since } },
+    where: { tenant_id: tenantId, created_at: { [Op.gte]: range.from, [Op.lte]: range.to } },
     attributes: ['deal_type', 'created_at'],
     raw: true,
   }).catch(() => []);
 
-  const buckets = [];
-  for (let i = 0; i < weeks; i += 1) {
-    const start = new Date(since);
-    start.setDate(start.getDate() + i * 7);
-    buckets.push({ start, otc: 0, otp: 0, foc: 0 });
-  }
-
+  const buckets = Array.from({ length: count }, (_, i) => ({ start: new Date(since.getTime() + i * stepMs), otc: 0, otp: 0, foc: 0 }));
   rows.forEach((r) => {
     const d = r.created_at instanceof Date ? r.created_at : new Date(r.created_at);
     if (Number.isNaN(d.getTime())) return;
-    const idx = Math.floor((d.getTime() - since.getTime()) / (7 * 86400000));
-    if (idx < 0 || idx >= weeks) return;
+    const idx = Math.floor((d.getTime() - since.getTime()) / stepMs);
+    if (idx < 0 || idx >= count) return;
     if (r.deal_type === 'offer_to_charge') buckets[idx].otc += 1;
     else if (r.deal_type === 'offer_to_purchase') buckets[idx].otp += 1;
     else if (r.deal_type === 'free_of_charge') buckets[idx].foc += 1;
   });
-
   return buckets.map((b) => ({ date: b.start.toISOString().slice(0, 10), otc: b.otc, otp: b.otp, foc: b.foc }));
 }
 
@@ -168,8 +162,8 @@ const QUOTATION_SENT_OR_BEYOND = ['sent', 'under_review', 'revised', 'pending_ap
  * Builds the "Operations Pulse" panel payload for the admin dashboard —
  * additive to `getAdminOverview`'s existing response, never required by it.
  */
-async function getPulseData(tenantId, period = 'week') {
-  const range = startOfPeriod(period);
+async function getPulseData(tenantId, range) {
+  const period = range.period;
   const { from, to, prevFrom, prevTo } = range;
 
   const periodWhere = (field = 'created_at') => ({ [field]: { [Op.gte]: from, [Op.lte]: to } });
@@ -212,14 +206,14 @@ async function getPulseData(tenantId, period = 'week') {
     leadsTrend, dealsConvertedTrend, quotationsSentTrend, dealsWonTrend,
     woScheduledTrend, woCompletedTrend, invoicesTrend, dealsByTypeTrend,
   ] = await Promise.all([
-    weeklyTrend(db.Lead, tenantId, 'created_at'),
-    weeklyTrend(db.Deal, tenantId, 'created_at'),
-    weeklyTrend(db.Quotation, tenantId, 'created_at', { status: { [Op.in]: QUOTATION_SENT_OR_BEYOND } }),
-    weeklyTrend(db.Deal, tenantId, 'updated_at', { status: 'won' }),
-    weeklyTrend(db.WorkOrder, tenantId, 'created_at'),
-    weeklyTrend(db.WorkOrder, tenantId, 'updated_at', { status: 'completed' }),
-    weeklyTrend(db.TaxInvoice, tenantId, 'created_at', {}, 'total'),
-    weeklyDealTypeTrend(tenantId),
+    rangeTrend(db.Lead, tenantId, range, 'created_at'),
+    rangeTrend(db.Deal, tenantId, range, 'created_at'),
+    rangeTrend(db.Quotation, tenantId, range, 'created_at', { status: { [Op.in]: QUOTATION_SENT_OR_BEYOND } }),
+    rangeTrend(db.Deal, tenantId, range, 'updated_at', { status: 'won' }),
+    rangeTrend(db.WorkOrder, tenantId, range, 'created_at'),
+    rangeTrend(db.WorkOrder, tenantId, range, 'updated_at', { status: 'completed' }),
+    rangeTrend(db.TaxInvoice, tenantId, range, 'created_at', {}, 'total'),
+    rangeDealTypeTrend(tenantId, range),
   ]);
 
   const dealTypeCounts = { otc: 0, otp: 0, foc: 0 };
@@ -283,8 +277,9 @@ async function countByStatus(model, tenantId, statusField = 'status', extraWhere
   }, {});
 }
 
-async function getAdminOverview(tenantId, period = 'week') {
-  const monthFrom = monthStart();
+async function getAdminOverview(tenantId, range) {
+  const monthFrom = range.from;
+  const rangeTo = range.to;
   const [
     arSummary, apSummary, woByStatus, dealsByStatus,
     pendingExpenses, draftGrns, pendingPos, unassignedPickups, revenueRows,
@@ -306,12 +301,12 @@ async function getAdminOverview(tenantId, period = 'week') {
       include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId } }],
     }).catch(() => 0),
     db.TaxInvoice.findAll({
-      where: { tenant_id: tenantId, payment_status: 'paid', updated_at: { [Op.gte]: monthFrom } },
+      where: { tenant_id: tenantId, payment_status: 'paid', updated_at: { [Op.gte]: monthFrom, [Op.lte]: rangeTo } },
       attributes: [[fn('SUM', col('paid_amount')), 'total']],
       raw: true,
     }),
-    db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'completed', updated_at: { [Op.gte]: monthFrom } } }).catch(() => 0),
-    db.Deal.count({ where: { tenant_id: tenantId, status: 'won', updated_at: { [Op.gte]: monthFrom } } }).catch(() => 0),
+    db.WorkOrder.count({ where: { tenant_id: tenantId, status: 'completed', updated_at: { [Op.gte]: monthFrom, [Op.lte]: rangeTo } } }).catch(() => 0),
+    db.Deal.count({ where: { tenant_id: tenantId, status: 'won', updated_at: { [Op.gte]: monthFrom, [Op.lte]: rangeTo } } }).catch(() => 0),
     db.Deal.findAll({
       where: { tenant_id: tenantId },
       attributes: ['id', 'deal_number', 'title', 'status', 'total', 'updated_at'],
@@ -324,7 +319,7 @@ async function getAdminOverview(tenantId, period = 'week') {
       order: [['updated_at', 'DESC']],
       limit: 5,
     }).catch(() => []),
-    getPulseData(tenantId, period).catch(() => null),
+    getPulseData(tenantId, range).catch(() => null),
   ]);
 
   const outstandingAr = Object.values(arSummary.buckets || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
@@ -333,7 +328,7 @@ async function getAdminOverview(tenantId, period = 'week') {
   return {
     role: 'admin',
     kpis: [
-      { label: 'Revenue (paid) this month', value: parseFloat(revenueRows[0]?.total || 0), format: 'currency' },
+      { label: 'Revenue collected', value: parseFloat(revenueRows[0]?.total || 0), format: 'currency' },
       { label: 'Outstanding AR', value: outstandingAr, format: 'currency' },
       { label: 'Outstanding AP', value: outstandingAp, format: 'currency' },
       { label: 'Open deals', value: OPEN_DEAL_STATUSES.reduce((s, st) => s + (dealsByStatus[st] || 0), 0), format: 'number' },
@@ -932,14 +927,15 @@ async function getAccountsOverview(tenantId) {
 
 const getOverview = async (tenantId, user, options = {}) => {
   const roleName = user?.role?.name || user?.Role?.name || 'sales';
-  const period = ['today', 'week', 'month'].includes(options.period) ? options.period : 'week';
+  const period = PERIODS.includes(options.period) ? options.period : 'month';
+  const range = startOfPeriod(period, options.dateFrom, options.dateTo);
 
   switch (roleName) {
     case 'super_admin':
       return getSuperAdminOverview();
     case 'tenant_admin':
     case 'admin':
-      return getAdminOverview(tenantId, period);
+      return getAdminOverview(tenantId, range);
     case 'sales_manager':
       return getSalesManagerOverview(tenantId);
     case 'sales':
