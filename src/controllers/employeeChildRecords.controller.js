@@ -10,6 +10,21 @@ const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 
 /** resolveEmployeeId: (req) => Promise<employeeId> — either req.params.employeeId (HR) or the caller's own record (self-service) */
+/** Copies uploaded file paths (single `file`, or `file` + `fileBack` from fields upload) onto the body. */
+function applyUploadedFiles(req, body) {
+  const path = require('path');
+  const config = require('../config');
+  const { getFileUrl } = require('../middlewares/upload');
+  const rel = (f) => path.relative(config.upload.path, f.path).replace(/\\/g, '/');
+  const front = req.file || req.files?.file?.[0];
+  const back = req.files?.fileBack?.[0];
+  if (front) {
+    body.filePath = rel(front);
+    body._fileUrl = getFileUrl(body.filePath);
+  }
+  if (back) body.filePathBack = rel(back);
+}
+
 function makeChildRecordController(service, resolveEmployeeId) {
   const list = asyncHandler(async (req, res) => {
     const employeeId = await resolveEmployeeId(req);
@@ -20,13 +35,7 @@ function makeChildRecordController(service, resolveEmployeeId) {
   const create = asyncHandler(async (req, res) => {
     const employeeId = await resolveEmployeeId(req);
     const body = { ...req.body };
-    if (req.file) {
-      const { getFileUrl } = require('../middlewares/upload');
-      const path = require('path');
-      const config = require('../config');
-      body.filePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
-      body._fileUrl = getFileUrl(body.filePath);
-    }
+    applyUploadedFiles(req, body);
     const row = await service.create(req.tenant.id, employeeId, body);
     return ApiResponse.created(res, row);
   });
@@ -34,13 +43,7 @@ function makeChildRecordController(service, resolveEmployeeId) {
   const update = asyncHandler(async (req, res) => {
     const employeeId = await resolveEmployeeId(req);
     const body = { ...req.body };
-    if (req.file) {
-      const { getFileUrl } = require('../middlewares/upload');
-      const path = require('path');
-      const config = require('../config');
-      body.filePath = path.relative(config.upload.path, req.file.path).replace(/\\/g, '/');
-      body._fileUrl = getFileUrl(body.filePath);
-    }
+    applyUploadedFiles(req, body);
     const row = await service.update(req.tenant.id, employeeId, req.params.id, body);
     return ApiResponse.success(res, row);
   });

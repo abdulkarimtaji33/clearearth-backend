@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
       issue_date: { type: DataTypes.DATEONLY, allowNull: true },
       expiry_date: { type: DataTypes.DATEONLY, allowNull: true },
       file_path: { type: DataTypes.STRING(500), allowNull: true },
+      file_path_back: { type: DataTypes.STRING(500), allowNull: true },
       notes: { type: DataTypes.TEXT, allowNull: true },
     },
     {

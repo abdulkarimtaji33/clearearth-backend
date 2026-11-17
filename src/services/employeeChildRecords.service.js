@@ -74,7 +74,7 @@ const previousEmployment = makeChildRecordService(db.EmployeePreviousEmployment,
 
 const documents = makeChildRecordService(db.EmployeeDocument, {
   documentTypeId: 'document_type_id', documentNumber: 'document_number',
-  issueDate: 'issue_date', expiryDate: 'expiry_date', filePath: 'file_path', notes: 'notes',
+  issueDate: 'issue_date', expiryDate: 'expiry_date', filePath: 'file_path', filePathBack: 'file_path_back', notes: 'notes',
 });
 
 // HR-only, never exposed on self-service endpoints.

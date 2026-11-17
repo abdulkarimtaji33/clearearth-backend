@@ -3,7 +3,7 @@ const router = express.Router();
 const employeeController = require('../controllers/employee.controller');
 const employeeNoteController = require('../controllers/employeeNote.controller');
 const { authenticate, authorize } = require('../middlewares/auth');
-const { uploadSingle } = require('../middlewares/upload');
+const { uploadSingle, uploadFields } = require('../middlewares/upload');
 const childRecordsService = require('../services/employeeChildRecords.service');
 const {
   makeChildRecordController, hrEmployeeIdResolver, selfEmployeeIdResolver,
@@ -90,6 +90,12 @@ const entities = {
 };
 // Entities whose create endpoint accepts an optional file upload (`file` field)
 const uploadableEntities = new Set(['qualifications', 'certifications', 'documents']);
+// Documents take a front scan (`file`) and an optional back scan (`fileBack`).
+const uploadMwFor = (entityPath) => {
+  if (!uploadableEntities.has(entityPath)) return [];
+  if (entityPath === 'documents') return [uploadFields([{ name: 'file', maxCount: 1 }, { name: 'fileBack', maxCount: 1 }])];
+  return [uploadSingle('file')];
+};
 
 const hrControllers = {};
 const selfControllers = {};
@@ -114,7 +120,7 @@ router.post('/me/photo', uploadSingle('file'), employeeController.uploadMyPhoto)
 router.get('/me/info-pdf', employeeController.downloadMyInfoPdf);
 
 for (const [path, controller] of Object.entries(selfControllers)) {
-  const uploadMw = uploadableEntities.has(path) ? [uploadSingle('file')] : [];
+  const uploadMw = uploadMwFor(path);
   router.get(`/me/${path}`, controller.list);
   router.post(`/me/${path}`, ...uploadMw, controller.create);
   router.put(`/me/${path}/:id`, ...uploadMw, controller.update);
@@ -152,7 +158,7 @@ router.delete('/:employeeId/notes/:id', authorize('hr.employees.manage'), employ
 
 // HR-side child-record CRUD
 for (const [path, controller] of Object.entries(hrControllers)) {
-  const uploadMw = uploadableEntities.has(path) ? [uploadSingle('file')] : [];
+  const uploadMw = uploadMwFor(path);
   router.get(`/:employeeId/${path}`, authorize('hr.employees.manage'), controller.list);
   router.post(`/:employeeId/${path}`, authorize('hr.employees.manage'), ...uploadMw, controller.create);
   router.put(`/:employeeId/${path}/:id`, authorize('hr.employees.manage'), ...uploadMw, controller.update);

@@ -3766,6 +3766,16 @@ async function runMigration() {
       )
     `);
 
+    console.log('Adding employee_documents.file_path_back (back-side scan of ID documents)...');
+    try {
+      await db.sequelize.query(`
+        ALTER TABLE employee_documents
+        ADD COLUMN file_path_back VARCHAR(500) NULL AFTER file_path
+      `);
+    } catch (e) {
+      if (!isDuplicateSchemaError(e)) console.warn('  employee_documents.file_path_back add:', e.message);
+    }
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {
