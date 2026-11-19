@@ -642,10 +642,7 @@ const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDa
 
   const prevStatus = po.status;
   assertApprovableTotal(po.items || []);
-  if (prevStatus !== PO_STATUS.APPROVED) {
-    // The expense head / sub-head is mandatory before approval; nothing is posted at approval.
-    await vendorBillService.assertPoHead(tenantId, po.expense_account_id);
-  }
+  // No expense head is needed to approve: nothing is posted, and accounts choose the head on the bill.
   await _approveClientQuotation(po, { approvedByUserId: actor.userId, requestedPickupDate });
 
   const approvedByUser = actor.userId ? await db.User.findByPk(actor.userId, { attributes: ['first_name', 'last_name'] }) : null;

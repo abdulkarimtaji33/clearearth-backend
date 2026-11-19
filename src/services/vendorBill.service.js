@@ -28,16 +28,20 @@ function poTotal(po) {
 /** The PO must carry an active expense head / sub-head (posting account) before it can be approved. */
 async function assertPoHead(tenantId, expenseAccountId) {
   if (expenseAccountId == null || expenseAccountId === '') {
-    throw ApiError.badRequest('Select the expense head and sub-head on the purchase order before approving it');
+    throw ApiError.badRequest('Select the expense head and sub-head for this bill');
   }
   return resolveExpenseAccount(tenantId, { expenseAccountId });
 }
 
-/** PO approval posts nothing: it only checks the head and sends the PO to "Awaiting bill". */
+/**
+ * PO approval posts nothing and sends the PO to "Awaiting bill". The expense head / sub-head is NOT
+ * needed here (sales approve POs and have nothing to do with accounts): accounts pick it when they
+ * record the supplier bill. A head that is already on the PO is still validated.
+ */
 async function approvePoForBilling(tenantId, poId, transaction = null) {
   const po = await db.PurchaseOrder.findOne({ where: { id: poId, tenant_id: tenantId }, attributes: ['id', 'expense_account_id'], transaction });
   if (!po) throw ApiError.notFound('Purchase order not found');
-  await assertPoHead(tenantId, po.expense_account_id);
+  if (po.expense_account_id) await assertPoHead(tenantId, po.expense_account_id);
   await db.PurchaseOrder.update({ bill_flow: true }, { where: { id: poId, tenant_id: tenantId }, transaction });
 }
 

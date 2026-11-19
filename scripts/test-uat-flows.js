@@ -114,7 +114,9 @@ const rejects = async (fn, re, label) => {
     return id;
   };
   const noHeadPo = await mkPo(null);
-  await rejects(() => vb.approvePoForBilling(tid, noHeadPo), /expense head and sub-head/, 'a PO cannot be approved without the expense head / sub-head');
+  await vb.approvePoForBilling(tid, noHeadPo);
+  ok(true, 'a PO can be approved without an expense head (sales never touch accounts)');
+  await rejects(() => vb.createBill(tid, 1, { purchaseOrderId: noHeadPo, supplierInvoiceNo: `NH-${Date.now()}`, billDate: today, subtotal: 100, vatAmount: 5 }), /expense head and sub-head/, 'the bill still needs the head, chosen by accounts');
   const poId = await mkPo(head.id);
   await vb.approvePoForBilling(tid, poId);
   const poJes = await q("SELECT COUNT(*) c FROM journal_entries WHERE source_type='purchase_order_approved' AND source_id=?", [poId]);
