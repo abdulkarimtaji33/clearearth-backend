@@ -3914,25 +3914,37 @@ async function runMigration() {
         INDEX idx_oe_outbound (outbound_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    // outbound.read / outbound.update may already exist from an older seed, in which case the catalog's
-    // "inherit" rule does not grant them. Give them to every role that already holds the GRN equivalent.
-    for (const [fromPerm, toPerm] of [['grn.read', 'outbound.read'], ['grn.update', 'outbound.update']]) {
-      await db.sequelize.query(
-        `INSERT IGNORE INTO role_permissions (role_id, permission_id)
-         SELECT DISTINCT rp.role_id, po.id
-           FROM role_permissions rp
-           JOIN permissions pg ON pg.id = rp.permission_id AND pg.name = ?
-           JOIN permissions po ON po.name = ?`,
-        { replacements: [fromPerm, toPerm] }
-      );
-    }
-
     // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).
     try {
       await require('./src/services/outbound.service').backfillFromGrns();
     } catch (e) { console.warn('  outbound backfill:', e.message); }
 
     restoreQuery();
+
+    // outbound.read / outbound.update may already exist from an older seed, so the catalog's "inherit" rule does
+    // not grant them. One time only (so later edits in the Roles screen are never overridden), give them to every
+    // role that already holds the GRN equivalent. Runs after restoreQuery() because role_permissions writes are
+    // otherwise skipped once access control is initialised.
+    {
+      const [[held]] = await db.sequelize.query(
+        `SELECT COUNT(*) AS n FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id JOIN roles r ON r.id = rp.role_id
+          WHERE p.name IN ('outbound.read', 'outbound.update') AND r.name NOT IN ('admin', 'tenant_admin', 'super_admin')`
+      );
+      if (!Number(held.n)) {
+        for (const [fromPerm, toPerm] of [['grn.read', 'outbound.read'], ['grn.update', 'outbound.update']]) {
+          await db.sequelize.query(
+            `INSERT IGNORE INTO role_permissions (role_id, permission_id)
+             SELECT DISTINCT rp.role_id, po.id
+               FROM role_permissions rp
+               JOIN permissions pg ON pg.id = rp.permission_id AND pg.name = ?
+               JOIN permissions po ON po.name = ?`,
+            { replacements: [fromPerm, toPerm] }
+          );
+        }
+        console.log('  Granted outbound.read / outbound.update to roles that hold the GRN permissions');
+      }
+    }
+
     console.log('Setting up dynamic access control (catalog, scopes, field rules, overrides)...');
     await require('./src/database/accessControl.setup').ensureAccessControl(db.sequelize, console.log);
 
