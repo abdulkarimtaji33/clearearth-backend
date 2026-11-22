@@ -7,7 +7,7 @@ const notificationService = require('./notification.service');
 const { nextReferenceNumber } = require('../utils/referenceNumber');
 const SERVICE_QUOTATION_SEED = 654; // old ERP's last service quotation was QT/SERV/654/1
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
-const { isManagerRole } = require('../utils/leadApproval');
+const { isManagerRole, canApproveDirectly } = require('../utils/leadApproval');
 const { Op } = db.Sequelize;
 
 const QUOTATION_STATUS = {
@@ -204,7 +204,7 @@ const _approveQuotation = async (quotation, { approvedByUserId, requestedPickupD
 };
 
 const approve = async (tenantId, quotationId, scope = {}, actor = {}, requestedPickupDate = null) => {
-  if (!isManagerRole(actor.roleName) && actor.roleName !== 'sales') {
+  if (!canApproveDirectly(actor, 'quotations.approve')) {
     throw ApiError.forbidden('Only a manager can approve quotations. Request manager approval instead.');
   }
 
@@ -345,7 +345,13 @@ const remove = async (tenantId, quotationId, scope = {}) => {
   await quotation.destroy();
 };
 
+const setPickupRequestNote = async (tenantId, quotationId, note) => {
+  if (note === undefined) return;
+  await db.Quotation.update({ pickup_request_note: note ? String(note).trim() : null }, { where: { id: quotationId, tenant_id: tenantId } });
+};
+
 module.exports = {
+  setPickupRequestNote,
   getAll,
   getById,
   create,

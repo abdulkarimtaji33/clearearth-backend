@@ -325,6 +325,8 @@ async function getAdminOverview(tenantId, range) {
   const outstandingAr = Object.values(arSummary.buckets || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
   const outstandingAp = Object.values(apSummary.buckets || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
 
+  const pendingOutboundsAdmin = await require('./outbound.service').pendingCount(tenantId);
+
   return {
     role: 'admin',
     kpis: [
@@ -332,6 +334,7 @@ async function getAdminOverview(tenantId, range) {
       { label: 'Outstanding AR', value: outstandingAr, format: 'currency' },
       { label: 'Outstanding AP', value: outstandingAp, format: 'currency' },
       { label: 'Open deals', value: OPEN_DEAL_STATUSES.reduce((s, st) => s + (dealsByStatus[st] || 0), 0), format: 'number' },
+      { label: 'Pending outbounds', value: pendingOutboundsAdmin, format: 'number', highlight: pendingOutboundsAdmin > 0 },
     ],
     stats: {
       completedWOsThisMonth,
@@ -340,6 +343,7 @@ async function getAdminOverview(tenantId, range) {
     actionables: [
       { id: 'expenses', label: 'Expense approvals pending', count: pendingExpenses, href: '/erp/accounts/work-orders' },
       { id: 'grn', label: 'GRNs awaiting approval', count: draftGrns, href: '/erp/grn' },
+      { id: 'outbound', label: 'Pending outbounds', count: pendingOutboundsAdmin, href: '/erp/outbound' },
       { id: 'po', label: 'POs pending approval', count: pendingPos, href: '/erp/purchase-orders' },
       { id: 'pickup', label: 'Unassigned pickup tasks', count: unassignedPickups, href: '/erp/work-orders' },
     ].filter((a) => a.count > 0),
@@ -741,6 +745,7 @@ async function getOperationsOverview(tenantId) {
     role: 'operations_manager',
     counts: {
       ordersAwaitingWo: (soAwaitingWo || 0) + (poAwaitingWo || 0),
+      pendingOutbounds: await require('./outbound.service').pendingCount(tenantId),
       grnsNew: grnsNew || 0,
       grnsSubmitted: grnsSubmitted || 0,
       overdueTasks: overdueTasks || 0,
@@ -753,6 +758,7 @@ async function getOperationsOverview(tenantId) {
       { label: 'Overdue tasks', value: overdueTasks, format: 'number', highlight: overdueTasks > 0 },
       { label: 'Expenses pending', value: pendingExpenses, format: 'number' },
       { label: 'GRNs pending', value: draftGrns, format: 'number' },
+      { label: 'Pending outbounds', value: await require('./outbound.service').pendingCount(tenantId), format: 'number' },
     ],
     actionables: [
       pendingExpenses > 0 && { id: 'exp', label: `${pendingExpenses} expense(s) need approval`, count: pendingExpenses, href: '/erp/accounts/work-orders' },
@@ -925,10 +931,32 @@ async function getAccountsOverview(tenantId) {
   };
 }
 
+/**
+ * Which dashboard a user gets is driven by the dashboard.view_* permissions (first match wins),
+ * so any custom role can be given any dashboard from the Roles UI.
+ */
+const DASHBOARD_VARIANTS = [
+  ['dashboard.view_super_admin', 'super_admin'],
+  ['dashboard.view_admin', 'admin'],
+  ['dashboard.view_operations', 'operations_manager'],
+  ['dashboard.view_accounts', 'accounts'],
+  ['dashboard.view_sales_manager', 'sales_manager'],
+  ['dashboard.view_inspection', 'inspection_team'],
+  ['dashboard.view_driver', 'driver'],
+  ['dashboard.view_sales', 'sales'],
+];
+
+const resolveDashboardVariant = (user) => {
+  const access = user?.access;
+  if (!access) return user?.role?.name || user?.Role?.name || 'sales';
+  const hit = DASHBOARD_VARIANTS.find(([perm]) => access.has(perm));
+  return hit ? hit[1] : 'sales';
+};
+
 const getOverview = async (tenantId, user, options = {}) => {
-  const roleName = user?.role?.name || user?.Role?.name || 'sales';
   const period = PERIODS.includes(options.period) ? options.period : 'month';
   const range = startOfPeriod(period, options.dateFrom, options.dateTo);
+  const roleName = resolveDashboardVariant(user);
 
   switch (roleName) {
     case 'super_admin':
@@ -953,4 +981,4 @@ const getOverview = async (tenantId, user, options = {}) => {
   }
 };
 
-module.exports = { getOverview };
+module.exports = { getOverview, resolveDashboardVariant };

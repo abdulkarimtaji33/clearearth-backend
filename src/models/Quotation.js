@@ -20,6 +20,7 @@ module.exports = (sequelize, DataTypes) => {
         comment: 'Continues the old ERP\'s quotation numbering sequence (last was 654)',
       },
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },
+      pickup_request_note: { type: DataTypes.TEXT, allowNull: true, comment: 'Note sales added to the pickup request' },
       requested_pickup_date: {
         type: DataTypes.DATEONLY,
         allowNull: true,

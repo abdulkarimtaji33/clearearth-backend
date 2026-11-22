@@ -8,6 +8,8 @@ router.use(authenticate);
 
 router.get('/', authorize('grn.read'), grnController.list);
 // Must come before '/:id' so 'inventory' isn't matched as a GRN id.
+router.get('/facilities', authorize('grn.read'), grnController.listFacilities);
+router.post('/facilities', authorize('grn.update'), grnController.createFacility);
 router.get('/inventory', authorize('grn.read'), grnController.listInventory);
 router.get('/inventory/stock', authorize('grn.read'), grnController.stockOnHand);
 router.get('/:id', authorize('grn.read'), grnController.getById);

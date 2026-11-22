@@ -9,7 +9,28 @@ const { parseTenantSettings, cleanTenantSettings } = require('./tenantSettings')
 
 const PIN_SETTINGS_KEY = 'leadApprovalPinHash';
 
-const isManagerRole = (roleName) => MANAGER_ROLES.includes(roleName);
+/**
+ * Manager authority is the `workflow.manager` permission (editable per role in the Roles UI).
+ * Accepts an actor ({ access, roleName }), an Access object, or (legacy) a bare role name.
+ */
+const isManagerRole = (subject) => {
+  if (subject && typeof subject === 'object') {
+    if (typeof subject.has === 'function') return subject.has('workflow.manager');
+    if (subject.access) return subject.access.has('workflow.manager');
+    return MANAGER_ROLES.includes(subject.roleName);
+  }
+  return MANAGER_ROLES.includes(subject);
+};
+
+/**
+ * May the actor approve a quotation / purchase order directly (without manager sign-off)?
+ * Managers always can; otherwise the actor needs the given approval permission.
+ */
+const canApproveDirectly = (actor, permission) => {
+  if (isManagerRole(actor)) return true;
+  if (actor && actor.access) return actor.access.has(permission);
+  return actor?.roleName === 'sales';
+};
 
 const getSalesManagerUserIds = async (tenantId) => {
   const roles = await db.Role.findAll({
@@ -64,6 +85,7 @@ const verifyLeadApprovalPin = async (tenantId, pin) => {
 
 module.exports = {
   isManagerRole,
+  canApproveDirectly,
   getSalesManagerUserIds,
   getLeadApprovalPinHash,
   isLeadApprovalPinConfigured,

@@ -3,6 +3,7 @@
  */
 const db = require('../models');
 const ApiError = require('../utils/apiError');
+const accessService = require('./access.service');
 const {
   hashPassword,
   comparePassword,
@@ -176,8 +177,9 @@ const login = async ({ email, password }) => {
     tenantId: user.tenant_id,
   });
 
-  // Get permissions
-  const permissions = user.role.permissions.map(p => p.name);
+  // Effective access (role permissions ± per-user overrides, scopes, field rules)
+  const access = (await accessService.buildAccess(user)).toJSON();
+  const permissions = access.permissions;
 
   return {
     user: {
@@ -187,6 +189,7 @@ const login = async ({ email, password }) => {
       lastName: user.last_name,
       role: user.role.name,
       permissions,
+      access,
     },
     tenant: {
       id: user.tenant.id,
@@ -324,7 +327,8 @@ const getCurrentUser = async userId => {
     throw ApiError.notFound('User not found');
   }
 
-  const permissions = user.role.permissions.map(p => p.name);
+  const access = (await accessService.buildAccess(user)).toJSON();
+  const permissions = access.permissions;
 
   return {
     id: user.id,
@@ -346,6 +350,7 @@ const getCurrentUser = async userId => {
       companyName: user.tenant.company_name,
     },
     permissions,
+    access,
   };
 };
 

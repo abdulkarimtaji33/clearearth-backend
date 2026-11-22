@@ -54,6 +54,12 @@ pm2 restart clearearth-api --update-env
 pm2 list   # confirm clearearth-api online
 ```
 
+> **Roles & permissions are managed in the UI (Roles & Access).** `npm run run-migration` syncs the permission
+> catalog (`src/config/accessCatalog.js`) and creates the access-control tables. The first run seeds each existing
+> role so behaviour is unchanged; after that the migration **skips every legacy `role_permissions` seeding step**, so
+> deploys never overwrite permission edits made in the UI. Wait ~15 s after `pm2 restart` before the API answers
+> (AdminJS bundling). Take a database dump before the first run of this feature.
+
 **One-shot deploy from a dev machine** (Git Bash / WSL; requires SSH key on each VPS):
 
 ```bash

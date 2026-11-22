@@ -39,16 +39,12 @@ const getAll = asyncHandler(async (req, res) => {
 
 const getById = asyncHandler(async (req, res) => {
   const workOrder = await workOrderService.getById(req.tenant.id, req.params.id);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req);
   return ApiResponse.success(res, sanitizeWorkOrderDeal(workOrder, hideFinancials));
 });
 
 const create = asyncHandler(async (req, res) => {
-  const roleName = req.user?.role?.name || req.user?.Role?.name;
-  if (['sales', 'sales_manager'].includes(roleName)) {
-    const ApiError = require('../utils/apiError');
-    throw ApiError.forbidden('Sales users cannot create work orders');
-  }
+  // Creating work orders is governed by the operations.create permission (enforced on the route)
   const scope = { userId: req.user?.id };
   const workOrder = await workOrderService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, workOrder, 'Work order created successfully');
@@ -72,9 +68,9 @@ const updateTaskNotes = asyncHandler(async (req, res) => {
 });
 
 const updateTaskAssignment = asyncHandler(async (req, res) => {
-  const { assignedTo, assigneeIds } = req.body;
+  const { assignedTo, assigneeIds, helperIds } = req.body;
   const task = await workOrderService.updateTaskAssignment(
-    req.tenant.id, req.params.id, req.params.taskId, Array.isArray(assigneeIds) ? assigneeIds : assignedTo
+    req.tenant.id, req.params.id, req.params.taskId, Array.isArray(assigneeIds) ? assigneeIds : assignedTo, helperIds
   );
   return ApiResponse.success(res, task, 'Task assignment updated');
 });

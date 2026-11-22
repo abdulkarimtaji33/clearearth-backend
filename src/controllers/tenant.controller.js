@@ -19,20 +19,18 @@ const getPublicLogo = asyncHandler(async (req, res) => {
 });
 
 const updateMyTenant = asyncHandler(async (req, res) => {
-  const roleName = req.user?.role?.name;
-  if (!['admin', 'tenant_admin', 'super_admin'].includes(roleName)) {
+  if (!req.access?.has('settings.manage')) {
     const ApiError = require('../utils/apiError');
-    throw ApiError.forbidden('Only administrators can update company settings');
+    throw ApiError.forbidden('You do not have permission to update company settings');
   }
   const tenant = await tenantService.update(req.tenant.id, req.body);
   return ApiResponse.success(res, tenant, 'Company settings updated successfully');
 });
 
 const updateLeadApprovalPin = asyncHandler(async (req, res) => {
-  const roleName = req.user?.role?.name;
-  if (!['admin', 'tenant_admin', 'super_admin'].includes(roleName)) {
+  if (!req.access?.has('settings.manage')) {
     const ApiError = require('../utils/apiError');
-    throw ApiError.forbidden('Only administrators can change the lead approval PIN');
+    throw ApiError.forbidden('You do not have permission to change the lead approval PIN');
   }
   const tenant = await tenantService.updateLeadApprovalPin(req.tenant.id, req.body.pin);
   return ApiResponse.success(res, tenant, 'Lead approval PIN updated successfully');

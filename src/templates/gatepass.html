@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; margin: 0; color: #2b3a44; }
+.head { display: flex; justify-content: space-between; align-items: flex-start; }
+.logo { width: 128px; }
+.right { text-align: right; }
+.title { font-size: 26px; font-weight: 800; color: #1e8449; letter-spacing: 0.5px; }
+.type { display: inline-block; margin-top: 6px; padding: 3px 12px; border-radius: 999px; background: #e6f4ea; color: #1e8449; font-weight: 700; font-size: 10px; text-transform: uppercase; }
+.num { margin-top: 8px; font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.meta { margin: 2px 0; color: #445; }
+.divider { height: 3px; background: linear-gradient(90deg, #1e8449, #2ea85c); margin: 14px 0 16px; border-radius: 2px; }
+.grid { display: flex; gap: 16px; margin-bottom: 14px; }
+.box { flex: 1; background: #f7f9f8; border: 1px solid #e6ebe8; border-radius: 8px; padding: 10px 12px; }
+.box-title { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e8449; margin-bottom: 6px; }
+.line { margin: 3px 0; }
+.line strong { color: #1a1a1a; }
+table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+table.items th { background: #1e8449; color: #fff; text-align: left; padding: 7px 8px; font-size: 10px; text-transform: uppercase; }
+table.items td { padding: 7px 8px; border-bottom: 1px solid #e6ebe8; }
+.r { text-align: right; }
+.desc { margin-top: 12px; padding: 10px 12px; border: 1px dashed #b9c4be; border-radius: 8px; min-height: 40px; }
+.sign { display: flex; gap: 20px; margin-top: 46px; }
+.sign div { flex: 1; border-top: 1px solid #55606b; padding-top: 6px; text-align: center; color: #55606b; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="head">
+  <div><img class="logo" src="{{logoDataUri}}"><div class="meta"><strong>{{fromCompany}}</strong></div><div class="meta">{{fromAddress}}</div><div class="meta">{{fromCity}}</div><div class="meta">{{fromPhone}}</div></div>
+  <div class="right">
+    <div class="title">GATE PASS</div>
+    <div class="type">{{typeLabel}}</div>
+    <div class="num"># {{gatepassNumber}}</div>
+    <div class="meta">Date: {{gatepassDate}}</div>
+    <div class="meta">Outbound: {{outboundNumber}} &nbsp;|&nbsp; GRN: {{grnNumber}}</div>
+  </div>
+</div>
+<div class="divider"></div>
+<div class="grid">
+  <div class="box">
+    <div class="box-title">{{partyTitle}}</div>
+    <div class="line"><strong>{{partyName}}</strong></div>
+    <div class="line">{{partyAddress}}</div>
+    <div class="line">{{partyPhone}}</div>
+  </div>
+  <div class="box">
+    <div class="box-title">Dispatch details</div>
+    <div class="line">Vehicle no: <strong>{{vehicleNo}}</strong></div>
+    <div class="line">Person in charge: <strong>{{personInCharge}}</strong></div>
+    <div class="line">Deal: <strong>{{dealLabel}}</strong></div>
+  </div>
+</div>
+<table class="items">
+  <thead><tr><th style="width:6%">#</th><th>Item</th><th style="width:14%">UOM</th><th class="r" style="width:16%">Amount</th></tr></thead>
+  <tbody>{{itemRows}}</tbody>
+</table>
+<div class="desc"><strong>Description:</strong> {{description}}</div>
+<div class="sign"><div>Prepared by</div><div>Person in charge</div><div>Security / gate</div><div>Received by</div></div>
+</body>
+</html>

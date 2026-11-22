@@ -29,7 +29,7 @@ const update = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const lead = await leadService.update(req.tenant.id, req.params.id, req.body, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, lead, 'Lead updated successfully');
 });
@@ -38,7 +38,7 @@ const qualify = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const lead = await leadService.qualify(req.tenant.id, req.params.id, req.body.notes, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, lead, 'Lead approved');
 });
@@ -53,7 +53,7 @@ const approveWithPin = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const lead = await leadService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, lead, 'Lead approved');
 });

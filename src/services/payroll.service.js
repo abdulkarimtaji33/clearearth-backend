@@ -295,9 +295,9 @@ const getPayslip = async (tenantId, actorUser, payslipId) => {
   });
   if (!payslip) throw ApiError.notFound('Payslip not found');
 
-  const names = (actorUser.role?.permissions || []).map((p) => p.name);
-  const hasHrAccess = ['super_admin', 'hr_manager', 'admin', 'tenant_admin'].includes(actorUser.role?.name)
-    || names.includes('hr.payroll.read') || names.includes('hr.payroll.process');
+  const hasHrAccess = actorUser.access
+    ? actorUser.access.hasAny('hr.access_all', 'hr.payroll.read', 'hr.payroll.process')
+    : ['super_admin', 'hr_manager', 'admin', 'tenant_admin'].includes(actorUser.role?.name);
 
   if (!hasHrAccess) {
     const employee = await employeeService.getByUserId(tenantId, actorUser.id);

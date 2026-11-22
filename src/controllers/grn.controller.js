@@ -97,4 +97,7 @@ const getPdf = asyncHandler(async (req, res) => {
   res.end(pdfBuffer, 'binary');
 });
 
-module.exports = { list, listInventory, stockOnHand, getById, create, update, uploadItemImages, approve, getPdf };
+const listFacilities = asyncHandler(async (req, res) => ApiResponse.success(res, await grnService.listFacilities(req.tenant.id)));
+const createFacility = asyncHandler(async (req, res) => ApiResponse.created(res, await grnService.createFacility(req.tenant.id, req.body.name), 'Facility added'));
+
+module.exports = { listFacilities, createFacility, list, listInventory, stockOnHand, getById, create, update, uploadItemImages, approve, getPdf };

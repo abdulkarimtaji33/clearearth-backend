@@ -24,6 +24,7 @@ module.exports = (sequelize, DataTypes) => {
       expected_delivery: { type: DataTypes.STRING(255) },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },
+      pickup_request_note: { type: DataTypes.TEXT, allowNull: true, comment: 'Note sales added to the pickup request' },
       requested_pickup_date: {
         type: DataTypes.DATEONLY,
         allowNull: true,

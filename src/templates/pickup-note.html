@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; margin: 0; color: #2b3a44; }
+.head { display: flex; justify-content: space-between; align-items: flex-start; }
+.logo { width: 128px; }
+.right { text-align: right; }
+.title { font-size: 26px; font-weight: 800; color: #1e8449; letter-spacing: 0.5px; }
+.meta { margin: 2px 0; color: #445; }
+.divider { height: 3px; background: linear-gradient(90deg, #1e8449, #2ea85c); margin: 14px 0 16px; border-radius: 2px; }
+.grid { display: flex; gap: 16px; margin-bottom: 14px; }
+.box { flex: 1; background: #f7f9f8; border: 1px solid #e6ebe8; border-radius: 8px; padding: 10px 12px; }
+.box-title { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e8449; margin-bottom: 6px; }
+.line { margin: 3px 0; }
+.line strong { color: #1a1a1a; }
+.note { margin-top: 10px; padding: 10px 12px; border: 1px dashed #b9c4be; border-radius: 8px; min-height: 40px; }
+.photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.photos img { width: 150px; height: 110px; object-fit: cover; border-radius: 6px; border: 1px solid #e6ebe8; }
+.sign { display: flex; gap: 20px; margin-top: 46px; }
+.sign div { flex: 1; border-top: 1px solid #55606b; padding-top: 6px; text-align: center; color: #55606b; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="head">
+  <div><img class="logo" src="{{logoDataUri}}"><div class="meta"><strong>{{fromCompany}}</strong></div><div class="meta">{{fromAddress}}</div></div>
+  <div class="right">
+    <div class="title">PICKUP NOTE</div>
+    <div class="meta">Task #{{taskId}} &nbsp;|&nbsp; Status: <strong>{{status}}</strong></div>
+    <div class="meta">Pickup date: {{pickupDate}}</div>
+  </div>
+</div>
+<div class="divider"></div>
+<div class="grid">
+  <div class="box">
+    <div class="box-title">Job</div>
+    <div class="line">Deal: <strong>{{deal}}</strong></div>
+    <div class="line">Client: <strong>{{client}}</strong></div>
+    <div class="line">Work order: <strong>{{workOrder}}</strong></div>
+    <div class="line">Task: <strong>{{task}}</strong></div>
+  </div>
+  <div class="box">
+    <div class="box-title">Crew</div>
+    <div class="line">Driver: <strong>{{driver}}</strong></div>
+    <div class="line">Helpers: <strong>{{helpers}}</strong></div>
+  </div>
+</div>
+<div class="grid">
+  <div class="box">
+    <div class="box-title">What was collected</div>
+    <div class="line">Quantity: <strong>{{quantity}} {{uom}}</strong></div>
+    <div class="line">Condition: <strong>{{condition}}</strong></div>
+  </div>
+  <div class="box">
+    <div class="box-title">Where it went</div>
+    <div class="line">GRN: <strong>{{grn}}</strong></div>
+    <div class="line">Storage facility: <strong>{{facility}}</strong></div>
+  </div>
+</div>
+<div class="note"><strong>Driver notes:</strong> {{driverNotes}}</div>
+<div class="note"><strong>Driver comment (GRN):</strong> {{driverComment}}</div>
+<div class="photos">{{photos}}</div>
+<div class="sign"><div>Driver</div><div>Client / site contact</div><div>Operations</div></div>
+</body>
+</html>

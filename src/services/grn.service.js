@@ -37,6 +37,7 @@ const grnIncludes = [
       },
     ],
   },
+  { model: db.StorageFacility, as: 'storageFacility', attributes: ['id', 'name'], required: false },
   { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
   { model: db.User, as: 'approvedByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
   {
@@ -276,8 +277,37 @@ async function createItemWithImages(grnId, item, transaction) {
   return row;
 }
 
+/** Facility + driver comment fields from a request body (camelCase or snake_case), merged over the current GRN. */
+async function resolveFacilityFields(tenantId, body, current) {
+  const pick = (a, b, cur, dflt) => (body[a] !== undefined ? body[a] : body[b] !== undefined ? body[b] : (current ? current[b] : dflt));
+  const without = Boolean(pick('disposedWithoutFacility', 'disposed_without_facility', null, false));
+  let facilityId = pick('storageFacilityId', 'storage_facility_id', null, null) || null;
+  if (without) facilityId = null;
+  if (facilityId) {
+    const f = await db.StorageFacility.findOne({ where: { id: facilityId, tenant_id: tenantId, is_active: true } });
+    if (!f) throw ApiError.badRequest('Invalid storage facility');
+  }
+  const comment = pick('driverComment', 'driver_comment', null, null);
+  return {
+    storage_facility_id: facilityId,
+    disposed_without_facility: without,
+    driver_comment: comment == null ? null : String(comment).trim() || null,
+  };
+}
+
+const listFacilities = (tenantId) => db.StorageFacility.findAll({ where: { tenant_id: tenantId, is_active: true }, order: [['name', 'ASC']] });
+
+const createFacility = async (tenantId, name) => {
+  const clean = String(name || '').trim();
+  if (!clean) throw ApiError.badRequest('Enter the facility name');
+  const [row] = await db.StorageFacility.findOrCreate({ where: { tenant_id: tenantId, name: clean }, defaults: { is_active: true } });
+  if (!row.is_active) await row.update({ is_active: true });
+  return row;
+};
+
 const createGrn = async (tenantId, userId, body) => {
   const { workOrderId, notes, items = [] } = body;
+  const facilityFields = await resolveFacilityFields(tenantId, body, null);
 
   if (!workOrderId) {
     throw ApiError.badRequest('GRN must be created from a completed work order');
@@ -308,6 +338,7 @@ const createGrn = async (tenantId, userId, body) => {
         deal_id: resolvedDealId,
         status: 'new',
         notes: notes || null,
+        ...facilityFields,
         created_by: userId,
       },
       { transaction: t }
@@ -318,6 +349,9 @@ const createGrn = async (tenantId, userId, body) => {
         await createItemWithImages(grn.id, it, t);
       }
     }
+
+    // Every GRN gets its Outbound entry ("Pending Outbound").
+    await require('./outbound.service').createForGrn(tenantId, grn.id, userId, t);
 
     await t.commit();
     return getById(tenantId, grn.id);
@@ -334,6 +368,16 @@ const updateGrn = async (tenantId, id, body, actorUser) => {
 
   const prevStatus = grn.status;
   const nextStatus = body.status && GRN_STATUSES.includes(body.status) ? body.status : grn.status;
+  const facilityFields = await resolveFacilityFields(tenantId, body, grn);
+  if (nextStatus === 'submitted' && prevStatus !== 'submitted') {
+    // The pickup note must say where the goods are stored; if they never reached the facility, the driver says why.
+    if (!facilityFields.storage_facility_id && !facilityFields.disposed_without_facility) {
+      throw ApiError.badRequest('Select the storage facility (Sajha, DIC B03, DIC H09 ...) before submitting, or tick "Disposed without coming to the facility"');
+    }
+    if (facilityFields.disposed_without_facility && !String(facilityFields.driver_comment || '').trim()) {
+      throw ApiError.badRequest('Add a driver comment explaining why the waste did not come to the facility');
+    }
+  }
 
   const t = await db.sequelize.transaction();
   try {
@@ -341,6 +385,7 @@ const updateGrn = async (tenantId, id, body, actorUser) => {
       {
         notes: body.notes !== undefined ? body.notes : grn.notes,
         status: nextStatus,
+        ...facilityFields,
       },
       { transaction: t }
     );
@@ -452,6 +497,8 @@ const ensureGrnForWorkOrder = async (tenantId, workOrderId, userId = null) => {
 };
 
 module.exports = {
+  listFacilities,
+  createFacility,
   listGrns,
   listInventoryItems,
   getStockOnHand,

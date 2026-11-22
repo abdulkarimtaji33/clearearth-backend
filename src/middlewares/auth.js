@@ -5,6 +5,7 @@ const ApiError = require('../utils/apiError');
 const { verifyToken } = require('../utils/helpers');
 const { asyncHandler } = require('./errorHandler');
 const db = require('../models');
+const accessService = require('../services/access.service');
 
 /**
  * Verify JWT Token and Authenticate User
@@ -47,15 +48,21 @@ const authenticate = asyncHandler(async (req, res, next) => {
     throw ApiError.forbidden('User account is not active');
   }
 
+  // Effective access = role permissions ± per-user overrides, plus data scopes and field rules
+  const access = await accessService.getAccess(user);
+  user.access = access;
+
   // Attach user and tenant to request
   req.user = user;
+  req.access = access;
   req.tenant = { id: decoded.tenantId };
 
   next();
 });
 
 /**
- * Check if user has specific permission
+ * Check if user has specific permission (any one of the listed permissions).
+ * Based on effective access: role permissions plus per-user grants minus per-user revokes.
  */
 const authorize = (...permissions) => {
   return asyncHandler(async (req, res, next) => {
@@ -63,28 +70,8 @@ const authorize = (...permissions) => {
       throw ApiError.unauthorized('Authentication required');
     }
 
-    // Super admin has all permissions
-    if (req.user.role.name === 'super_admin') {
-      return next();
-    }
-
-    // Get user permissions
-    const userPermissions = req.user.role.permissions.map(p => p.name);
-    const roleName = req.user.role.name;
-
-    const userHas = (permission) => {
-      if (userPermissions.includes(permission)) return true;
-      // operations_manager: any operations.* satisfies operations.<action> checks
-      if (roleName === 'operations_manager' && permission.startsWith('operations.')) {
-        return userPermissions.some((p) => p.startsWith('operations.'));
-      }
-      return false;
-    };
-
-    // Check if user has required permission (any one of the listed permissions)
-    const hasPermission = permissions.some((permission) => userHas(permission));
-
-    if (!hasPermission) {
+    const access = req.access || req.user.access;
+    if (!access || !access.hasAny(...permissions)) {
       throw ApiError.forbidden('Insufficient permissions');
     }
 

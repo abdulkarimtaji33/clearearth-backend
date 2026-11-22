@@ -11,8 +11,50 @@ function isDuplicateSchemaError(e) {
   );
 }
 
+/**
+ * permissions.module / permissions.action became VARCHAR (see src/database/accessControl.setup.js).
+ * Legacy steps below that re-declare them as ENUMs must only run while the column is still an ENUM.
+ */
+async function permissionsColumnIsEnum(column) {
+  try {
+    const [rows] = await db.sequelize.query(
+      `SELECT DATA_TYPE AS t FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'permissions' AND COLUMN_NAME = ?`,
+      { replacements: [column] }
+    );
+    return rows.length > 0 && rows[0].t === 'enum';
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Once the dynamic access-control system is initialised, role permissions are managed from the
+ * Roles UI. The legacy steps below re-seed role_permissions on every run, which would overwrite
+ * admin edits — so after initialisation, writes to role_permissions made by this script are skipped.
+ */
+async function freezeRolePermissionSeeding() {
+  let initialised = false;
+  try {
+    const [rows] = await db.sequelize.query(`SELECT id FROM permissions WHERE name = 'workflow.manager' LIMIT 1`);
+    initialised = rows.length > 0;
+  } catch (e) { /* fresh database */ }
+  if (!initialised) return () => {};
+  console.log('Access control already initialised — role_permissions seeding steps will be skipped.');
+  const original = db.sequelize.query.bind(db.sequelize);
+  db.sequelize.query = (sql, opts) => {
+    const s = typeof sql === 'string' ? sql : (sql && sql.query) || '';
+    if (/\brole_permissions\b/i.test(s) && /^\s*(INSERT|DELETE|REPLACE|UPDATE)\b/i.test(s)) {
+      return Promise.resolve([[], 0]);
+    }
+    return original(sql, opts);
+  };
+  return () => { db.sequelize.query = original; };
+}
+
 async function runMigration() {
   try {
+    const restoreQuery = await freezeRolePermissionSeeding();
     console.log('Creating material_types table...');
     await db.sequelize.query(`
       CREATE TABLE IF NOT EXISTS material_types (
@@ -348,7 +390,7 @@ async function runMigration() {
 
     console.log('Adding inspection_requests and inspection_reports to permissions module enum...');
     try {
-      await db.sequelize.query(`
+      if (await permissionsColumnIsEnum('module')) await db.sequelize.query(`
         ALTER TABLE permissions MODIFY COLUMN module ENUM(
           'users','roles','contacts','companies','suppliers','leads','products','deals',
           'inspection_requests','inspection_reports'
@@ -1790,7 +1832,7 @@ async function runMigration() {
 
     console.log('Seeding quotations and purchase_orders permissions...');
     try {
-      await db.sequelize.query(`
+      if (await permissionsColumnIsEnum('module')) await db.sequelize.query(`
         ALTER TABLE permissions MODIFY COLUMN module ENUM(
           'users','roles','contacts','companies','suppliers','leads','products','deals',
           'inspection_requests','inspection_reports','quotations','purchase_orders',
@@ -2484,7 +2526,7 @@ async function runMigration() {
     console.log('Ensuring users.impersonate permission exists and granting to admin roles...');
     try {
       try {
-        await db.sequelize.query(`
+        if (await permissionsColumnIsEnum('action')) await db.sequelize.query(`
           ALTER TABLE permissions MODIFY COLUMN action ENUM(
             'create','read','update','delete','approve','export','impersonate'
           ) NOT NULL
@@ -3775,6 +3817,111 @@ async function runMigration() {
     } catch (e) {
       if (!isDuplicateSchemaError(e)) console.warn('  employee_documents.file_path_back add:', e.message);
     }
+
+    // ── Inbound / Outbound modules (additive only) ────────────────────────────────────────────
+    console.log('Ensuring outbound tables, GRN facility/comment columns, helpers and scheduling notes...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS storage_facilities (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_sf_name (tenant_id, name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    {
+      const [tenantRows] = await db.sequelize.query('SELECT id FROM tenants');
+      for (const tr of tenantRows) {
+        for (const name of ['Sajha', 'DIC B03', 'DIC H09']) {
+          await db.sequelize.query('INSERT IGNORE INTO storage_facilities (tenant_id, name) VALUES (?, ?)', { replacements: [tr.id, name] });
+        }
+      }
+    }
+    for (const [tbl, col, ddl] of [
+      ['grns', 'storage_facility_id', 'INT NULL'],
+      ['grns', 'driver_comment', 'TEXT NULL'],
+      ['grns', 'disposed_without_facility', 'TINYINT(1) NOT NULL DEFAULT 0'],
+      ['work_order_task_assignees', 'role', "VARCHAR(20) NOT NULL DEFAULT 'driver'"],
+      ['quotations', 'pickup_request_note', 'TEXT NULL'],
+      ['purchase_orders', 'pickup_request_note', 'TEXT NULL'],
+    ]) {
+      try { await db.sequelize.query(`ALTER TABLE ${tbl} ADD COLUMN ${col} ${ddl}`); } catch (e) { if (!isDuplicateSchemaError(e)) console.warn(`  ${tbl}.${col}:`, e.message); }
+    }
+    // Existing multi-assignee rows: the first assignee stays the driver, the others become helpers.
+    await db.sequelize.query(`UPDATE work_order_task_assignees a JOIN work_order_tasks t ON t.id = a.task_id SET a.role = 'helper' WHERE t.assigned_to IS NOT NULL AND a.user_id <> t.assigned_to AND a.role = 'driver'`);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS outbounds (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        outbound_number VARCHAR(30) NOT NULL,
+        grn_id INT NOT NULL,
+        deal_id INT NULL,
+        work_order_id INT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending_outbound',
+        outbound_type VARCHAR(20) NULL,
+        company_id INT NULL,
+        supplier_id INT NULL,
+        vehicle_no VARCHAR(50) NULL,
+        person_in_charge VARCHAR(150) NULL,
+        description TEXT NULL,
+        gatepass_number VARCHAR(30) NULL,
+        gatepass_date DATE NULL,
+        inventory_released TINYINT(1) NOT NULL DEFAULT 0,
+        notes TEXT NULL,
+        requested_delivery_date DATE NULL,
+        delivery_date_status VARCHAR(30) NULL,
+        confirmed_delivery_date DATE NULL,
+        delivery_reschedule_note TEXT NULL,
+        delivery_notes TEXT NULL,
+        delivery_requested_by INT NULL,
+        completed_at DATETIME NULL,
+        created_by INT NULL,
+        updated_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_outbound_grn (tenant_id, grn_id),
+        UNIQUE KEY uk_outbound_number (tenant_id, outbound_number),
+        INDEX idx_outbound_status (tenant_id, status),
+        INDEX idx_outbound_deal (deal_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS outbound_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        outbound_id INT NOT NULL,
+        grn_item_id INT NULL,
+        item_name VARCHAR(255) NOT NULL,
+        material_type_id INT NULL,
+        unit_of_measure VARCHAR(20) NULL DEFAULT 'kg',
+        quantity DECIMAL(15,2) NOT NULL DEFAULT 0,
+        unit_value DECIMAL(15,2) NULL,
+        notes TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_oi_outbound (outbound_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS outbound_events (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        outbound_id INT NOT NULL,
+        user_id INT NULL,
+        action VARCHAR(40) NOT NULL,
+        detail TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_oe_outbound (outbound_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).
+    try {
+      await require('./src/services/outbound.service').backfillFromGrns();
+    } catch (e) { console.warn('  outbound backfill:', e.message); }
+
+    restoreQuery();
+    console.log('Setting up dynamic access control (catalog, scopes, field rules, overrides)...');
+    await require('./src/database/accessControl.setup').ensureAccessControl(db.sequelize, console.log);
 
     console.log('✅ Migration completed successfully!');
     process.exit(0);

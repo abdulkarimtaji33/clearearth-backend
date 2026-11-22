@@ -19,6 +19,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         references: { model: 'users', key: 'id' },
       },
+      role: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'driver' },
     },
     {
       tableName: 'work_order_task_assignees',

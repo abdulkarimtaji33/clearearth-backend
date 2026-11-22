@@ -1,5 +1,9 @@
 const ApiError = require('./apiError');
 
+/**
+ * Invoice-generation rule is now the `invoices.generate` permission (editable per role in the Roles UI).
+ * The role-name sets below are only a fallback when no effective access is attached to the request.
+ */
 const INVOICE_GENERATION_BLOCKED_ROLES = new Set(['sales', 'sales_executive', 'sales_manager', 'operations_manager', 'operations']);
 const OPERATIONS_ROLES = new Set(['operations_manager', 'operations']);
 
@@ -8,8 +12,11 @@ function roleNameFromRequest(req) {
 }
 
 function assertCanGenerateInvoice(req) {
-  const role = roleNameFromRequest(req);
-  if (INVOICE_GENERATION_BLOCKED_ROLES.has(role)) {
+  const access = req.access || req.user?.access;
+  const allowed = access
+    ? access.has('invoices.generate')
+    : !INVOICE_GENERATION_BLOCKED_ROLES.has(roleNameFromRequest(req));
+  if (!allowed) {
     throw ApiError.forbidden('Your role cannot create proforma or tax invoices');
   }
 }

@@ -105,41 +105,11 @@ const createForUsers = async (tenantId, userIds, payload) => {
 };
 
 const getSalesManagerUserIds = async (tenantId) => {
-  const roles = await db.Role.findAll({
-    where: {
-      name: 'sales_manager',
-      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
-    },
-    attributes: ['id'],
-  });
-  const roleIds = roles.map(r => r.id);
-  if (roleIds.length === 0) return [];
-
-  const users = await db.User.findAll({
-    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
-    attributes: ['id'],
-  });
-  return users.map(u => u.id);
+  return getUserIdsWithPermission(tenantId, 'workflow.manager', { excludeAdmins: true });
 };
 
-const INSPECTION_TEAM_ROLES = ['inspection_team', 'inspection'];
-
 const getInspectionTeamUserIds = async (tenantId) => {
-  const roles = await db.Role.findAll({
-    where: {
-      name: { [Op.in]: INSPECTION_TEAM_ROLES },
-      [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }],
-    },
-    attributes: ['id'],
-  });
-  const roleIds = roles.map(r => r.id);
-  if (roleIds.length === 0) return [];
-
-  const users = await db.User.findAll({
-    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
-    attributes: ['id'],
-  });
-  return users.map(u => u.id);
+  return getUserIdsWithPermission(tenantId, 'inspection_reports.perform', { excludeAdmins: true });
 };
 
 const getManagerAndAdminUserIds = async (tenantId) => {
@@ -351,34 +321,49 @@ const notifyLeadApprovalRequested = async (tenantId, lead, requestedByUser) => {
 };
 
 const getAccountsUserIds = async (tenantId) => {
-  const roles = await db.Role.findAll({
-    where: { name: 'accounts', [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
-    attributes: ['id'],
-  });
-  const roleIds = roles.map(r => r.id);
-  if (roleIds.length === 0) return [];
-  const users = await db.User.findAll({
-    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
-    attributes: ['id'],
-  });
-  return users.map(u => u.id);
+  return getUserIdsWithPermission(tenantId, 'accounting.update', { excludeAdmins: true });
 };
 
-/** All active users in this tenant whose role holds the given permission name */
-const getUserIdsWithPermission = async (tenantId, permissionName) => {
+/**
+ * All active users in this tenant who effectively hold the given permission:
+ * role permission, plus per-user grants, minus per-user revokes (expired overrides ignored).
+ * excludeAdmins drops admin-type roles so routine workflow notifications don't spam administrators.
+ */
+const ADMIN_ROLE_NAMES = ['super_admin', 'admin', 'tenant_admin'];
+const getUserIdsWithPermission = async (tenantId, permissionName, { excludeAdmins = false } = {}) => {
+  const perm = await db.Permission.findOne({ where: { name: permissionName }, attributes: ['id'] });
+  if (!perm) return [];
+
   const roles = await db.Role.findAll({
     where: { [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
     include: [{ model: db.Permission, as: 'permissions', where: { name: permissionName }, attributes: [] }],
     attributes: ['id'],
   });
   const roleIds = roles.map(r => r.id);
-  if (roleIds.length === 0) return [];
+
+  const overrides = await db.UserPermissionOverride.findAll({
+    where: { tenant_id: tenantId, permission_id: perm.id },
+    attributes: ['user_id', 'effect', 'expires_at'],
+  });
+  const now = Date.now();
+  const live = overrides.filter(o => !o.expires_at || new Date(o.expires_at).getTime() >= now);
+  const grantedIds = live.filter(o => o.effect === 'grant').map(o => o.user_id);
+  const revokedIds = new Set(live.filter(o => o.effect === 'revoke').map(o => o.user_id));
+
+  const or = [];
+  if (roleIds.length) or.push({ role_id: { [Op.in]: roleIds } });
+  if (grantedIds.length) or.push({ id: { [Op.in]: grantedIds } });
+  if (!or.length) return [];
 
   const users = await db.User.findAll({
-    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
+    where: { tenant_id: tenantId, status: 'active', [Op.or]: or },
     attributes: ['id'],
+    include: [{ model: db.Role, as: 'role', attributes: ['name'] }],
   });
-  return users.map(u => u.id);
+  return users
+    .filter(u => !revokedIds.has(u.id))
+    .filter(u => !excludeAdmins || !ADMIN_ROLE_NAMES.includes(u.role?.name))
+    .map(u => u.id);
 };
 
 /**
@@ -398,17 +383,7 @@ const getManagerOrPermissionHolderUserIds = async (tenantId, employee, permissio
 };
 
 const getOperationsManagerUserIds = async (tenantId) => {
-  const roles = await db.Role.findAll({
-    where: { name: 'operations_manager', [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
-    attributes: ['id'],
-  });
-  const roleIds = roles.map(r => r.id);
-  if (roleIds.length === 0) return [];
-  const users = await db.User.findAll({
-    where: { tenant_id: tenantId, role_id: { [Op.in]: roleIds }, status: 'active' },
-    attributes: ['id'],
-  });
-  return users.map(u => u.id);
+  return getUserIdsWithPermission(tenantId, 'operations.update', { excludeAdmins: true });
 };
 
 const notifyQuotationApproved = async (tenantId, quotation, approvedByUser) => {

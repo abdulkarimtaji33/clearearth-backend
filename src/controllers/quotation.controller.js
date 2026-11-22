@@ -26,7 +26,7 @@ const getAll = asyncHandler(async (req, res) => {
     hasWorkOrder: hasWorkOrder === 'true' ? true : hasWorkOrder === 'false' ? false : undefined,
     ...scope,
   });
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req);
   const quotations = hideFinancials
     ? result.quotations.map((q) => sanitizeQuotationListItem(q, true))
     : result.quotations;
@@ -40,49 +40,50 @@ const getAll = asyncHandler(async (req, res) => {
 const getById = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const quotation = await quotationService.getById(req.tenant.id, req.params.id, scope);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  const hideFinancials = shouldHideDealFinancials(req);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials));
 });
 
 const create = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req);
   const scope = getSalesScope(req);
   const quotation = await quotationService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, quotation, 'Quotation created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req);
   const scope = getSalesScope(req);
   const quotation = await quotationService.update(req.tenant.id, req.params.id, req.body, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, quotation, 'Quotation updated successfully');
 });
 
 const remove = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req);
   const scope = getSalesScope(req);
   await quotationService.remove(req.tenant.id, req.params.id, scope);
   return ApiResponse.success(res, null, 'Quotation deleted');
 });
 
 const approve = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req);
   const scope = getSalesScope(req);
   const quotation = await quotationService.approve(req.tenant.id, req.params.id, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   }, req.body.requestedPickupDate || null);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  await quotationService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);
+  const hideFinancials = shouldHideDealFinancials(req);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Quotation approved');
 });
 
 const confirmPickupDate = asyncHandler(async (req, res) => {
   const quotation = await quotationService.confirmPickupDate(req.tenant.id, req.params.id, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, quotation, 'Pickup date confirmed');
 });
@@ -90,7 +91,7 @@ const confirmPickupDate = asyncHandler(async (req, res) => {
 const requestPickupReschedule = asyncHandler(async (req, res) => {
   const quotation = await quotationService.requestPickupReschedule(req.tenant.id, req.params.id, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   }, req.body.note || null);
   return ApiResponse.success(res, quotation, 'Reschedule requested');
 });
@@ -99,21 +100,22 @@ const reschedulePickupDate = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const quotation = await quotationService.reschedulePickupDate(req.tenant.id, req.params.id, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   }, req.body.pickupDate);
   return ApiResponse.success(res, quotation, 'Pickup date rescheduled');
 });
 
 const requestApproval = asyncHandler(async (req, res) => {
-  assertCanModifyQuotationsAndOrders(req.user?.role?.name);
+  assertCanModifyQuotationsAndOrders(req);
   const scope = getSalesScope(req);
   const quotation = await quotationService.requestApproval(req.tenant.id, req.params.id, scope, req.user, req.body.requestedPickupDate);
-  const hideFinancials = shouldHideDealFinancials(req.user?.role?.name);
+  await quotationService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);
+  const hideFinancials = shouldHideDealFinancials(req);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Approval requested');
 });
 
 const getPdf = asyncHandler(async (req, res) => {
-  if (shouldHideDealFinancials(req.user?.role?.name)) {
+  if (shouldHideDealFinancials(req)) {
     throw ApiError.forbidden('Operations managers cannot download quotation or order PDFs with pricing.');
   }
   const scope = getSalesScope(req);

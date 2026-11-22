@@ -1,14 +1,17 @@
 /**
- * Helper to build scope filters for sales role (own records only).
- * Sales Manager: no scope (sees all).
- * Sales: scopeUserId = req.user.id (sees own records only).
+ * Helper to build scope filters for CRM records.
+ * Driven by the role's data scope for `crm_records` (own / all), editable in the Roles UI.
+ *   all -> no scope (sees everything in the tenant)
+ *   own -> scopeUserId = req.user.id (sees own / assigned records only)
  */
 function getSalesScope(req) {
-  if (!req?.user?.role?.name) return {};
-  if (req.user.role.name === 'sales') {
-    return { scopeUserId: req.user.id };
+  if (!req?.user) return {};
+  const access = req.access || req.user.access;
+  if (access) {
+    return access.scope('crm_records') === 'own' ? { scopeUserId: req.user.id } : {};
   }
-  return {};
+  // Fallback (no effective access attached): legacy behaviour
+  return req.user.role?.name === 'sales' ? { scopeUserId: req.user.id } : {};
 }
 
 /**

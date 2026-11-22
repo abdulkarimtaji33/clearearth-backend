@@ -9,8 +9,12 @@ const { WEEKEND_DAYS } = require('./attendance.service');
 
 const SCOPED_APPROVER_ROLES = ['sales_manager', 'operations_manager'];
 
-/** True when the approver's role scope is limited to their own direct reports */
+/**
+ * True when the approver's data scope for "HR · Leave requests" is limited
+ * (team = direct reports only, own = nobody else). Configured per role in the Roles UI.
+ */
 function isScopedApprover(user) {
+  if (user.access) return user.access.scope('hr_leave') !== 'all';
   const roleName = user.role?.name;
   if (!roleName) return true;
   if (roleName === 'super_admin' || roleName === 'hr_manager' || roleName === 'admin' || roleName === 'tenant_admin') return false;
@@ -18,7 +22,10 @@ function isScopedApprover(user) {
 }
 
 async function assertCanActOnEmployee(tenantId, actorUser, targetEmployeeId) {
-  if (!isScopedApprover(actorUser)) return; // hr_manager/admin/super_admin bypass
+  if (!isScopedApprover(actorUser)) return; // unrestricted scope
+  if (actorUser.access && actorUser.access.scope('hr_leave') === 'own') {
+    throw ApiError.forbidden('Your role can only manage your own leave');
+  }
   const approverEmployee = await employeeService.getByUserId(tenantId, actorUser.id);
   if (!approverEmployee) throw ApiError.forbidden('No employee record linked to your account');
   const target = await db.Employee.findOne({ where: { id: targetEmployeeId, tenant_id: tenantId } });
@@ -177,6 +184,7 @@ const cancel = async (tenantId, actorUserId, requestId) => {
 };
 
 function hasHrLeaveAccess(user) {
+  if (user.access) return user.access.hasAny('hr.access_all', 'hr.leave.read', 'hr.leave.approve');
   const roleName = user.role?.name;
   if (['super_admin', 'hr_manager', 'admin', 'tenant_admin'].includes(roleName)) return true;
   const names = (user.role?.permissions || []).map((p) => p.name);

@@ -6,7 +6,7 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
 const { shouldHideDealFinancials, sanitizeDealPayload } = require('../utils/dealFinancials');
 
-const hideFinancialsForUser = (req) => shouldHideDealFinancials(req.user?.role?.name);
+const hideFinancialsForUser = (req) => shouldHideDealFinancials(req);
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, paymentStatus, companyId, supplierId, contactId, assignedTo, productServiceId, minAmount, maxAmount, dateFrom, dateTo } = req.query;
@@ -79,7 +79,7 @@ const saveInspectionReport = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.saveInspectionReport(req.tenant.id, req.params.id, req.body, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Inspection report saved');
 });
@@ -111,7 +111,7 @@ const approve = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.approve(req.tenant.id, req.params.id, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Deal approved');
 });
@@ -126,7 +126,7 @@ const approveWithPin = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const deal = await dealService.approveWithPin(req.tenant.id, req.params.id, req.body.pin, scope, {
     userId: req.user.id,
-    roleName: req.user.role?.name,
+    roleName: req.user.role?.name, access: req.access,
   });
   return ApiResponse.success(res, sanitizeDealPayload(deal, hideFinancialsForUser(req)), 'Deal approved');
 });

@@ -41,6 +41,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM(...Object.values(RECORD_STATUS)),
         defaultValue: RECORD_STATUS.ACTIVE,
       },
+      default_snapshot: {
+        type: DataTypes.TEXT('long'),
+        allowNull: true,
+        comment: 'JSON snapshot of a system role’s factory permissions/scopes/field rules (for Reset to default)',
+      },
+      color: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
     },
     {
       tableName: 'roles',
@@ -62,6 +71,9 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'role_id',
       as: 'users',
     });
+
+    Role.hasMany(models.RoleDataScope, { foreignKey: 'role_id', as: 'dataScopes' });
+    Role.hasMany(models.RoleFieldRule, { foreignKey: 'role_id', as: 'fieldRules' });
 
     Role.belongsToMany(models.Permission, {
       through: models.RolePermission,

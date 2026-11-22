@@ -22,6 +22,7 @@ const taskInclude = {
       required: false,
       through: { attributes: [] },
     },
+    { model: db.WorkOrderTaskAssignee, as: 'assigneeRows', attributes: ['user_id', 'role'], required: false },
     {
       model: db.WorkOrderTaskFile,
       as: 'files',
@@ -106,7 +107,15 @@ const resolveTaskPayload = async (tenantId, task, transaction) => {
     workTypeId = null;
   }
 
-  const assigneeIds = await resolveAssigneeIds(tenantId, task, transaction);
+  // One driver per task; any number of helpers work under that driver. If `helperIds` is not sent, extra
+  // legacy assignees (the old multi-select) are kept as helpers so nothing is lost.
+  const allIds = await resolveAssigneeIds(tenantId, task, transaction);
+  const driverId = allIds[0] ?? null;
+  const assigneeIds = driverId ? [driverId] : [];
+  const helperSource = Array.isArray(task.helperIds)
+    ? await resolveAssigneeIds(tenantId, { assigneeIds: task.helperIds }, transaction)
+    : allIds.slice(1);
+  const helperIds = helperSource.filter((id) => id !== driverId);
 
   const status = task.status || 'not_started';
   const { expenseLines, expenseTotal } = buildExpenseLines(task);
@@ -126,18 +135,18 @@ const resolveTaskPayload = async (tenantId, task, transaction) => {
     },
     expenseLines,
     assigneeIds,
+    helperIds,
   };
 };
 
-/** Replace a task's assignee rows to match `assigneeIds` exactly. */
-const syncTaskAssignees = async (taskId, assigneeIds, transaction) => {
+/** Replace a task's assignee rows: the one driver (role "driver") plus any helpers (role "helper"). */
+const syncTaskAssignees = async (taskId, assigneeIds, transaction, helperIds = []) => {
   await db.WorkOrderTaskAssignee.destroy({ where: { task_id: taskId }, transaction });
-  if (assigneeIds.length > 0) {
-    await db.WorkOrderTaskAssignee.bulkCreate(
-      assigneeIds.map((user_id) => ({ task_id: taskId, user_id })),
-      { transaction }
-    );
-  }
+  const rows = [
+    ...assigneeIds.map((user_id) => ({ task_id: taskId, user_id, role: 'driver' })),
+    ...helperIds.map((user_id) => ({ task_id: taskId, user_id, role: 'helper' })),
+  ];
+  if (rows.length > 0) await db.WorkOrderTaskAssignee.bulkCreate(rows, { transaction });
 };
 
 const syncTaskExpenses = async (taskId, expenseLines, transaction) => {
@@ -221,18 +230,18 @@ const safeDeleteTask = async (taskId, transaction) => {
 const updateTaskInPlace = async (tenantId, taskId, task, transaction, sortOrder = null) => {
   const row = await db.WorkOrderTask.findOne({ where: { id: taskId }, transaction });
   if (!row) throw ApiError.badRequest('Task not found');
-  const { payload, expenseLines, assigneeIds } = await resolveTaskPayload(tenantId, task, transaction);
+  const { payload, expenseLines, assigneeIds, helperIds } = await resolveTaskPayload(tenantId, task, transaction);
   const updatePayload = sortOrder !== null ? { ...payload, sort_order: sortOrder } : payload;
   await row.update(updatePayload, { transaction });
   await syncTaskExpenses(taskId, expenseLines, transaction);
-  await syncTaskAssignees(taskId, assigneeIds, transaction);
+  await syncTaskAssignees(taskId, assigneeIds, transaction, helperIds);
   return row;
 };
 
 const createTaskWithExpenses = async (tenantId, task, workOrderId, transaction, sortOrder = 0) => {
-  const { payload, expenseLines, assigneeIds } = await resolveTaskPayload(tenantId, task, transaction);
+  const { payload, expenseLines, assigneeIds, helperIds } = await resolveTaskPayload(tenantId, task, transaction);
   const created = await db.WorkOrderTask.create({ ...payload, work_order_id: workOrderId, sort_order: sortOrder }, { transaction });
-  await syncTaskAssignees(created.id, assigneeIds, transaction);
+  await syncTaskAssignees(created.id, assigneeIds, transaction, helperIds);
   if (expenseLines.length > 0) {
     await db.WorkOrderTaskExpense.bulkCreate(
       expenseLines.map((line) => ({
@@ -604,18 +613,25 @@ const updateTaskNotes = async (tenantId, workOrderId, taskId, notes) => {
 };
 
 /** `assigneeIds` (array) is preferred; a bare `assignedTo` id is accepted for back-compat. */
-const updateTaskAssignment = async (tenantId, workOrderId, taskId, assignedToOrIds) => {
+const updateTaskAssignment = async (tenantId, workOrderId, taskId, assignedToOrIds, helperIdsIn) => {
   const workOrder = await db.WorkOrder.findOne({ where: { id: workOrderId, tenant_id: tenantId } });
   if (!workOrder) throw ApiError.notFound('Work order not found');
   const task = await db.WorkOrderTask.findOne({ where: { id: taskId, work_order_id: workOrderId } });
   if (!task) throw ApiError.notFound('Task not found');
 
   const taskLike = Array.isArray(assignedToOrIds) ? { assigneeIds: assignedToOrIds } : { assignedTo: assignedToOrIds };
-  const assigneeIds = await resolveAssigneeIds(tenantId, taskLike);
+  const allIds = await resolveAssigneeIds(tenantId, taskLike);
+  const driverIds = allIds.slice(0, 1);
+  // Callers that only send the driver (the quick "Assign to driver" dialog) keep the helpers already on the task.
+  const keptHelpers = Array.isArray(helperIdsIn) || allIds.length > 1 ? null
+    : (await db.WorkOrderTaskAssignee.findAll({ where: { task_id: taskId, role: 'helper' }, attributes: ['user_id'] })).map((r) => r.user_id);
+  const helperSource = Array.isArray(helperIdsIn) ? await resolveAssigneeIds(tenantId, { assigneeIds: helperIdsIn }) : (keptHelpers || allIds.slice(1));
+  const helperIds = helperSource.filter((id) => id !== driverIds[0]);
+  const assigneeIds = driverIds;
 
   await db.sequelize.transaction(async (t) => {
     await task.update({ assigned_to: assigneeIds[0] ?? null }, { transaction: t });
-    await syncTaskAssignees(taskId, assigneeIds, t);
+    await syncTaskAssignees(taskId, assigneeIds, t, helperIds);
   });
 
   const updated = await db.WorkOrderTask.findOne({
@@ -623,6 +639,7 @@ const updateTaskAssignment = async (tenantId, workOrderId, taskId, assignedToOrI
     include: [
       { model: db.User, as: 'assignedUser', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
       { model: db.User, as: 'assignees', attributes: ['id', 'first_name', 'last_name', 'email'], required: false, through: { attributes: [] } },
+      { model: db.WorkOrderTaskAssignee, as: 'assigneeRows', attributes: ['user_id', 'role'], required: false },
     ],
   });
   return updated;

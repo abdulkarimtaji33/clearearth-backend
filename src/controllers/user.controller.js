@@ -51,7 +51,7 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const user = await userService.create(req.tenant.id, req.body);
+  const user = await userService.create(req.tenant.id, req.body, req.user);
   return ApiResponse.created(res, user, 'User created successfully');
 });
 

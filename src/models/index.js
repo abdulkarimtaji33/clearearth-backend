@@ -14,6 +14,10 @@ const AuditLog = require('./AuditLog')(sequelize, DataTypes);
 const ErrorLog = require('./ErrorLog')(sequelize, DataTypes);
 const Notification = require('./Notification')(sequelize, DataTypes);
 const UserPushToken = require('./UserPushToken')(sequelize, DataTypes);
+const UserPermissionOverride = require('./UserPermissionOverride')(sequelize, DataTypes);
+const RoleDataScope = require('./RoleDataScope')(sequelize, DataTypes);
+const RoleFieldRule = require('./RoleFieldRule')(sequelize, DataTypes);
+const AccessAuditLog = require('./AccessAuditLog')(sequelize, DataTypes);
 
 // Contacts, Companies & Suppliers
 const Contact = require('./Contact')(sequelize, DataTypes);
@@ -85,6 +89,10 @@ const BankReconciliation = require('./BankReconciliation')(sequelize, DataTypes)
 const BankReconciliationItem = require('./BankReconciliationItem')(sequelize, DataTypes);
 const SupplierAdvance = require('./SupplierAdvance')(sequelize, DataTypes);
 const SupplierAdvanceApplication = require('./SupplierAdvanceApplication')(sequelize, DataTypes);
+const StorageFacility = require('./StorageFacility')(sequelize, DataTypes);
+const Outbound = require('./Outbound')(sequelize, DataTypes);
+const OutboundItem = require('./OutboundItem')(sequelize, DataTypes);
+const OutboundEvent = require('./OutboundEvent')(sequelize, DataTypes);
 const WorkType = require('./WorkType')(sequelize, DataTypes);
 
 // Accounting / GL
@@ -155,6 +163,10 @@ const db = {
   ErrorLog,
   Notification,
   UserPushToken,
+  UserPermissionOverride,
+  RoleDataScope,
+  RoleFieldRule,
+  AccessAuditLog,
   Contact,
   CompanyContact,
   Company,
@@ -210,6 +222,10 @@ const db = {
   BankReconciliationItem,
   SupplierAdvance,
   SupplierAdvanceApplication,
+  StorageFacility,
+  Outbound,
+  OutboundItem,
+  OutboundEvent,
   WorkType,
   FiscalYear,
   AccountingPeriod,

@@ -522,7 +522,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
       // Approval statuses must go through the approve workflow (manager / PIN).
       // Sales (and anyone with deals.update) may change other pipeline statuses.
       if (data.status === DEAL_STATUS.APPROVED || data.status === DEAL_STATUS.PENDING_APPROVAL) {
-        if (!isManagerRole(actor?.roleName)) {
+        if (!isManagerRole(actor)) {
           throw ApiError.forbidden('Only a manager can approve deals. Use the approval workflow.');
         }
         throw ApiError.badRequest('Deal approval is required. Use the approval workflow.');
@@ -793,8 +793,13 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}, actor = 
   });
 
   const roleName = actor.roleName;
-  const isInspectorRole = INSPECTION_ROLES.includes(roleName);
-  const canApproveReport = INSPECTION_REPORT_APPROVER_ROLES.includes(roleName);
+  // Driven by permissions (inspection_reports.perform / inspection_reports.approve); role-name lists are a fallback
+  const isInspectorRole = actor.access
+    ? actor.access.has('inspection_reports.perform')
+    : INSPECTION_ROLES.includes(roleName);
+  const canApproveReport = actor.access
+    ? actor.access.has('inspection_reports.approve')
+    : INSPECTION_REPORT_APPROVER_ROLES.includes(roleName);
 
   let inspectorId = data.inspectorId || null;
   if (isInspectorRole) {
@@ -807,7 +812,7 @@ const saveInspectionReport = async (tenantId, dealId, data, scope = {}, actor = 
   if (canApproveReport && data.approvedById != null) {
     approvedById = data.approvedById;
   } else if (!canApproveReport && data.approvedById != null && data.approvedById !== existing?.approved_by_id) {
-    throw ApiError.forbidden('Only sales, sales manager, operations manager, or admin can approve inspection reports');
+    throw ApiError.forbidden('Your role does not have permission to approve inspection reports');
   }
 
   const payload = {
@@ -870,7 +875,7 @@ const _approveDeal = async (deal, { approvedByUserId }) => {
 };
 
 const approve = async (tenantId, dealId, scope = {}, actor = {}) => {
-  if (!isManagerRole(actor.roleName)) {
+  if (!isManagerRole(actor)) {
     throw ApiError.forbidden('Only a manager can approve deals. Use the approval PIN or request manager approval.');
   }
 

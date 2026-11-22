@@ -9,6 +9,9 @@ module.exports = (sequelize, DataTypes) => {
       deal_id: { type: DataTypes.INTEGER, allowNull: true },
       status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'new' },
       notes: { type: DataTypes.TEXT, allowNull: true },
+      storage_facility_id: { type: DataTypes.INTEGER, allowNull: true },
+      driver_comment: { type: DataTypes.TEXT, allowNull: true },
+      disposed_without_facility: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       created_by: { type: DataTypes.INTEGER, allowNull: true },
       approved_by: { type: DataTypes.INTEGER, allowNull: true },
       approved_at: { type: DataTypes.DATE, allowNull: true },
@@ -28,6 +31,7 @@ module.exports = (sequelize, DataTypes) => {
     Grn.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdByUser' });
     Grn.belongsTo(models.User, { foreignKey: 'approved_by', as: 'approvedByUser' });
     Grn.hasMany(models.GrnItem, { foreignKey: 'grn_id', as: 'items' });
+    Grn.belongsTo(models.StorageFacility, { foreignKey: 'storage_facility_id', as: 'storageFacility' });
   };
 
   return Grn;

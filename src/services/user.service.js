@@ -105,8 +105,30 @@ const getById = async (tenantId, userId) => {
   return user;
 };
 
-const create = async (tenantId, data) => {
+/**
+ * Privilege-escalation guard: you can only assign a role whose permissions you hold yourself
+ * (Super Admins can assign anything; only a Super Admin can assign the Super Admin role).
+ */
+const assertCanAssignRole = async (tenantId, roleId, actor) => {
+  const access = actor?.access;
+  if (!access || access.isSuperAdmin || !roleId) return;
+  const role = await db.Role.findOne({
+    where: { id: roleId, [Op.or]: [{ tenant_id: tenantId }, { tenant_id: null }] },
+    include: [{ model: db.Permission, as: 'permissions', through: { attributes: [] }, attributes: ['name'] }],
+  });
+  if (!role) return;
+  if (role.name === 'super_admin') throw ApiError.forbidden('Only a Super Admin can assign the Super Admin role');
+  const missing = role.permissions.map((p) => p.name).filter((n) => !access.has(n));
+  if (missing.length) {
+    throw ApiError.forbidden(
+      `You cannot assign "${role.display_name}" because it grants permissions you do not hold (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}).`
+    );
+  }
+};
+
+const create = async (tenantId, data, actor = null) => {
   const { email, password, roleId, firstName, lastName, phone, designation, avatar } = data;
+  await assertCanAssignRole(tenantId, roleId, actor);
 
   const existingUser = await db.User.findOne({
     where: { tenant_id: tenantId, email },
@@ -188,6 +210,12 @@ const update = async (tenantId, userId, data, actor = null) => {
       },
     });
     if (data.roleId && !roleExists) throw ApiError.badRequest('Role not found');
+    if (data.roleId && data.roleId !== user.role_id) {
+      await assertCanAssignRole(tenantId, data.roleId, actor);
+      if (actor && (actor.userId === userId || actor.id === userId) && !actor.access?.isSuperAdmin) {
+        throw ApiError.badRequest('You cannot change your own role.');
+      }
+    }
     updateData.role_id = data.roleId || null;
   }
 
@@ -202,7 +230,18 @@ const update = async (tenantId, userId, data, actor = null) => {
     emailChanged = true;
   }
 
+  const roleChanged = updateData.role_id !== undefined && updateData.role_id !== user.role_id;
   await user.update(updateData);
+  if (roleChanged || data.status !== undefined) {
+    require('./access.service').invalidateUser(userId);
+    try { require('../socket').emitToUsers([userId], 'access:changed', { userId }); } catch { /* optional */ }
+    if (roleChanged) {
+      await require('./accessAudit.service').log(
+        { userId: actor?.id, tenantId, name: actor ? `${actor.first_name || ''} ${actor.last_name || ''}`.trim() : null },
+        { action: 'user.role.change', targetType: 'user', targetId: userId, targetLabel: `${user.first_name} ${user.last_name}`.trim(), details: { roleId: updateData.role_id } }
+      );
+    }
+  }
 
   if (emailChanged) {
     try {

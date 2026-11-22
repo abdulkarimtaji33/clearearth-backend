@@ -27,6 +27,17 @@ const startServer = async () => {
     //   await syncDatabase({ alter: true });
     // }
 
+    // Keep the permission catalog (src/config/accessCatalog.js) in sync with the database.
+    // Idempotent; failures are logged but never block startup.
+    try {
+      const db = require('./models');
+      const { ensureAccessControl } = require('./database/accessControl.setup');
+      const result = await ensureAccessControl(db.sequelize, (m) => logger.info(m));
+      if (result.created) logger.info(`Access catalog synced (${result.created} new permissions)`);
+    } catch (e) {
+      logger.error(`Access catalog sync failed: ${e.message}`);
+    }
+
     const app = await createApp();
 
     // Create HTTP server and attach Socket.IO

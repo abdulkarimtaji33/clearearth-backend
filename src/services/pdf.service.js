@@ -685,6 +685,83 @@ async function generateCreditNotePdf(creditNoteId, tenantId) {
   return htmlToPdf(html);
 }
 
+/** Printable pickup note: what the driver filled in for one pickup task. */
+async function generatePickupNotePdf(taskId, tenantId) {
+  const note = await require('./pickupReport.service').getNote(tenantId, taskId);
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!note || !tenant) return null;
+  const photos = (note.files || []).slice(0, 8).map((f) => {
+    const rel = String(f.image_url || '').replace(/^\/+/, '');
+    const abs = path.join(__dirname, '../..', rel);
+    try {
+      if (fs.existsSync(abs)) {
+        const ext = path.extname(abs).toLowerCase().replace('.', '') || 'jpeg';
+        return `<img src="data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${fs.readFileSync(abs).toString('base64')}">`;
+      }
+    } catch (_) { /* skip unreadable photo */ }
+    return '';
+  }).join('');
+  const html = renderTemplate(path.join(__dirname, '../templates/pickup-note.html'), {
+    logoDataUri: getLogoDataUri(),
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: [tenant.address, tenant.city].filter(Boolean).join(', ') || '-',
+    taskId: note.task_id,
+    status: escapeHtml(note.status_label),
+    pickupDate: note.pickup_date ? formatDate(note.pickup_date) : '-',
+    deal: escapeHtml([note.deal_number, note.deal_title].filter(Boolean).join(' ') || '-'),
+    client: escapeHtml(note.client || '-'),
+    workOrder: escapeHtml(note.work_order || '-'),
+    task: escapeHtml(note.task || '-'),
+    driver: escapeHtml(note.driver || '-'),
+    helpers: escapeHtml(note.helpers.join(', ') || '-'),
+    quantity: escapeHtml(note.quantity || '-'),
+    uom: escapeHtml(note.uom || ''),
+    condition: escapeHtml(note.condition || '-'),
+    grn: escapeHtml(note.grn_number || '-'),
+    facility: escapeHtml(note.storage_facility || '-'),
+    driverNotes: escapeHtml(note.driver_notes || '-'),
+    driverComment: escapeHtml(note.driver_comment || '-'),
+    photos,
+  });
+  return htmlToPdf(html);
+}
+
+/** Gatepass for an outbound entry (sale -> client, disposed / free service -> vendor). */
+async function generateGatepassPdf(outboundId, tenantId) {
+  const outboundService = require('./outbound.service');
+  const ob = await outboundService.getById(tenantId, outboundId);
+  const tenant = await db.Tenant.findByPk(tenantId);
+  if (!ob || !tenant || !ob.gatepass_number) return null;
+  const isSale = ob.outbound_type === 'sale';
+  let party = isSale ? ob.company : ob.supplier;
+  if (party?.id) {
+    party = (isSale ? await db.Company.findByPk(party.id) : await db.Supplier.findByPk(party.id)) || party;
+  }
+  const rows = (ob.items || []).map((it, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(it.item_name)}</td><td>${escapeHtml(it.unit_of_measure || '')}</td><td class="r">${formatNum(it.quantity)}</td></tr>`).join('');
+  const html = renderTemplate(path.join(__dirname, '../templates/gatepass.html'), {
+    logoDataUri: getLogoDataUri(),
+    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
+    fromAddress: tenant.address || '-',
+    fromCity: [tenant.city, tenant.country].filter(Boolean).join(', ') || '-',
+    fromPhone: tenant.phone || '-',
+    typeLabel: ob.outbound_type === 'sale' ? 'Sale' : ob.outbound_type === 'disposed' ? 'Disposed' : 'Free service',
+    gatepassNumber: ob.gatepass_number,
+    gatepassDate: formatDate(ob.gatepass_date),
+    outboundNumber: ob.outbound_number,
+    grnNumber: ob.grn?.grn_number || '-',
+    partyTitle: isSale ? 'Client' : 'Vendor',
+    partyName: escapeHtml(party?.company_name || '-'),
+    partyAddress: escapeHtml([party?.address, party?.city, party?.country].filter(Boolean).join(', ') || '-'),
+    partyPhone: escapeHtml(party?.phone || ''),
+    vehicleNo: escapeHtml(ob.vehicle_no || '-'),
+    personInCharge: escapeHtml(ob.person_in_charge || '-'),
+    dealLabel: escapeHtml(ob.deal ? `${ob.deal.deal_number} ${ob.deal.title || ''}`.trim() : '-'),
+    itemRows: rows,
+    description: escapeHtml(ob.description || '-'),
+  });
+  return htmlToPdf(html);
+}
+
 async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
   const invoice = await db.ProformaInvoice.findOne({
     where: { id: proformaInvoiceId, tenant_id: tenantId },
@@ -1086,6 +1163,8 @@ module.exports = {
   generateProformaInvoicePdf,
   generateTaxInvoicePdf,
   generateCreditNotePdf,
+  generateGatepassPdf,
+  generatePickupNotePdf,
   generateReceivableReceiptPdf,
   generateStatementOfAccountPdf,
   generateGrnPdf,

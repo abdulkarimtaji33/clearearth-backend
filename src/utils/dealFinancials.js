@@ -3,15 +3,26 @@
  */
 const ApiError = require('./apiError');
 
+// Legacy fallback only (used when a bare role-name string is passed instead of a request / access object).
 const ROLES_HIDE_DEAL_FINANCIALS = new Set(['operations_manager']);
 
 const DEAL_AMOUNT_FIELDS = ['subtotal', 'vat_percentage', 'vat_amount', 'total', 'paid_amount'];
 const LINE_ITEM_AMOUNT_FIELDS = ['unit_price', 'line_total'];
 const INVOICE_AMOUNT_FIELDS = ['subtotal', 'vat_percentage', 'vat_amount', 'total', 'paid_amount'];
 
-const shouldHideDealFinancials = (roleName) => (
-  roleName != null && ROLES_HIDE_DEAL_FINANCIALS.has(roleName)
-);
+/**
+ * Whether the "financials" field group (prices & amounts) is hidden for the caller.
+ * Accepts an Express request, a user, an Access object, or (legacy) a role name string.
+ * Configured per role under Roles → Field visibility.
+ */
+const shouldHideDealFinancials = (subject) => {
+  if (subject == null) return false;
+  if (typeof subject === 'string') return ROLES_HIDE_DEAL_FINANCIALS.has(subject);
+  if (typeof subject.hidesField === 'function') return subject.hidesField('financials');
+  const access = subject.access || subject.user?.access;
+  if (access) return access.hidesField('financials');
+  return false;
+};
 
 const redactFields = (obj, fields) => {
   if (!obj || typeof obj !== 'object') return;
@@ -67,10 +78,20 @@ const sanitizePurchaseOrderPayload = (po, hideFinancials) => {
   return p;
 };
 
-/** Operations managers may view quotations/orders but cannot create, edit, approve, or delete them. */
-const assertCanModifyQuotationsAndOrders = (roleName) => {
-  if (shouldHideDealFinancials(roleName)) {
-    throw ApiError.forbidden('Operations managers can view quotations and orders but cannot modify them.');
+/**
+ * Users without the `orders.modify` permission may view quotations/orders but cannot create,
+ * edit, approve, or delete them. Accepts an Express request, a user, an Access object or (legacy) a role name.
+ */
+const assertCanModifyQuotationsAndOrders = (subject) => {
+  let allowed;
+  if (typeof subject === 'string' || subject == null) {
+    allowed = !ROLES_HIDE_DEAL_FINANCIALS.has(subject);
+  } else {
+    const access = typeof subject.has === 'function' ? subject : (subject.access || subject.user?.access);
+    allowed = access ? access.has('orders.modify') : true;
+  }
+  if (!allowed) {
+    throw ApiError.forbidden('Your role can view quotations and orders but cannot modify them.');
   }
 };
 

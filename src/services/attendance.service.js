@@ -18,8 +18,13 @@ const LATE_THRESHOLD_MINUTE = 15;
 // leave.service -> attendance.service (for WEEKEND_DAYS).
 const SCOPED_APPROVER_ROLES = ['sales_manager', 'operations_manager'];
 
+/**
+ * Data scope for HR attendance comes from the role (Roles -> Data scope -> "HR · Attendance"):
+ *   all -> unrestricted, team -> direct reports only, own -> nobody else.
+ */
 function isScopedApprover(user) {
   if (!user) return false; // internal/system calls (e.g. payroll processing) are unrestricted
+  if (user.access) return user.access.scope('hr_attendance') !== 'all';
   const roleName = user.role?.name;
   if (!roleName) return true;
   if (roleName === 'super_admin' || roleName === 'hr_manager' || roleName === 'admin' || roleName === 'tenant_admin') return false;
@@ -27,7 +32,10 @@ function isScopedApprover(user) {
 }
 
 async function assertCanActOnEmployee(tenantId, actorUser, targetEmployeeId) {
-  if (!isScopedApprover(actorUser)) return; // hr_manager/admin/super_admin bypass
+  if (!isScopedApprover(actorUser)) return; // unrestricted scope
+  if (actorUser?.access && actorUser.access.scope('hr_attendance') === 'own') {
+    throw ApiError.forbidden('Your role can only manage your own attendance');
+  }
   const approverEmployee = await employeeService.getByUserId(tenantId, actorUser.id);
   if (!approverEmployee) throw ApiError.forbidden('No employee record linked to your account');
   const target = await db.Employee.findOne({ where: { id: targetEmployeeId, tenant_id: tenantId } });
@@ -39,6 +47,7 @@ async function assertCanActOnEmployee(tenantId, actorUser, targetEmployeeId) {
 /** Direct-report employee ids for a scoped approver, or null if actor is unrestricted (HR/admin) */
 async function scopedReportIds(tenantId, actorUser) {
   if (!isScopedApprover(actorUser)) return null;
+  if (actorUser?.access && actorUser.access.scope('hr_attendance') === 'own') return [0];
   const approverEmployee = await employeeService.getByUserId(tenantId, actorUser.id);
   const reportIds = approverEmployee
     ? (await db.Employee.findAll({ where: { tenant_id: tenantId, manager_id: approverEmployee.id }, attributes: ['id'] })).map((e) => e.id)

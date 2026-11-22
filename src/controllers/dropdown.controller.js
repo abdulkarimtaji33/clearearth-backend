@@ -149,11 +149,10 @@ exports.getAllDropdowns = async (req, res) => {
  */
 exports.createDropdown = async (req, res) => {
   try {
-    const roleName = req.user?.role?.name;
-    if (!['admin', 'tenant_admin', 'super_admin'].includes(roleName)) {
+    if (!req.access?.has('settings.manage')) {
       return res.status(403).json({
         success: false,
-        message: 'Only administrators can create dropdown values',
+        message: 'You do not have permission to create dropdown values',
       });
     }
 

@@ -5,7 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
-const { isManagerRole } = require('../utils/leadApproval');
+const { isManagerRole, canApproveDirectly } = require('../utils/leadApproval');
 const { assertManagerCanChangeStatus } = require('../utils/statusChangeGuard');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
@@ -634,7 +634,7 @@ const reschedulePickupDate = async (tenantId, poId, scope = {}, actor = {}, newP
 };
 
 const approve = async (tenantId, poId, actor = {}, scope = {}, requestedPickupDate = null) => {
-  if (!isManagerRole(actor.roleName) && actor.roleName !== 'sales') {
+  if (!canApproveDirectly(actor, 'purchase_orders.approve')) {
     throw ApiError.forbidden('Only a manager can approve purchase quotations. Request manager approval instead.');
   }
 
@@ -687,7 +687,13 @@ const requestApproval = async (tenantId, poId, requestedByUser = null, scope = {
   return getById(tenantId, poId);
 };
 
+const setPickupRequestNote = async (tenantId, poId, note) => {
+  if (note === undefined) return;
+  await db.PurchaseOrder.update({ pickup_request_note: note ? String(note).trim() : null }, { where: { id: poId, tenant_id: tenantId } });
+};
+
 module.exports = {
+  setPickupRequestNote,
   getAll,
   getById,
   create,

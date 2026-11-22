@@ -1,8 +1,6 @@
 /**
  * Permission Model
  */
-const { MODULES, ACTIONS } = require('../constants');
-
 module.exports = (sequelize, DataTypes) => {
   const Permission = sequelize.define(
     'Permission',
@@ -23,15 +21,33 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       module: {
-        type: DataTypes.ENUM(...Object.values(MODULES)),
+        type: DataTypes.STRING(50),
         allowNull: false,
       },
       action: {
-        type: DataTypes.ENUM(...Object.values(ACTIONS)),
+        type: DataTypes.STRING(50),
         allowNull: false,
+      },
+      category: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Optional sub-group within a module (e.g. hr -> employees)',
       },
       description: {
         type: DataTypes.TEXT,
+      },
+      is_dangerous: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      is_catalog: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'True when defined in src/config/accessCatalog.js (enforced by the app)',
+      },
+      sort_order: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
       },
     },
     {
