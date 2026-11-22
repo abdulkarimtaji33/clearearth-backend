@@ -3914,6 +3914,19 @@ async function runMigration() {
         INDEX idx_oe_outbound (outbound_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    // outbound.read / outbound.update may already exist from an older seed, in which case the catalog's
+    // "inherit" rule does not grant them. Give them to every role that already holds the GRN equivalent.
+    for (const [fromPerm, toPerm] of [['grn.read', 'outbound.read'], ['grn.update', 'outbound.update']]) {
+      await db.sequelize.query(
+        `INSERT IGNORE INTO role_permissions (role_id, permission_id)
+         SELECT DISTINCT rp.role_id, po.id
+           FROM role_permissions rp
+           JOIN permissions pg ON pg.id = rp.permission_id AND pg.name = ?
+           JOIN permissions po ON po.name = ?`,
+        { replacements: [fromPerm, toPerm] }
+      );
+    }
+
     // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).
     try {
       await require('./src/services/outbound.service').backfillFromGrns();
