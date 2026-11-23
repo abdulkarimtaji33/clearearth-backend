@@ -51,6 +51,7 @@ const getPreviewFromQuotation = async (tenantId, quotationId, scope = {}) => {
       unitPrice: parseFloat(it.unit_price) || 0,
       lineTotal: parseFloat(it.line_total) || 0,
       unitOfMeasure: it.unit_of_measure || ps.unit_of_measure || null,
+      vatApplicable: isVatApplicable(it),
       sortOrder: idx,
     };
   });
@@ -175,6 +176,8 @@ const getById = async (tenantId, id, scope = {}) => {
   return row;
 };
 
+const { isVatApplicable } = require('../utils/lineVat');
+
 const create = async (tenantId, userId, body, scope = {}) => {
   const {
     quotationId,
@@ -207,7 +210,11 @@ const create = async (tenantId, userId, body, scope = {}) => {
   const lineRows = (items || []).map((it) => parseFloat(it.lineTotal ?? it.line_total) || 0);
   const vatPct = parseFloat(vatPercentage) || 0;
   const computedSubtotal = lineRows.length ? round2(lineRows.reduce((s, v) => s + v, 0)) : round2(subtotal);
-  const computedVat = round2((computedSubtotal * vatPct) / 100);
+  // VAT only on the lines marked "VAT applicable" (all of them when no lines are sent)
+  const taxableSubtotal = (items || []).length
+    ? round2((items || []).reduce((s, it) => s + (isVatApplicable(it) ? (parseFloat(it.lineTotal ?? it.line_total) || 0) : 0), 0))
+    : computedSubtotal;
+  const computedVat = round2((taxableSubtotal * vatPct) / 100);
   const computedTotal = round2(computedSubtotal + computedVat);
 
   const t = await db.sequelize.transaction();
@@ -243,6 +250,7 @@ const create = async (tenantId, userId, body, scope = {}) => {
       unit_price: parseFloat(it.unitPrice ?? it.unit_price) || 0,
       line_total: parseFloat(it.lineTotal ?? it.line_total) || 0,
       unit_of_measure: it.unitOfMeasure || it.unit_of_measure || null,
+      vat_applicable: isVatApplicable(it),
       sort_order: it.sortOrder ?? it.sort_order ?? idx,
     }));
 

@@ -3914,6 +3914,13 @@ async function runMigration() {
         INDEX idx_oe_outbound (outbound_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    console.log('Adding per-item VAT flag (vat_applicable) to deal, proforma and tax invoice items...');
+    for (const tbl of ['deal_items', 'proforma_invoice_items', 'tax_invoice_items']) {
+      try {
+        await db.sequelize.query(`ALTER TABLE ${tbl} ADD COLUMN vat_applicable TINYINT(1) NOT NULL DEFAULT 1`);
+      } catch (e) { if (!isDuplicateSchemaError(e)) console.warn(`  ${tbl}.vat_applicable:`, e.message); }
+    }
+
     // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).
     try {
       await require('./src/services/outbound.service').backfillFromGrns();

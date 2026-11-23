@@ -22,6 +22,8 @@ async function nextTaxInvoiceNumber(tenantId, transaction) {
   return `INV/CE/${year}/${n}`;
 }
 
+const { isVatApplicable } = require('../utils/lineVat');
+
 const getPreviewFromProforma = async (tenantId, proformaInvoiceId, scope = {}) => {
   const proforma = await proformaInvoiceService.getById(tenantId, proformaInvoiceId, scope);
   const plain = proforma.get ? proforma.get({ plain: true }) : proforma;
@@ -40,6 +42,7 @@ const getPreviewFromProforma = async (tenantId, proformaInvoiceId, scope = {}) =
     unitPrice: parseFloat(it.unit_price) || 0,
     lineTotal: parseFloat(it.line_total) || 0,
     unitOfMeasure: it.unit_of_measure || it.productService?.unit_of_measure || null,
+    vatApplicable: isVatApplicable(it),
     sortOrder: idx,
   }));
 
@@ -211,7 +214,9 @@ const create = async (tenantId, userId, body, scope = {}) => {
   const pItems = plain.items || [];
   const invSubtotal = round2(pItems.reduce((s, it) => s + (parseFloat(it.line_total) || 0), 0));
   const invVatPct = parseFloat(plain.vat_percentage) || 0;
-  const invVat = round2((invSubtotal * invVatPct) / 100);
+  // VAT only on the lines marked "VAT applicable"
+  const invTaxable = round2(pItems.reduce((s, it) => s + (isVatApplicable(it) ? (parseFloat(it.line_total) || 0) : 0), 0));
+  const invVat = round2((invTaxable * invVatPct) / 100);
   const invTotal = round2(invSubtotal + invVat);
 
   const t = await db.sequelize.transaction();
@@ -251,6 +256,7 @@ const create = async (tenantId, userId, body, scope = {}) => {
       unit_price: parseFloat(it.unit_price) || 0,
       line_total: parseFloat(it.line_total) || 0,
       unit_of_measure: it.unit_of_measure || null,
+      vat_applicable: isVatApplicable(it),
       sort_order: it.sort_order ?? idx,
     }));
 

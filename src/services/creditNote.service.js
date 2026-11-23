@@ -29,7 +29,13 @@ function invoiceNumbers(inv) {
   const paid = round2(inv.paid_amount || 0);
   const credited = round2(inv.credited_amount || 0);
   const outstanding = Math.max(0, round2(total - paid - credited));
-  const vatPct = parseFloat(inv.vat_percentage) || 0;
+  const nominal = parseFloat(inv.vat_percentage) || 0;
+  const sub = parseFloat(inv.subtotal) || 0;
+  const vatAmt = parseFloat(inv.vat_amount) || 0;
+  // When some lines carry no VAT the effective rate (VAT / subtotal) is lower than the nominal one: credit at that
+  // rate so a credit note never reverses more VAT than was charged. Uniform invoices keep the nominal rate.
+  const effective = sub > 0 ? (vatAmt / sub) * 100 : nominal;
+  const vatPct = Math.abs(effective - nominal) > 0.05 ? effective : nominal;
   return { total, paid, credited, outstanding, vatPct };
 }
 

@@ -121,12 +121,18 @@ const _saveDealWds = async (dealId, wdsDetails, transaction) => {
   }
 };
 
+const { isVatApplicable } = require('../utils/lineVat');
+
 const calculateDealTotals = (items, vatPercentage = 5) => {
-  const subtotal = items.reduce((sum, item) => {
-    return sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice));
-  }, 0);
-  
-  const vatAmount = (subtotal * parseFloat(vatPercentage)) / 100;
+  let subtotal = 0;
+  let taxable = 0;
+  for (const item of items) {
+    const line = parseFloat(item.quantity) * parseFloat(item.unitPrice);
+    subtotal += line;
+    if (isVatApplicable(item)) taxable += line; // VAT only on lines marked applicable
+  }
+
+  const vatAmount = (taxable * parseFloat(vatPercentage)) / 100;
   const total = subtotal + vatAmount;
   
   return {
@@ -432,6 +438,7 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
         throw ApiError.badRequest('Each line item must have a product/service selected');
       }
       const itemsToCreate = items.map(item => ({
+        vat_applicable: isVatApplicable(item),
         deal_id: deal.id,
         product_service_id: item.productServiceId,
         quantity: item.quantity,
@@ -672,6 +679,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
           throw ApiError.badRequest('Each line item must have a product/service selected');
         }
         const itemsToCreate = data.items.map(item => ({
+          vat_applicable: isVatApplicable(item),
           deal_id: dealId,
           product_service_id: item.productServiceId,
           quantity: item.quantity,

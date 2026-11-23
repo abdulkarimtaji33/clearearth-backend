@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
       quantity: { type: DataTypes.DECIMAL(15, 4), allowNull: false, defaultValue: 1 },
       unit_price: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       line_total: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
+      vat_applicable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, comment: 'false = no VAT charged on this line' },
       unit_of_measure: { type: DataTypes.STRING(100) },
       sort_order: { type: DataTypes.INTEGER, defaultValue: 0 },
     },

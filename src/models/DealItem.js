@@ -37,6 +37,7 @@ module.exports = (sequelize, DataTypes) => {
       notes: {
         type: DataTypes.TEXT,
       },
+      vat_applicable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, comment: 'false = no VAT charged on this line' },
       unit_of_measure: {
         type: DataTypes.STRING(100),
         allowNull: true,

@@ -183,6 +183,8 @@ function resolvePdfAsApproved(recordApproved, options = {}, { allowOverride = tr
   return recordApproved;
 }
 
+const { isVatApplicable } = require('./../utils/lineVat');
+
 function getVat(tenant) {
   return tenant?.trn_number || tenant?.vat_registration_number || '-';
 }
@@ -297,7 +299,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
       const qty = parseFloat(item.quantity) || 0;
       const unitPrice = isFoc ? 0 : (parseFloat(item.unit_price) || 0);
       const amount = qty * unitPrice;
-      const tax = amount * vatPct;
+      const tax = isVatApplicable(item) ? amount * vatPct : 0;
       const total = amount + tax;
       subtotal += amount;
       totalVat += tax;
@@ -554,7 +556,8 @@ async function generateTaxInvoicePdf(taxInvoiceId, tenantId) {
     const qty = parseFloat(item.quantity) || 0;
     const rate = parseFloat(item.unit_price) || 0;
     const taxable = qty * rate;
-    const tax = showTax ? (taxable * vatPct) / 100 : 0;
+    const lineHasVat = showTax && isVatApplicable(item);
+    const tax = lineHasVat ? (taxable * vatPct) / 100 : 0;
     const amount = taxable + tax;
     subtotal += taxable;
     totalTax += tax;
@@ -566,7 +569,7 @@ async function generateTaxInvoicePdf(taxInvoiceId, tenantId) {
       <td class="text-right">${formatNum(qty)}</td>
       <td class="text-right">${formatNum(rate)}</td>
       <td class="text-right">${formatNum(taxable)}</td>
-      ${showTax ? `<td class="text-right">${formatNum(tax)}<br>${vatPct.toFixed(2)}%</td>` : ''}
+      ${showTax ? `<td class="text-right">${formatNum(tax)}${lineHasVat ? `<br>${vatPct.toFixed(2)}%` : ''}</td>` : ''}
       <td class="text-right">${formatNum(amount)}</td>
     </tr>`;
   });
@@ -813,7 +816,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
     const qty = parseFloat(item.quantity) || 0;
     const unitPrice = isFoc ? 0 : (parseFloat(item.unit_price) || 0);
     const amount = qty * unitPrice;
-    const tax = amount * vatPct;
+    const tax = isVatApplicable(item) ? amount * vatPct : 0;
     const total = amount + tax;
     subtotal += amount;
     totalVat += tax;
