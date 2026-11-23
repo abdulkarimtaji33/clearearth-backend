@@ -35,37 +35,32 @@ const getById = async (tenantId, id) => {
   return terms;
 };
 
-const create = async (tenantId, data) => {
+const DEFAULT_ADMIN_ONLY = 'Only an administrator can choose the default Terms & Conditions';
+
+// Several terms can be defaults: all of them are pre-selected when a quotation is created.
+const create = async (tenantId, data, { canSetDefault = false } = {}) => {
   const { title, content, category, isDefault } = data;
 
-  if (isDefault) {
-    await db.TermsAndConditions.update(
-      { is_default: false },
-      { where: { tenant_id: tenantId } }
-    );
-  }
+  if (isDefault && !canSetDefault) throw ApiError.forbidden(DEFAULT_ADMIN_ONLY);
 
   const terms = await db.TermsAndConditions.create({
     tenant_id: tenantId,
     title,
     content,
     category: category || null,
-    is_default: isDefault || false,
+    is_default: Boolean(isDefault),
     status: 'active',
   });
 
   return terms;
 };
 
-const update = async (tenantId, id, data) => {
+const update = async (tenantId, id, data, { canSetDefault = false } = {}) => {
   const terms = await getById(tenantId, id);
   const { title, content, category, isDefault, status } = data;
 
-  if (isDefault && !terms.is_default) {
-    await db.TermsAndConditions.update(
-      { is_default: false },
-      { where: { tenant_id: tenantId } }
-    );
+  if (isDefault !== undefined && Boolean(isDefault) !== Boolean(terms.is_default) && !canSetDefault) {
+    throw ApiError.forbidden(DEFAULT_ADMIN_ONLY);
   }
 
   await terms.update({

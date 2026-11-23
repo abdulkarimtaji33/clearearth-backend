@@ -20,12 +20,12 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const terms = await termsService.create(req.tenant.id, req.body);
+  const terms = await termsService.create(req.tenant.id, req.body, { canSetDefault: Boolean(req.access?.has('settings.manage')) });
   return ApiResponse.created(res, terms, 'Terms and Conditions created successfully');
 });
 
 const update = asyncHandler(async (req, res) => {
-  const terms = await termsService.update(req.tenant.id, req.params.id, req.body);
+  const terms = await termsService.update(req.tenant.id, req.params.id, req.body, { canSetDefault: Boolean(req.access?.has('settings.manage')) });
   return ApiResponse.success(res, terms, 'Terms and Conditions updated successfully');
 });
 
