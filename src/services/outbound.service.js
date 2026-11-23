@@ -18,7 +18,10 @@ const STATUSES = ['pending_outbound', 'completed'];
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 const includes = [
-  { model: db.Grn, as: 'grn', attributes: ['id', 'grn_number', 'status', 'storage_facility_id', 'driver_comment', 'disposed_without_facility'], required: false },
+  {
+    model: db.Grn, as: 'grn', attributes: ['id', 'grn_number', 'status', 'storage_facility_id', 'driver_comment', 'disposed_without_facility'], required: false,
+    include: [{ model: db.StorageFacility, as: 'storageFacility', attributes: ['id', 'name'], required: false }],
+  },
   {
     model: db.Deal, as: 'deal', attributes: ['id', 'deal_number', 'title', 'deal_type', 'assigned_to'], required: false,
     include: [
