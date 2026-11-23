@@ -90,6 +90,7 @@ const BankReconciliationItem = require('./BankReconciliationItem')(sequelize, Da
 const SupplierAdvance = require('./SupplierAdvance')(sequelize, DataTypes);
 const SupplierAdvanceApplication = require('./SupplierAdvanceApplication')(sequelize, DataTypes);
 const StorageFacility = require('./StorageFacility')(sequelize, DataTypes);
+const PickupRequest = require('./PickupRequest')(sequelize, DataTypes);
 const Outbound = require('./Outbound')(sequelize, DataTypes);
 const OutboundItem = require('./OutboundItem')(sequelize, DataTypes);
 const OutboundEvent = require('./OutboundEvent')(sequelize, DataTypes);
@@ -223,6 +224,7 @@ const db = {
   SupplierAdvance,
   SupplierAdvanceApplication,
   StorageFacility,
+  PickupRequest,
   Outbound,
   OutboundItem,
   OutboundEvent,

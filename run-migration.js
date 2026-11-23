@@ -3914,6 +3914,43 @@ async function runMigration() {
         INDEX idx_oe_outbound (outbound_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS pickup_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        source_type VARCHAR(20) NOT NULL,
+        source_id INT NOT NULL,
+        request_type VARCHAR(20) NOT NULL DEFAULT 'pickup',
+        company_name VARCHAR(255) NULL,
+        contact_person VARCHAR(255) NULL,
+        contact_phone VARCHAR(100) NULL,
+        contact_email VARCHAR(255) NULL,
+        request_date DATE NULL,
+        request_time VARCHAR(20) NULL,
+        location_type VARCHAR(20) NULL,
+        location_address VARCHAR(500) NULL,
+        gate_pass_required TINYINT(1) NULL,
+        service_type VARCHAR(30) NULL,
+        material_type VARCHAR(500) NULL,
+        total_weight VARCHAR(100) NULL,
+        truck_required LONGTEXT NULL,
+        packing_type VARCHAR(30) NULL,
+        labor_required TINYINT(1) NULL,
+        labor_count INT NULL,
+        wds_number VARCHAR(100) NULL,
+        wds_food_type VARCHAR(20) NULL,
+        dm_inspection_required TINYINT(1) NULL,
+        pickup_note_required TINYINT(1) NULL,
+        grn_required TINYINT(1) NULL,
+        certificates LONGTEXT NULL,
+        additional_notes TEXT NULL,
+        requested_by VARCHAR(255) NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_pickup_request_source (tenant_id, source_type, source_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
     console.log('Adding per-item VAT flag (vat_applicable) to deal, proforma and tax invoice items...');
     for (const tbl of ['deal_items', 'proforma_invoice_items', 'tax_invoice_items']) {
       try {

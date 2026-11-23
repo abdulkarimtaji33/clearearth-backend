@@ -1,3 +1,4 @@
+const pickupRequestService = require('../services/pickupRequest.service');
 const quotationService = require('../services/quotation.service');
 const pdfService = require('../services/pdf.service');
 const ApiResponse = require('../utils/apiResponse');
@@ -76,6 +77,7 @@ const approve = asyncHandler(async (req, res) => {
     roleName: req.user.role?.name, access: req.access,
   }, req.body.requestedPickupDate || null);
   await quotationService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);
+  await pickupRequestService.save(req.tenant.id, 'quotation', req.params.id, req.body.pickupRequest, req.user.id);
   const hideFinancials = shouldHideDealFinancials(req);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Quotation approved');
 });
@@ -110,6 +112,7 @@ const requestApproval = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const quotation = await quotationService.requestApproval(req.tenant.id, req.params.id, scope, req.user, req.body.requestedPickupDate);
   await quotationService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);
+  await pickupRequestService.save(req.tenant.id, 'quotation', req.params.id, req.body.pickupRequest, req.user.id);
   const hideFinancials = shouldHideDealFinancials(req);
   return ApiResponse.success(res, sanitizeQuotationListItem(quotation, hideFinancials), 'Approval requested');
 });
@@ -141,7 +144,19 @@ const getPdf = asyncHandler(async (req, res) => {
   res.end(pdfBuffer, 'binary');
 });
 
+const getPickupRequest = asyncHandler(async (req, res) => {
+  const data = await pickupRequestService.getBySource(req.tenant.id, 'quotation', req.params.id);
+  return ApiResponse.success(res, data, 'Pickup request');
+});
+
+const getPickupRequestPrefill = asyncHandler(async (req, res) => {
+  const data = await pickupRequestService.prefill(req.tenant.id, 'quotation', req.params.id, req.user);
+  return ApiResponse.success(res, data, 'Pickup request defaults');
+});
+
 module.exports = {
+  getPickupRequest,
+  getPickupRequestPrefill,
   getAll,
   getById,
   create,

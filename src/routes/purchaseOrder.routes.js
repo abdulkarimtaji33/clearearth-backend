@@ -8,6 +8,8 @@ const { body } = require('express-validator');
 router.use(authenticate);
 
 router.get('/', purchaseOrderController.getAll);
+router.get('/:id/pickup-request/prefill', purchaseOrderController.getPickupRequestPrefill);
+router.get('/:id/pickup-request', purchaseOrderController.getPickupRequest);
 router.get('/:id', purchaseOrderController.getById);
 router.post('/', purchaseOrderController.create);
 router.put('/:id', purchaseOrderController.update);

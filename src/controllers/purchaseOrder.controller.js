@@ -1,3 +1,4 @@
+const pickupRequestService = require('../services/pickupRequest.service');
 const purchaseOrderService = require('../services/purchaseOrder.service');
 const pdfService = require('../services/pdf.service');
 const ApiResponse = require('../utils/apiResponse');
@@ -72,6 +73,7 @@ const approve = asyncHandler(async (req, res) => {
     roleName: req.user.role?.name, access: req.access,
   }, scope, req.body.requestedPickupDate || null);
   await purchaseOrderService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);
+  await pickupRequestService.save(req.tenant.id, 'purchase_order', req.params.id, req.body.pickupRequest, req.user.id);
   return ApiResponse.success(res, po, 'Purchase quotation approved');
 });
 
@@ -105,6 +107,7 @@ const requestApproval = asyncHandler(async (req, res) => {
   const scope = getSalesScope(req);
   const po = await purchaseOrderService.requestApproval(req.tenant.id, req.params.id, req.user, scope, req.body.requestedPickupDate);
   await purchaseOrderService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);
+  await pickupRequestService.save(req.tenant.id, 'purchase_order', req.params.id, req.body.pickupRequest, req.user.id);
   return ApiResponse.success(res, po, 'Approval requested');
 });
 
@@ -146,7 +149,19 @@ const getPdf = asyncHandler(async (req, res) => {
   res.end(pdfBuffer, 'binary');
 });
 
+const getPickupRequest = asyncHandler(async (req, res) => {
+  const data = await pickupRequestService.getBySource(req.tenant.id, 'purchase_order', req.params.id);
+  return ApiResponse.success(res, data, 'Pickup request');
+});
+
+const getPickupRequestPrefill = asyncHandler(async (req, res) => {
+  const data = await pickupRequestService.prefill(req.tenant.id, 'purchase_order', req.params.id, req.user);
+  return ApiResponse.success(res, data, 'Pickup request defaults');
+});
+
 module.exports = {
+  getPickupRequest,
+  getPickupRequestPrefill,
   getAll,
   getById,
   create,
