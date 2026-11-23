@@ -278,3 +278,23 @@ exports.deleteDropdown = async (req, res) => {
     });
   }
 };
+
+/** All countries (existing dropdown values first). Public, like the other form dropdowns. */
+exports.getWorldCountries = async (req, res) => {
+  try {
+    const rows = await require('../services/geo.service').listCountries();
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load countries', error: error.message });
+  }
+};
+
+/** Cities of one country: ?country=<stored value, name or ISO code>. */
+exports.getWorldCities = async (req, res) => {
+  try {
+    const rows = await require('../services/geo.service').listCities(req.query.country);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load cities', error: error.message });
+  }
+};

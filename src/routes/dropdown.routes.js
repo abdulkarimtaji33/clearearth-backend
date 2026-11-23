@@ -9,6 +9,10 @@ const { authenticate } = require('../middlewares/auth');
 // Get all dropdowns grouped by category (public - used for form dropdowns)
 router.get('/all', dropdownController.getAllDropdowns);
 
+// World countries and the cities of one country (company form)
+router.get('/world/countries', dropdownController.getWorldCountries);
+router.get('/world/cities', dropdownController.getWorldCities);
+
 // Get dropdowns by specific category (public - used for form dropdowns)
 router.get('/category/:category', dropdownController.getDropdownsByCategory);
 
