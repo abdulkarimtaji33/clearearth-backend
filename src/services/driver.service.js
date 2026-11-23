@@ -2,6 +2,7 @@
  * Driver pickup tasks
  */
 const db = require('../models');
+const pickupNoteService = require('./pickupNote.service');
 const ApiError = require('../utils/apiError');
 const path = require('path');
 const { Op } = db.Sequelize;
@@ -213,7 +214,13 @@ const getPickup = async (tenantId, userId, taskId) => {
     where: { id: taskId, assigned_to: userId },
   });
   if (!task) throw ApiError.notFound('Pickup task not found');
-  return shapeTaskDetail(task.get({ plain: true }));
+  return { ...shapeTaskDetail(task.get({ plain: true })), pickupNote: await pickupNoteService.get(tenantId, task.id) };
+};
+
+const savePickupNote = async (tenantId, userId, taskId, data) => {
+  const task = await db.WorkOrderTask.findOne({ where: { id: taskId, assigned_to: userId } });
+  if (!task) throw ApiError.notFound('Pickup task not found');
+  return pickupNoteService.save(tenantId, task.id, data);
 };
 
 const startPickup = async (tenantId, userId, taskId) => {
@@ -234,7 +241,7 @@ const startPickup = async (tenantId, userId, taskId) => {
   return { taskId: task.id, status: 'in_progress' };
 };
 
-const markPickedUp = async (tenantId, userId, taskId, { quantity, uom, condition, remarks } = {}, files = []) => {
+const markPickedUp = async (tenantId, userId, taskId, { quantity, uom, condition, remarks, pickupNote } = {}, files = []) => {
   const task = await db.WorkOrderTask.findOne({
     where: { id: taskId, assigned_to: userId },
     include: [
@@ -255,6 +262,8 @@ const markPickedUp = async (tenantId, userId, taskId, { quantity, uom, condition
 
   await task.update(updates);
 
+  if (pickupNote) await pickupNoteService.save(tenantId, task.id, pickupNote);
+
   if (files.length > 0) {
     const fileRecords = files.map((f) => ({
       task_id: task.id,
@@ -267,4 +276,4 @@ const markPickedUp = async (tenantId, userId, taskId, { quantity, uom, condition
   return { taskId: task.id, status: 'completed' };
 };
 
-module.exports = { listPickups, getPickup, startPickup, markPickedUp };
+module.exports = { listPickups, getPickup, startPickup, markPickedUp, savePickupNote };

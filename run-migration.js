@@ -3951,6 +3951,41 @@ async function runMigration() {
         UNIQUE KEY uq_pickup_request_source (tenant_id, source_type, source_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS pickup_note_details (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        task_id INT NOT NULL,
+        note_number VARCHAR(50) NULL,
+        pickup_date DATE NULL,
+        vehicle_no VARCHAR(50) NULL,
+        reference_no VARCHAR(100) NULL,
+        pickup_type VARCHAR(20) NULL,
+        service_type VARCHAR(100) NULL,
+        service_offered VARCHAR(1000) NULL,
+        customer_name VARCHAR(255) NULL,
+        customer_address VARCHAR(500) NULL,
+        contact_person VARCHAR(255) NULL,
+        contact_no VARCHAR(100) NULL,
+        email VARCHAR(255) NULL,
+        special_request TEXT NULL,
+        free_note TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_pickup_note_task (tenant_id, task_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS pickup_note_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        note_id INT NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        description VARCHAR(500) NULL,
+        unit VARCHAR(30) NULL,
+        weight_kg DECIMAL(14,3) NULL,
+        INDEX idx_pni_note (note_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
     console.log('Adding per-item VAT flag (vat_applicable) to deal, proforma and tax invoice items...');
     for (const tbl of ['deal_items', 'proforma_invoice_items', 'tax_invoice_items']) {
       try {

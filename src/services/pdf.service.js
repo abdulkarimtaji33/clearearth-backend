@@ -704,26 +704,40 @@ async function generatePickupNotePdf(taskId, tenantId) {
     } catch (_) { /* skip unreadable photo */ }
     return '';
   }).join('');
+  const nd = note.noteDetails || {};
+  const e = (v) => escapeHtml(v || '-');
+  const lines = nd.items || [];
+  const itemRows = (lines.length ? lines : [{ description: '', unit: '', weightKg: '' }]).map((it, i) => (
+    `<tr><td class="c">${i + 1}</td><td>${escapeHtml(it.description || '')}</td><td class="c">${escapeHtml(it.unit || '')}</td><td class="r">${it.weightKg === '' || it.weightKg == null ? '' : formatNum(it.weightKg)}</td></tr>`
+  )).join('');
+  const totalWeight = lines.reduce((sum, it) => sum + (Number(it.weightKg) || 0), 0);
   const html = renderTemplate(path.join(__dirname, '../templates/pickup-note.html'), {
     logoDataUri: getLogoDataUri(),
-    fromCompany: tenant.company_name || 'Clear Earth Recycling LLC',
-    fromAddress: [tenant.address, tenant.city].filter(Boolean).join(', ') || '-',
-    taskId: note.task_id,
-    status: escapeHtml(note.status_label),
-    pickupDate: note.pickup_date ? formatDate(note.pickup_date) : '-',
-    deal: escapeHtml([note.deal_number, note.deal_title].filter(Boolean).join(' ') || '-'),
-    client: escapeHtml(note.client || '-'),
-    workOrder: escapeHtml(note.work_order || '-'),
-    task: escapeHtml(note.task || '-'),
-    driver: escapeHtml(note.driver || '-'),
-    helpers: escapeHtml(note.helpers.join(', ') || '-'),
+    fromCompany: escapeHtml(tenant.company_name || 'Clear Earth Recycling L.L.C.'),
+    fromAddress: escapeHtml([tenant.address, tenant.city].filter(Boolean).join(', ') || ''),
+    noteNumber: e(nd.noteNumber),
+    pickupDate: (nd.pickupDate || note.pickup_date) ? formatDate(nd.pickupDate || note.pickup_date) : '-',
+    vehicleNo: e(nd.vehicleNo),
+    referenceNo: e(nd.referenceNo),
+    pickupType: nd.pickupType ? (nd.pickupType === 'individual' ? 'Individual' : 'Corporate') : '-',
+    serviceType: e(nd.serviceType),
+    serviceOffered: e(nd.serviceOffered),
+    customerName: e(nd.customerName || note.client),
+    customerAddress: e(nd.customerAddress),
+    contactPerson: e(nd.contactPerson),
+    contactNo: e(nd.contactNo),
+    email: e(nd.email),
+    itemRows,
+    totalWeight: totalWeight ? formatNum(totalWeight) : '',
+    specialRequest: escapeHtml(nd.specialRequest || ''),
+    freeNote: escapeHtml(nd.freeNote || ''),
+    driver: e(note.driver),
+    helpers: escapeHtml((note.helpers || []).join(', ') || '-'),
     quantity: escapeHtml(note.quantity || '-'),
     uom: escapeHtml(note.uom || ''),
-    condition: escapeHtml(note.condition || '-'),
-    grn: escapeHtml(note.grn_number || '-'),
-    facility: escapeHtml(note.storage_facility || '-'),
-    driverNotes: escapeHtml(note.driver_notes || '-'),
-    driverComment: escapeHtml(note.driver_comment || '-'),
+    condition: e(note.condition),
+    grn: e(note.grn_number),
+    facility: e(note.storage_facility),
     photos,
   });
   return htmlToPdf(html);

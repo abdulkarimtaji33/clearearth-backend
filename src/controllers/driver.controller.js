@@ -19,15 +19,24 @@ const startPickup = asyncHandler(async (req, res) => {
 
 const markPickedUp = asyncHandler(async (req, res) => {
   const { quantity, uom, condition, remarks } = req.body;
+  let pickupNote = req.body.pickupNote;
+  if (typeof pickupNote === 'string') {
+    try { pickupNote = JSON.parse(pickupNote); } catch (e) { pickupNote = undefined; }
+  }
   const files = req.files || [];
   const row = await driverService.markPickedUp(
     req.tenant.id,
     req.user.id,
     req.params.taskId,
-    { quantity, uom, condition, remarks },
+    { quantity, uom, condition, remarks, pickupNote },
     files
   );
   return ApiResponse.success(res, row, 'Marked as picked up');
 });
 
-module.exports = { listPickups, getPickup, startPickup, markPickedUp };
+const savePickupNote = asyncHandler(async (req, res) => {
+  const row = await driverService.savePickupNote(req.tenant.id, req.user.id, req.params.taskId, req.body);
+  return ApiResponse.success(res, row, 'Pick-up note saved');
+});
+
+module.exports = { listPickups, getPickup, startPickup, markPickedUp, savePickupNote };

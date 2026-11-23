@@ -119,6 +119,7 @@ const getNote = async (tenantId, taskId) => {
   const map = await grnMap(tenantId, [t.work_order_id]);
   const row = await toRow(t, map);
   row.files = (t.files || []).map((f) => f.get({ plain: true }));
+  row.noteDetails = await require('./pickupNote.service').get(tenantId, taskId);
   return row;
 };
 
