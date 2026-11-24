@@ -140,6 +140,13 @@ const create = async (tenantId, data, scope = {}) => {
   const user = await db.User.findOne({ where: { id: effectivePreparedBy, tenant_id: tenantId } });
   if (!user) throw ApiError.badRequest('User not found');
 
+  const approvedCount = await db.Quotation.count({
+    where: { tenant_id: tenantId, deal_id: dealId, status: QUOTATION_STATUS.APPROVED },
+  });
+  if (approvedCount > 0) {
+    throw ApiError.badRequest('This deal already has an approved quotation, so a new version cannot be created');
+  }
+
   const existingCount = await db.Quotation.count({ where: { tenant_id: tenantId, deal_id: dealId } });
 
   const quotation = await db.sequelize.transaction(async (t) => {

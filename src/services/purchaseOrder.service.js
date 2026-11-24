@@ -259,6 +259,22 @@ const create = async (tenantId, data, scope = {}) => {
     if (scope.scopeUserId && deal.assigned_to !== scope.scopeUserId) {
       throw ApiError.forbidden('You can only create purchase quotations for your own deals');
     }
+    // Client purchase quotations are versioned per deal; once one is approved it is final.
+    if (hasC && !hasS && documentType !== 'bill') {
+      const approvedClientQuotation = await db.PurchaseOrder.count({
+        where: {
+          tenant_id: tenantId,
+          deal_id: dealId,
+          status: PO_STATUS.APPROVED,
+          company_id: { [db.Sequelize.Op.ne]: null },
+          supplier_id: null,
+          document_type: 'quotation',
+        },
+      });
+      if (approvedClientQuotation > 0) {
+        throw ApiError.badRequest('This deal already has an approved purchase quotation, so a new version cannot be created');
+      }
+    }
   }
 
   if (!items || !Array.isArray(items) || items.length === 0) {
