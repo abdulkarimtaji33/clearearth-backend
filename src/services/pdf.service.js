@@ -427,7 +427,7 @@ async function generatePurchaseOrderPdf(poId, tenantId, options = {}) {
   const isFoc = po.deal?.deal_type === 'free_of_charge';
   const isRcm = !isFoc && (po.deal?.is_rcm_applicable || false);
   const vatPct = isFoc ? 0 : (isRcm ? 0 : (parseFloat(po.deal?.vat_percentage) || 5) / 100);
-  const currency = 'AED';
+  const currency = po.deal?.currency || 'AED';
   const dealType = formatDealType(po.deal?.deal_type);
 
   let itemsHtml = '';
