@@ -14,8 +14,9 @@ const contactInclude = {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, industryType, country, city, contactId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, status, industryType, country, city, contactId, dateFrom, dateTo, department } = filters;
   const where = { tenant_id: tenantId };
+  if (department) where.department = department;
 
   if (search) {
     const s = String(search).trim();
@@ -172,7 +173,7 @@ const getById = async (tenantId, supplierId) => {
   return plain;
 };
 
-const create = async (tenantId, data) => {
+const create = async (tenantId, data, department = 'sales') => {
   const {
     companyName, primaryContactId, industryType, website,
     email, phone, country, city, address, notes, contacts, type, vatNumber,
@@ -185,6 +186,7 @@ const create = async (tenantId, data) => {
 
   const supplier = await db.Supplier.create({
     tenant_id: tenantId,
+    department,
     company_name: companyName,
     primary_contact_id: primaryContactId || null,
     industry_type: industryType || null,

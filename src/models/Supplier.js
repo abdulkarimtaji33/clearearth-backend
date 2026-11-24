@@ -53,6 +53,12 @@ module.exports = (sequelize, DataTypes) => {
       notes: {
         type: DataTypes.TEXT,
       },
+      department: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: 'sales',
+        comment: 'Which department owns this record: sales or operations',
+      },
       status: {
         type: DataTypes.ENUM('active', 'inactive'),
         defaultValue: 'active',

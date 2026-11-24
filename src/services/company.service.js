@@ -24,8 +24,9 @@ const _buildCompanyWhereForSales = async (tenantId, companyId, scopeUserId) => {
 };
 
 const getAll = async (tenantId, filters) => {
-  const { offset, limit, search, status, industryType, country, city, contactId, scopeUserId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, status, industryType, country, city, contactId, scopeUserId, dateFrom, dateTo, department } = filters;
   const where = { tenant_id: tenantId };
+  if (department) where.department = department;
 
   if (scopeUserId) {
     const relatedIds = await getSalesRelatedCompanyIds(db, tenantId, scopeUserId);
@@ -207,6 +208,7 @@ const create = async (tenantId, data, scope = {}) => {
     companyName, primaryContactId, industryType, website,
     email, phone, country, city, address, notes, contacts, type, vatNumber,
   } = data;
+  const department = scope.department || 'sales';
 
   if (email) {
     const existing = await db.Company.findOne({ where: { tenant_id: tenantId, email } });
@@ -215,6 +217,7 @@ const create = async (tenantId, data, scope = {}) => {
 
   const company = await db.Company.create({
     tenant_id: tenantId,
+    department,
     company_name: companyName,
     primary_contact_id: primaryContactId || null,
     industry_type: industryType || null,

@@ -5,14 +5,16 @@ const companyService = require('../services/company.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
+const { departmentOfRequest } = require('../utils/roleAccess');
 const { getSalesScope } = require('../utils/scopeHelper');
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, industryType, country, city, contactId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const scope = getSalesScope(req);
+  const department = departmentOfRequest(req);
 
-  const result = await companyService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, dateFrom, dateTo, ...scope });
+  const result = await companyService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, dateFrom, dateTo, ...scope, ...(department ? { department } : {}) });
 
   return ApiResponse.paginated(res, result.companies, {
     page: pagination.page,
@@ -28,7 +30,7 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const scope = getSalesScope(req);
+  const scope = { ...getSalesScope(req), department: departmentOfRequest(req) || 'sales' };
   const company = await companyService.create(req.tenant.id, req.body, scope);
   return ApiResponse.created(res, company, 'Company created successfully');
 });

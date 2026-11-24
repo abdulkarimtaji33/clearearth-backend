@@ -3986,6 +3986,12 @@ async function runMigration() {
         INDEX idx_pni_note (note_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    console.log('Adding department (sales / operations) to companies and suppliers...');
+    for (const tbl of ['companies', 'suppliers']) {
+      try {
+        await db.sequelize.query(`ALTER TABLE ${tbl} ADD COLUMN department VARCHAR(20) NOT NULL DEFAULT 'sales'`);
+      } catch (e) { if (!isDuplicateSchemaError(e)) console.warn(`  ${tbl}.department:`, e.message); }
+    }
     console.log('Adding per-item VAT flag (vat_applicable) to deal, proforma and tax invoice items...');
     for (const tbl of ['deal_items', 'proforma_invoice_items', 'tax_invoice_items']) {
       try {

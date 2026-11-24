@@ -21,11 +21,26 @@ function assertCanGenerateInvoice(req) {
   }
 }
 
+const SALES_ROLES = new Set(['sales', 'sales_executive', 'sales_manager']);
+
+/**
+ * Clients and vendors are kept separate per department: operations users only see (and create) operations
+ * records, sales users only sales records. Other roles (administrators, accounts) see everything.
+ * Returns 'operations', 'sales' or null (no restriction).
+ */
+function departmentOfRequest(req) {
+  const role = roleNameFromRequest(req);
+  if (OPERATIONS_ROLES.has(role)) return 'operations';
+  if (SALES_ROLES.has(role)) return 'sales';
+  return null;
+}
+
 function isOperationsRole(role) {
   return OPERATIONS_ROLES.has(role);
 }
 
 module.exports = {
+  departmentOfRequest,
   INVOICE_GENERATION_BLOCKED_ROLES,
   OPERATIONS_ROLES,
   roleNameFromRequest,

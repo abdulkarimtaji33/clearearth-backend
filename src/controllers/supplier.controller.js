@@ -5,12 +5,14 @@ const supplierService = require('../services/supplier.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
+const { departmentOfRequest } = require('../utils/roleAccess');
 
 const getAll = asyncHandler(async (req, res) => {
   const { page, pageSize, search, status, industryType, country, city, contactId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
 
-  const result = await supplierService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, dateFrom, dateTo });
+  const department = departmentOfRequest(req);
+  const result = await supplierService.getAll(req.tenant.id, { ...pagination, search, status, industryType, country, city, contactId, dateFrom, dateTo, ...(department ? { department } : {}) });
 
   return ApiResponse.paginated(res, result.suppliers, {
     page: pagination.page,
@@ -25,7 +27,7 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const supplier = await supplierService.create(req.tenant.id, req.body);
+  const supplier = await supplierService.create(req.tenant.id, req.body, departmentOfRequest(req) || 'sales');
   return ApiResponse.created(res, supplier, 'Supplier created successfully');
 });
 
