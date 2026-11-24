@@ -125,6 +125,7 @@ const getById = async (tenantId, quotationId, scope = {}) => {
 
 const create = async (tenantId, data, scope = {}) => {
   const { dealId, preparedBy, quotationDate, quotationAmount, remarks } = data;
+  const currency = /^[A-Za-z]{3}$/.test(String(data.currency || '').trim()) ? String(data.currency).trim().toUpperCase() : 'AED';
 
   const dealWhere = { id: dealId, tenant_id: tenantId };
   if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
@@ -154,6 +155,8 @@ const create = async (tenantId, data, scope = {}) => {
     } else {
       referenceNumber = await nextReferenceNumber(db.Quotation, SERVICE_QUOTATION_SEED, t);
     }
+    // The deal carries the currency forward to the proforma and tax invoices.
+    if (deal.currency !== currency) await deal.update({ currency }, { transaction: t });
     return db.Quotation.create(
       {
         tenant_id: tenantId,
@@ -161,7 +164,7 @@ const create = async (tenantId, data, scope = {}) => {
         prepared_by: effectivePreparedBy,
         quotation_date: quotationDate,
         quotation_amount: parseFloat(quotationAmount) || 0,
-        currency: 'AED',
+        currency,
         status: QUOTATION_STATUS.NEW,
         version: existingCount + 1,
         reference_number: referenceNumber,
