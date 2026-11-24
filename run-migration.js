@@ -4051,6 +4051,24 @@ async function runMigration() {
       }
     }
 
+    // Operations must be able to fully manage their own clients, vendors and the contacts on them (including delete),
+    // so they never hit "Insufficient permissions". Also granted once only.
+    {
+      const [[flag2]] = await db.sequelize.query("SELECT COUNT(*) AS n FROM one_time_flags WHERE name = 'ops_clients_vendors_full_crud'");
+      if (!Number(flag2.n)) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id)
+           SELECT r.id, p.id FROM roles r JOIN permissions p
+            WHERE r.name IN ('operations_manager', 'operations', 'Operations Team')
+              AND p.name IN ('companies.read', 'companies.create', 'companies.update', 'companies.delete',
+                             'suppliers.read', 'suppliers.create', 'suppliers.update', 'suppliers.delete',
+                             'contacts.read', 'contacts.create', 'contacts.update', 'contacts.delete')`
+        );
+        await db.sequelize.query("INSERT IGNORE INTO one_time_flags (name) VALUES ('ops_clients_vendors_full_crud')");
+        console.log('  Granted full client / vendor / contact permissions to the operations roles');
+      }
+    }
+
     console.log('Setting up dynamic access control (catalog, scopes, field rules, overrides)...');
     await require('./src/database/accessControl.setup').ensureAccessControl(db.sequelize, console.log);
 
