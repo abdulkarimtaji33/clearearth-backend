@@ -81,7 +81,43 @@ async function sales(tenantId) {
   ];
 }
 
-const KINDS = { purchase, service, sales };
+/** Accounts: every sales (tax) invoice, whatever the deal type. */
+async function salesInvoices(tenantId) {
+  const invoices = await q(
+    `SELECT t.id, t.tax_invoice_number AS reference, t.invoice_date AS date, t.due_date, t.total AS amount, t.paid_amount, t.credited_amount, t.payment_status AS status,
+            COALESCE(co.company_name, '') AS party
+       FROM tax_invoices t
+       LEFT JOIN proforma_invoices p ON p.id = t.proforma_invoice_id
+       LEFT JOIN deals d ON d.id = p.deal_id
+       LEFT JOIN companies co ON co.id = COALESCE(d.company_id, t.company_id)
+      WHERE t.tenant_id = ?`, [tenantId]).catch(async () => q(
+    `SELECT t.id, t.tax_invoice_number AS reference, t.invoice_date AS date, t.due_date, t.total AS amount, t.paid_amount, t.credited_amount, t.payment_status AS status,
+            COALESCE(co.company_name, '') AS party
+       FROM tax_invoices t
+       LEFT JOIN proforma_invoices p ON p.id = t.proforma_invoice_id
+       LEFT JOIN deals d ON d.id = p.deal_id
+       LEFT JOIN companies co ON co.id = d.company_id
+      WHERE t.tenant_id = ?`, [tenantId]));
+  return invoices.map((t) => invoiceRow(t, 'Sales Invoice'));
+}
+
+/** Accounts: every purchase bill (vendor bill) with its Purchase-bill reference. */
+async function purchaseBills(tenantId) {
+  const sql = (ref) => `SELECT b.id, b.bill_number, b.supplier_invoice_no, ${ref} AS purchase_bill_reference, b.bill_date AS date, b.total AS amount, b.paid_amount, b.debit_note_amount, b.status,
+            COALESCE(s.company_name, c.company_name, '') AS party
+       FROM vendor_bills b
+       LEFT JOIN suppliers s ON s.id = b.supplier_id
+       LEFT JOIN companies c ON c.id = b.company_id
+      WHERE b.tenant_id = ?`;
+  let bills;
+  try { bills = await q(sql('b.purchase_bill_reference'), [tenantId]); } catch (e) { bills = await q(sql('NULL'), [tenantId]); }
+  return bills.map((b) => ({
+    type: 'Purchase Bill', reference: b.bill_number, bill_reference: b.purchase_bill_reference || '', party: b.party, date: b.date, amount: num(b.amount),
+    balance: num(num(b.amount) - num(b.paid_amount) - num(b.debit_note_amount)), status: b.status, link: '/erp/vendor-bills',
+  }));
+}
+
+const KINDS = { purchase, service, sales, sales_invoices: salesInvoices, purchase_bills: purchaseBills };
 
 /** kind: purchase | service | sales. `docType` limits to one document type (e.g. "Sales Order"). */
 async function list(tenantId, kind, { search, docType, offset = 0, limit = 25 } = {}) {
@@ -91,7 +127,7 @@ async function list(tenantId, kind, { search, docType, offset = 0, limit = 25 } 
   if (docType) rows = rows.filter((r) => r.type === docType);
   if (search) {
     const s = String(search).trim().toLowerCase();
-    rows = rows.filter((r) => [r.reference, r.party, r.status, r.type].some((v) => String(v || '').toLowerCase().includes(s)));
+    rows = rows.filter((r) => [r.reference, r.bill_reference, r.party, r.status, r.type].some((v) => String(v || '').toLowerCase().includes(s)));
   }
   rows.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   return { rows: rows.slice(offset, offset + limit), total: rows.length };
