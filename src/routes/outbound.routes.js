@@ -7,6 +7,7 @@ router.use(authenticate);
 
 // Outbound entries are created automatically with each GRN, so there is no POST /: they are only edited.
 router.get('/', authorize('outbound.read'), ctrl.list);
+router.get('/parties', authorize('outbound.read'), ctrl.parties);
 router.get('/:id', authorize('outbound.read'), ctrl.getById);
 router.get('/:id/gatepass', authorize('outbound.read'), ctrl.getPdf);
 router.patch('/:id', authorize('outbound.update'), ctrl.update);

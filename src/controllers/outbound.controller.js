@@ -3,6 +3,8 @@ const pdfService = require('../services/pdf.service');
 const ApiResponse = require('../utils/apiResponse');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
+const { departmentOfRequest } = require('../utils/roleAccess');
+const db = require('../models');
 
 const actor = (req) => ({ userId: req.user?.id, roleName: req.user?.role?.name || req.user?.roleName });
 
@@ -44,4 +46,16 @@ const getPdf = asyncHandler(async (req, res) => {
   res.end(pdfBuffer, 'binary');
 });
 
-module.exports = { list, getById, update, requestDelivery, confirmDelivery, requestReschedule, getPdf };
+/** Clients (for sales) and vendors (for disposal / free service) the user can pick on an outbound entry. */
+const parties = asyncHandler(async (req, res) => {
+  const where = { tenant_id: req.tenant.id, status: 'active' };
+  const department = departmentOfRequest(req);
+  if (department) where.department = department;
+  const [companies, suppliers] = await Promise.all([
+    db.Company.findAll({ where, attributes: ['id', 'company_name'], order: [['company_name', 'ASC']], limit: 2000 }),
+    db.Supplier.findAll({ where, attributes: ['id', 'company_name'], order: [['company_name', 'ASC']], limit: 2000 }),
+  ]);
+  return ApiResponse.success(res, { companies, suppliers });
+});
+
+module.exports = { parties, list, getById, update, requestDelivery, confirmDelivery, requestReschedule, getPdf };

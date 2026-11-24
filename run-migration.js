@@ -4030,6 +4030,23 @@ async function runMigration() {
       }
     }
 
+    // Operations keeps its own clients and vendors, so its roles need the client / vendor permissions. Granted
+    // once only (flag row), so later edits in the Roles screen are never overridden.
+    {
+      await db.sequelize.query('CREATE TABLE IF NOT EXISTS one_time_flags (name VARCHAR(100) PRIMARY KEY, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+      const [[flag]] = await db.sequelize.query("SELECT COUNT(*) AS n FROM one_time_flags WHERE name = 'ops_clients_vendors_permissions'");
+      if (!Number(flag.n)) {
+        await db.sequelize.query(
+          `INSERT IGNORE INTO role_permissions (role_id, permission_id)
+           SELECT r.id, p.id FROM roles r JOIN permissions p
+            WHERE r.name IN ('operations_manager', 'operations')
+              AND p.name IN ('companies.read', 'companies.create', 'companies.update', 'suppliers.read', 'suppliers.create', 'suppliers.update')`
+        );
+        await db.sequelize.query("INSERT IGNORE INTO one_time_flags (name) VALUES ('ops_clients_vendors_permissions')");
+        console.log('  Granted client / vendor permissions to the operations roles');
+      }
+    }
+
     console.log('Setting up dynamic access control (catalog, scopes, field rules, overrides)...');
     await require('./src/database/accessControl.setup').ensureAccessControl(db.sequelize, console.log);
 
