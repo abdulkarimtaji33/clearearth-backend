@@ -238,9 +238,9 @@ const FIELD_GROUPS = [
 /** Roles that keep operations.* wildcard behaviour from before the permission matrix was editable. */
 const LEGACY_TIGHTEN = [
   // role names -> permissions to REMOVE on first run so the matrix reflects real behaviour
-  { roles: ['operations_manager', 'operations'], remove: ['quotations.update', 'quotations.approve', 'purchase_orders.update', 'purchase_orders.approve', 'accounting.read', 'accounting.create', 'accounting.update', 'accounting.delete', 'reports.read', 'invoices.generate'] },
+  { roles: ['operations_manager', 'operations'], remove: ['quotations.update', 'quotations.approve', 'purchase_orders.update', 'purchase_orders.approve', 'accounting.read', 'accounting.create', 'accounting.update', 'accounting.delete', 'reports.read', 'invoices.generate', 'certificates.read', 'certificates.create', 'certificates.update', 'certificates.verify', 'certificates.manage'] },
   // Sales roles never authored inspection reports or created work orders (UI + API enforced it by role name)
-  { roles: ['sales', 'sales_executive', 'sales_manager'], remove: ['operations.create', 'inspection_reports.create', 'inspection_reports.update'] },
+  { roles: ['sales', 'sales_executive', 'sales_manager'], remove: ['operations.create', 'inspection_reports.create', 'inspection_reports.update', 'outbound.read', 'outbound.update'] },
 ];
 
 /** Roles that previously matched permission prefixes implicitly (fuzzy rules) — grant explicitly. */
