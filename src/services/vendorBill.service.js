@@ -128,6 +128,7 @@ const listBills = async (tenantId, filters = {}) => {
     where[Op.or] = [
       { bill_number: { [Op.like]: s } },
       { supplier_invoice_no: { [Op.like]: s } },
+      { purchase_bill_reference: { [Op.like]: s } },
       { '$supplier.company_name$': { [Op.like]: s } },
       { '$company.company_name$': { [Op.like]: s } },
     ];
@@ -170,10 +171,17 @@ async function nextBillNumber(tenantId, transaction) {
  * A bill above what is left on the PO needs the extra amount approved; the difference is posted to the expense head.
  * POs approved before this change that already carry an accrual (Cr 2200) have it cleared first (Dr 2200).
  */
+const cleanPoRef = (v) => {
+  const t = v == null ? '' : String(v).trim();
+  if (t.length > 100) throw ApiError.badRequest('Purchase-bill reference must be 100 characters or fewer');
+  return t || null;
+};
+
 const createBill = async (tenantId, userId, body = {}) => {
   const {
     purchaseOrderId, supplierInvoiceNo, supplierTrn, billDate, dueDate, attachmentPath, notes, expenseAccountId, approveOverage,
   } = body;
+  const purchaseBillReference = cleanPoRef(body.purchaseBillReference);
   const subtotal = round2(body.subtotal);
   const vat = round2(body.vatAmount || 0);
 
@@ -249,6 +257,7 @@ const createBill = async (tenantId, userId, body = {}) => {
       supplier_id: po.supplier_id || null,
       company_id: po.company_id || null,
       supplier_invoice_no: String(supplierInvoiceNo).trim(),
+      purchase_bill_reference: purchaseBillReference || `PO-${po.id}`,
       supplier_trn: supplierTrn ? String(supplierTrn).trim() : null,
       bill_date: billDate,
       due_date: dueDate || null,
@@ -369,6 +378,7 @@ const createWorkOrderExpenseBill = async (tenantId, userId, body = {}) => {
       expense_account_id: exp.expense_account_id || null,
       supplier_id: supplier.id,
       supplier_invoice_no: invNo,
+      purchase_bill_reference: cleanPoRef(body.purchaseBillReference),
       supplier_trn: trn || null,
       bill_date: billDate,
       due_date: dueDate || null,
@@ -452,6 +462,7 @@ const createDirectBill = async (tenantId, userId, body = {}) => {
       supplier_id: supplier.id,
       company_id: null,
       supplier_invoice_no: invNo,
+      purchase_bill_reference: cleanPoRef(body.purchaseBillReference),
       supplier_trn: trn || null,
       bill_date: billDate,
       due_date: dueDate || null,

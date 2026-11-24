@@ -3992,6 +3992,10 @@ async function runMigration() {
         await db.sequelize.query(`ALTER TABLE ${tbl} ADD COLUMN department VARCHAR(20) NOT NULL DEFAULT 'sales'`);
       } catch (e) { if (!isDuplicateSchemaError(e)) console.warn(`  ${tbl}.department:`, e.message); }
     }
+    console.log('Adding purchase_bill_reference to vendor_bills...');
+    try {
+      await db.sequelize.query('ALTER TABLE vendor_bills ADD COLUMN purchase_bill_reference VARCHAR(100) NULL');
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  vendor_bills.purchase_bill_reference:', e.message); }
     console.log('Adding per-item VAT flag (vat_applicable) to deal, proforma and tax invoice items...');
     for (const tbl of ['deal_items', 'proforma_invoice_items', 'tax_invoice_items']) {
       try {

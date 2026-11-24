@@ -15,6 +15,7 @@ module.exports = (sequelize, DataTypes) => {
       supplier_id: { type: DataTypes.INTEGER, allowNull: true },
       company_id: { type: DataTypes.INTEGER, allowNull: true },
       supplier_invoice_no: { type: DataTypes.STRING(100), allowNull: false },
+      purchase_bill_reference: { type: DataTypes.STRING(100), allowNull: true },
       supplier_trn: { type: DataTypes.STRING(50), allowNull: true },
       bill_date: { type: DataTypes.DATEONLY, allowNull: false },
       due_date: { type: DataTypes.DATEONLY, allowNull: true },
