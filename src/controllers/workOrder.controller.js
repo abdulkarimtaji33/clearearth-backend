@@ -67,6 +67,16 @@ const updateTaskNotes = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, task, 'Task notes updated');
 });
 
+const getTaskPickupNote = asyncHandler(async (req, res) => {
+  const data = await require('../services/pickupNote.service').getForWorkOrder(req.tenant.id, req.params.id, req.params.taskId);
+  return ApiResponse.success(res, data);
+});
+
+const saveTaskPickupNote = asyncHandler(async (req, res) => {
+  const data = await require('../services/pickupNote.service').saveForWorkOrder(req.tenant.id, req.params.id, req.params.taskId, req.body);
+  return ApiResponse.success(res, data, 'Pick-up note saved');
+});
+
 const updateTaskAssignment = asyncHandler(async (req, res) => {
   const { assignedTo, assigneeIds, helperIds } = req.body;
   const task = await workOrderService.updateTaskAssignment(
@@ -117,5 +127,6 @@ const linkTaskFileToCertificate = asyncHandler(async (req, res) => {
 
 module.exports = {
   getAll, getById, create, update, updateTaskStatus, updateTaskNotes, updateTaskAssignment, updateTaskExpenses, remove,
+  getTaskPickupNote, saveTaskPickupNote,
   listTaskFiles, uploadTaskFiles, deleteTaskFile, linkTaskFileToCertificate,
 };

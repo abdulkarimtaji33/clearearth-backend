@@ -4,6 +4,7 @@
  * free-text note. Pre-filled from the task and its deal until the driver saves it.
  */
 const db = require('../models');
+const ApiError = require('../utils/apiError');
 
 const str = (v, max) => (v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
 const num = v => {
@@ -109,4 +110,31 @@ const save = async (tenantId, taskId, data = {}, transaction = null) => {
   return get(tenantId, taskId);
 };
 
-module.exports = { get, save };
+/** Task of the given work order (tenant-scoped); throws ApiError when it does not belong. */
+const taskOfWorkOrder = async (tenantId, workOrderId, taskId) => {
+  const task = await db.WorkOrderTask.findOne({
+    where: { id: taskId, work_order_id: workOrderId },
+    include: [{ model: db.WorkOrder, as: 'workOrder', required: true, where: { tenant_id: tenantId }, attributes: ['id', 'status'] }],
+  });
+  if (!task) throw ApiError.notFound('Pickup task not found in this work order');
+  if (!/pickup/i.test(task.type_of_work || '')) throw ApiError.badRequest('This task is not a pickup task');
+  return task;
+};
+
+const LOCKED = ['completed', 'cancelled'];
+
+/** Operations view: the note plus whether it can still be edited (only until the work order is completed). */
+const getForWorkOrder = async (tenantId, workOrderId, taskId) => {
+  const task = await taskOfWorkOrder(tenantId, workOrderId, taskId);
+  const note = await get(tenantId, taskId);
+  return { note, workOrderStatus: task.workOrder.status, editable: !LOCKED.includes(task.workOrder.status) };
+};
+
+const saveForWorkOrder = async (tenantId, workOrderId, taskId, data) => {
+  const task = await taskOfWorkOrder(tenantId, workOrderId, taskId);
+  if (LOCKED.includes(task.workOrder.status)) throw ApiError.badRequest('The work order is closed, so the pick-up note can no longer be edited');
+  const note = await save(tenantId, taskId, data);
+  return { note, workOrderStatus: task.workOrder.status, editable: true };
+};
+
+module.exports = { get, save, getForWorkOrder, saveForWorkOrder };

@@ -15,6 +15,9 @@ router.patch('/:id/tasks/:taskId/notes', authorize('operations.update', 'deals.u
 router.patch('/:id/tasks/:taskId/assign', authorize('operations.update', 'deals.update'), workOrderController.updateTaskAssignment);
 router.patch('/:id/tasks/:taskId/expenses', authorize('operations.update', 'deals.update'), workOrderController.updateTaskExpenses);
 
+router.get('/:id/tasks/:taskId/pickup-note', authorize('operations.read'), workOrderController.getTaskPickupNote);
+router.put('/:id/tasks/:taskId/pickup-note', authorize('operations.update'), workOrderController.saveTaskPickupNote);
+
 // Task completion evidence — any document/image type the shared upload allowlist accepts.
 router.get('/:id/tasks/:taskId/files', authorize('operations.read', 'deals.read'), workOrderController.listTaskFiles);
 router.post('/:id/tasks/:taskId/files', authorize('operations.update', 'deals.update'), uploadMultiple('files', 20), workOrderController.uploadTaskFiles);

@@ -41,7 +41,23 @@ function includesFor(tenantId, filters) {
   ];
 }
 
-async function toRow(t, grnByWo) {
+const PENDING_NOTE = 'Pending (work order not completed)';
+
+/** Note summary per task id, only for tasks whose work order is completed. */
+async function noteMap(tenantId, tasks) {
+  const ids = tasks.filter((t) => t.workOrder?.status === 'completed').map((t) => t.id);
+  if (!ids.length) return new Map();
+  const notes = await db.PickupNoteDetail.findAll({ where: { tenant_id: tenantId, task_id: { [Op.in]: ids } } });
+  if (!notes.length) return new Map();
+  const items = await db.PickupNoteItem.findAll({ where: { note_id: { [Op.in]: notes.map((n) => n.id) } } });
+  const weight = new Map();
+  items.forEach((i) => weight.set(i.note_id, (weight.get(i.note_id) || 0) + (Number(i.weight_kg) || 0)));
+  return new Map(notes.map((n) => [n.task_id, { note_number: n.note_number || '', vehicle_no: n.vehicle_no || '', customer: n.customer_name || '', total_weight_kg: weight.get(n.id) || 0 }]));
+}
+
+async function toRow(t, grnByWo, notes = new Map()) {
+  const done = t.workOrder?.status === 'completed';
+  const nd = notes.get(t.id);
   const grn = grnByWo.get(t.work_order_id) || null;
   const helpers = (t.assigneeRows || []).filter((a) => a.role === 'helper').map((a) => fullName(a.user)).filter(Boolean);
   return {
@@ -66,6 +82,12 @@ async function toRow(t, grnByWo) {
     grn_number: grn?.grn_number || '',
     storage_facility: grn?.disposed_without_facility ? 'Disposed without coming to the facility' : (grn?.storageFacility?.name || ''),
     driver_comment: grn?.driver_comment || '',
+    note_available: done,
+    note_status: done ? (nd ? 'Available' : 'No note filled in') : PENDING_NOTE,
+    note_number: done ? (nd?.note_number || '') : PENDING_NOTE,
+    note_vehicle_no: done ? (nd?.vehicle_no || '') : '',
+    note_customer: done ? (nd?.customer || '') : '',
+    note_total_weight_kg: done && nd ? nd.total_weight_kg : null,
   };
 }
 
@@ -86,7 +108,8 @@ const list = async (tenantId, filters = {}) => {
     order: [['start_date', 'DESC'], ['id', 'DESC']], offset, limit,
   });
   const map = await grnMap(tenantId, [...new Set(rows.map((r) => r.work_order_id))]);
-  return { rows: await Promise.all(rows.map((r) => toRow(r, map))), total: count };
+  const notes = await noteMap(tenantId, rows);
+  return { rows: await Promise.all(rows.map((r) => toRow(r, map, notes))), total: count };
 };
 
 const csvCell = (v) => {
@@ -101,12 +124,14 @@ const exportCsv = async (tenantId, filters = {}) => {
     order: [['start_date', 'DESC'], ['id', 'DESC']],
   });
   const map = await grnMap(tenantId, [...new Set(rows.map((r) => r.work_order_id))]);
-  const data = await Promise.all(rows.map((r) => toRow(r, map)));
+  const notes = await noteMap(tenantId, rows);
+  const data = await Promise.all(rows.map((r) => toRow(r, map, notes)));
   const cols = [
     ['Pickup date', 'pickup_date'], ['Deal', 'deal_number'], ['Client', 'client'], ['Work order', 'work_order'], ['Task', 'task'],
     ['Status', 'status_label'], ['Driver', 'driver'], ['Helpers', 'helpers'], ['Quantity', 'quantity'], ['UOM', 'uom'],
     ['Condition', 'condition'], ['Driver notes', 'driver_notes'], ['Photos', 'photos'], ['GRN', 'grn_number'],
     ['Storage facility', 'storage_facility'], ['Driver comment', 'driver_comment'],
+    ['Pickup note no.', 'note_number'], ['Vehicle', 'note_vehicle_no'], ['Note customer', 'note_customer'], ['Note total weight (kg)', 'note_total_weight_kg'],
   ];
   const lines = [cols.map((c) => csvCell(c[0])).join(',')];
   for (const r of data) lines.push(cols.map((c) => csvCell(r[c[1]])).join(','));
@@ -117,7 +142,8 @@ const getNote = async (tenantId, taskId) => {
   const t = await db.WorkOrderTask.findOne({ where: { id: taskId }, include: includesFor(tenantId, {}) });
   if (!t) throw ApiError.notFound('Pickup task not found');
   const map = await grnMap(tenantId, [t.work_order_id]);
-  const row = await toRow(t, map);
+  if (t.workOrder?.status !== 'completed') throw ApiError.badRequest('The pick-up note is pending: it can be printed once the work order is completed');
+  const row = await toRow(t, map, await noteMap(tenantId, [t]));
   row.files = (t.files || []).map((f) => f.get({ plain: true }));
   row.noteDetails = await require('./pickupNote.service').get(tenantId, taskId);
   return row;
