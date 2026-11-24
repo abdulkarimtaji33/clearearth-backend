@@ -180,6 +180,27 @@ Reports (`reports.service.js`, `financialReports.service.js`): trial balance, ge
 
 ---
 
+### 4.7 Recent changes (Nov 2026)
+
+Everything below is additive (new tables/columns are created by `run-migration.js`; nothing existing was dropped).
+
+| Area | What was built | Where |
+|---|---|---|
+| Countries and cities | Every country and the cities of a country, searchable. | `src/services/geo.service.js` (package `country-state-city`); `GET /dropdowns/world/countries`, `GET /dropdowns/world/cities?country=` |
+| Per-line VAT | `vat_applicable` (default true) on deal, proforma and tax-invoice lines; VAT only on flagged lines; credit notes use the effective rate when it differs from the nominal one. | `src/utils/lineVat.js`; `deal`, `proformaInvoice`, `taxInvoice`, `creditNote`, `pdf` services; columns `deal_items/proforma_invoice_items/tax_invoice_items.vat_applicable` |
+| Default Terms & Conditions | `is_default` on a template; several defaults allowed; only `settings.manage` may set or clear it; defaults are pre-selected on new quotations. | `src/services/termsAndConditions.service.js` (+ controller) |
+| Currency on quotations | Quotation `currency` chosen at creation (3-letter code, default AED); written to the deal so proforma/tax invoices follow it; quotation and purchase-order PDF column headings use it. | `quotation.service.create`; `templates/quotation.html`, `purchase-order.html`; `pdf.service` |
+| Pickup / delivery request | Structured request submitted while approving a quotation or purchase quotation (body field `pickupRequest`): company, contact, date/time, location, service type, material, weight, trucks, packing, labor, WDS, notes/GRN flags, certificates. Pre-filled from the deal. | table `pickup_requests`; `src/services/pickupRequest.service.js`; `GET /quotations/:id/pickup-request[/prefill]`, `GET /purchase-orders/:id/pickup-request[/prefill]` |
+| Pick-up note | Paper-style note per pickup task (note no. auto-assigned, vehicle, reference, type, service, customer details, item lines in kg, special request, free note). Driver saves it; operations can view/edit it in the work order until the work order is completed; it reaches the pickup report (and printable PDF) only after completion. | tables `pickup_note_details`, `pickup_note_items`; `src/services/pickupNote.service.js`; `PUT /driver/pickups/:taskId/note`; `GET/PUT /work-orders/:id/tasks/:taskId/pickup-note`; `pickupReport.service` (note columns, PDF gated); `templates/pickup-note.html` |
+| Clients/vendors per department | `companies.department` and `suppliers.department` (`sales` or `operations`, existing rows = sales). Operations roles only list operations records, sales roles only sales records; other roles see all. | `src/utils/roleAccess.js` `departmentOfRequest`; company/supplier controllers and services |
+| Outbound party lists | Client and vendor dropdowns on an Outbound entry come from a department-scoped endpoint (works without client/vendor permissions). | `GET /outbound/parties` (`outbound.read`) |
+| Operations permissions | Operations roles get `companies.read/create/update` and `suppliers.read/create/update` once (flag row in `one_time_flags`, so later Role-screen edits are kept). | `run-migration.js` |
+| Accounts registers | Two extra register kinds: `sales_invoices` (every tax invoice) and `purchase_bills` (every vendor bill with its Purchase-bill reference). | `src/services/register.service.js`; `GET /registers/:kind` |
+| Purchase-bill reference | `vendor_bills.purchase_bill_reference` (optional, defaults to `PO-<id>` for a bill recorded from a PO); searchable. | `vendorBill.service.js`; column in `vendor_bills` |
+| Deal title | Generated as `<first item name> - <company name>` on create and when items/company change; a client-supplied title is ignored. Existing deals keep their titles. | `deal.service.js` `buildDealTitle` |
+| Quotation versions | A new quotation (or client purchase quotation) cannot be created once the deal already has an approved one. | `quotation.service.create`, `purchaseOrder.service.create` |
+| Inspection report PDF | `GET /deals/:id/inspection-report/pdf` (existing) is now also offered from the report details view. | `inspectionReportPdf.service.js` |
+
 ## 5. Complete HTTP API reference (generated)
 
 All paths are relative to `/api/v1`. "Permission(s)" lists `authorize(...)` guards (any one satisfies); "authenticated" means the router only requires a valid token. Request-body details live in the controller/service named in the Handler column.

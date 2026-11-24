@@ -81,6 +81,39 @@ The `Menudata.js` under `horizontal/navbar` and `MenuItems.js` are template left
 
 ---
 
+### 2.7 Recent additions (Nov 2026)
+
+**Navigation**
+- Accounts menu now has `Inbound (Accounts)` (Sales Orders, Sales Invoices, Sales Register) and `Outbound (Accounts)` (Purchase Orders, Purchase Bills, Purchase Register) in `layouts/full/vertical/sidebar/ErpMenuItems.js`.
+
+**New routes**
+- `/erp/accounts/purchase-orders` -> `views/erp/purchase-orders/AccountsPurchaseOrderList.jsx` (client and vendor purchase orders in one list, filter All/Client/Vendor, row menu with *Create purchase bill*).
+- `/erp/registers/sales_invoices` and `/erp/registers/purchase_bills` (kinds added to `views/erp/registers/RegisterList.jsx`; the purchase register shows the Purchase-bill reference).
+- `/erp/vendor-bills?poId=<id>` opens the *Record bill* form for that purchase order (`views/erp/payables/VendorBills.jsx`).
+
+**New components**
+| File | Purpose |
+|---|---|
+| `components/erp/PickupRequestFields.jsx` | Grouped Pickup/Delivery request form (choice buttons, chips), pre-filled via `getPickupRequestPrefill`; exports `missingPickupRequestFields` |
+| `components/erp/PickupNoteForm.jsx` | Pick-up note form (header, customer, item lines, special request, free note) |
+| `components/erp/PickupNoteDialog.jsx` | Operations view/edit of a driver's note from the work order (read-only once the work order is completed) |
+| `components/erp/CountryCityFields.jsx` | Shared searchable Country and City fields (company, vendor, contact and lead dialogs) |
+| `components/shared/ScrollToError.jsx` | Mounted in `FullLayout`; scrolls to the first error alert or invalid field after a failed save |
+
+**Changed screens**
+- `QuotationForm.jsx`: Currency field, per-line VAT checkbox, default terms pre-selected. `QuotationList.jsx` shows currency per amount.
+- `ApproveQuotationConfirmDialog.jsx`, `ApprovalWorkflowDialogs.jsx`: *Schedule a pickup or delivery* switch with the request form; `PickupDatePanel.jsx` shows the request details to operations.
+- `TermsList.jsx`/`TermsForm.jsx`: Default badge and Make/Remove default (administrators).
+- `DriverPickupTaskView.jsx`: pick-up note section and Save; `work-orders/WorkOrderView.jsx`: *Pick-up note* button per pickup task; `operations/PickupReport.jsx`: note number and vehicle columns, PDF enabled once the work order is completed.
+- `DealForm.jsx`/`DealView.jsx`: title read-only; create-quotation actions hidden once a quotation is approved.
+- `InspectionRequestDetail.jsx`: *Download PDF* button; dashboards: *Pending outbounds* figure opens the Outbound list.
+- Outbound party dropdowns use `getOutboundParties`.
+
+**New `ApiService` methods** (`services/api.js`): `getWorldCountries`, `getWorldCities`, `getPickupRequestPrefill`, `getPickupRequest`, `saveDriverPickupNote`, `getWorkOrderTaskPickupNote`, `saveWorkOrderTaskPickupNote`, `getOutboundParties`; `approveQuotation`, `requestQuotationApproval`, `approvePurchaseOrder`, `requestPurchaseOrderApproval` now accept the pickup request as a fourth argument.
+
+**Conventions**
+- MUI v7: `Grid` items use `size={{ xs: 12, sm: 6 }}` (not `item xs=`).
+
 ## 3. Routes (generated)
 
 Every entry of `src/routes/Router.js`. "Guard(s)" are the wrapper components in §2.2; routes without a guard still sit under `ProtectedRoute` via the root layout and are limited by the API's own permission checks.
