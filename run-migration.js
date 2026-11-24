@@ -1485,6 +1485,14 @@ async function runMigration() {
         'purchase_orders.create', 'purchase_orders.update', 'purchase_orders.delete', 'purchase_orders.approve'
       )
     `);
+    await db.sequelize.query(`
+      DELETE rp FROM role_permissions rp
+      INNER JOIN permissions p ON p.id = rp.permission_id
+      INNER JOIN roles r ON r.id = rp.role_id
+      WHERE r.name IN ('operations_manager', 'operations', 'Operations Team')
+        AND (p.name LIKE 'accounting.%' OR p.name IN ('reports.read', 'invoices.generate'))
+    `);
+    console.log('  Operations roles: accounting / financial reports / invoice generation permissions removed');
     const [[omRoleRow]] = await db.sequelize.query(`SELECT id FROM roles WHERE name = 'operations_manager' AND tenant_id IS NULL LIMIT 1`);
     if (omRoleRow?.id) {
       const [opsPerms] = await db.sequelize.query(`SELECT id FROM permissions WHERE name LIKE 'operations.%'`);
