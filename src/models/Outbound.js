@@ -16,6 +16,7 @@ module.exports = (sequelize, DataTypes) => {
       status: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'pending_outbound' },
       outbound_type: { type: DataTypes.STRING(20), allowNull: true },
       company_id: { type: DataTypes.INTEGER, allowNull: true },
+      currency: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'AED' },
       supplier_id: { type: DataTypes.INTEGER, allowNull: true },
       vehicle_no: { type: DataTypes.STRING(50), allowNull: true },
       person_in_charge: { type: DataTypes.STRING(150), allowNull: true },

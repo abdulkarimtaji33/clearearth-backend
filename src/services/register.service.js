@@ -14,7 +14,7 @@ const num = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
 async function purchase(tenantId) {
   const orders = await q(
-    `SELECT po.id, po.po_date AS date, po.status,
+    `SELECT po.id, po.po_date AS date, po.status, po.currency,
             COALESCE(s.company_name, c.company_name, '') AS party,
             COALESCE((SELECT SUM(i.total) FROM purchase_order_items i WHERE i.purchase_order_id = po.id), 0) AS amount
        FROM purchase_orders po
@@ -22,16 +22,16 @@ async function purchase(tenantId) {
        LEFT JOIN companies c ON c.id = po.company_id
       WHERE po.tenant_id = ?`, [tenantId]);
   const bills = await q(
-    `SELECT b.id, b.bill_number, b.supplier_invoice_no, b.bill_date AS date, b.total AS amount, b.paid_amount, b.debit_note_amount, b.status,
+    `SELECT b.id, b.bill_number, b.supplier_invoice_no, b.bill_date AS date, b.total AS amount, b.currency, b.paid_amount, b.debit_note_amount, b.status,
             COALESCE(s.company_name, c.company_name, '') AS party
        FROM vendor_bills b
        LEFT JOIN suppliers s ON s.id = b.supplier_id
        LEFT JOIN companies c ON c.id = b.company_id
       WHERE b.tenant_id = ?`, [tenantId]);
   return [
-    ...orders.map((o) => ({ type: 'Purchase Order', reference: `PO-${o.id}`, party: o.party, date: o.date, amount: num(o.amount), status: o.status, link: `/erp/purchase-orders/view/${o.id}` })),
+    ...orders.map((o) => ({ type: 'Purchase Order', reference: `PO-${o.id}`, party: o.party, date: o.date, amount: num(o.amount), currency: o.currency || 'AED', status: o.status, link: `/erp/purchase-orders/view/${o.id}` })),
     ...bills.map((b) => ({
-      type: 'Purchase Invoice', reference: b.bill_number, party: b.party, date: b.date, amount: num(b.amount),
+      type: 'Purchase Invoice', reference: b.bill_number, party: b.party, date: b.date, amount: num(b.amount), currency: b.currency || 'AED',
       balance: num(num(b.amount) - num(b.paid_amount) - num(b.debit_note_amount)), status: b.status, link: '/erp/vendor-bills',
     })),
   ];
@@ -39,7 +39,7 @@ async function purchase(tenantId) {
 
 async function invoicesForDealType(tenantId, dealType) {
   return q(
-    `SELECT t.id, t.tax_invoice_number AS reference, t.invoice_date AS date, t.due_date, t.total AS amount, t.paid_amount, t.credited_amount, t.payment_status AS status,
+    `SELECT t.id, t.tax_invoice_number AS reference, t.invoice_date AS date, t.due_date, t.total AS amount, t.currency, t.paid_amount, t.credited_amount, t.payment_status AS status,
             COALESCE(co.company_name, '') AS party
        FROM tax_invoices t
        JOIN proforma_invoices p ON p.id = t.proforma_invoice_id
@@ -49,34 +49,34 @@ async function invoicesForDealType(tenantId, dealType) {
 }
 
 const invoiceRow = (t, label) => ({
-  type: label, reference: t.reference, party: t.party, date: t.date, due_date: t.due_date, amount: num(t.amount),
+  type: label, reference: t.reference, party: t.party, date: t.date, due_date: t.due_date, amount: num(t.amount), currency: t.currency || 'AED',
   balance: num(num(t.amount) - num(t.paid_amount) - num(t.credited_amount)), status: t.status, link: `/erp/tax-invoices/view/${t.id}`,
 });
 
 async function service(tenantId) {
   const orders = await q(
-    `SELECT qt.id, qt.quotation_date AS date, qt.quotation_amount AS amount, qt.status, COALESCE(co.company_name, '') AS party, d.deal_number
+    `SELECT qt.id, qt.quotation_date AS date, qt.quotation_amount AS amount, qt.currency, qt.status, COALESCE(co.company_name, '') AS party, d.deal_number
        FROM quotations qt
        JOIN deals d ON d.id = qt.deal_id
        LEFT JOIN companies co ON co.id = d.company_id
       WHERE qt.tenant_id = ? AND d.deal_type = 'offer_to_charge'`, [tenantId]);
   const invoices = await invoicesForDealType(tenantId, 'offer_to_charge');
   return [
-    ...orders.map((o) => ({ type: 'Service Order', reference: `${o.deal_number || 'Deal'} / Q${o.id}`, party: o.party, date: o.date, amount: num(o.amount), status: o.status, link: `/erp/quotations/view/${o.id}` })),
+    ...orders.map((o) => ({ type: 'Service Order', reference: `${o.deal_number || 'Deal'} / Q${o.id}`, party: o.party, date: o.date, amount: num(o.amount), currency: o.currency || 'AED', status: o.status, link: `/erp/quotations/view/${o.id}` })),
     ...invoices.map((t) => invoiceRow(t, 'Service Invoice')),
   ];
 }
 
 async function sales(tenantId) {
   const orders = await q(
-    `SELECT o.id, o.outbound_number, o.completed_at AS date, o.status, COALESCE(co.company_name, '') AS party,
+    `SELECT o.id, o.outbound_number, o.completed_at AS date, o.status, o.currency, COALESCE(co.company_name, '') AS party,
             COALESCE((SELECT SUM(i.quantity * COALESCE(i.unit_value, 0)) FROM outbound_items i WHERE i.outbound_id = o.id), 0) AS amount
        FROM outbounds o
        LEFT JOIN companies co ON co.id = o.company_id
       WHERE o.tenant_id = ? AND o.outbound_type = 'sale'`, [tenantId]);
   const invoices = await invoicesForDealType(tenantId, 'free_of_charge');
   return [
-    ...orders.map((o) => ({ type: 'Sales Order', reference: o.outbound_number, party: o.party, date: o.date, amount: num(o.amount), status: o.status === 'completed' ? 'dispatched' : o.status, link: `/erp/outbound/view/${o.id}` })),
+    ...orders.map((o) => ({ type: 'Sales Order', reference: o.outbound_number, party: o.party, date: o.date, amount: num(o.amount), currency: o.currency || 'AED', status: o.status === 'completed' ? 'dispatched' : o.status, link: `/erp/outbound/view/${o.id}` })),
     ...invoices.map((t) => invoiceRow(t, 'Sales Invoice')),
   ];
 }

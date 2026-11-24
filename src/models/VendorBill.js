@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
       purchase_bill_reference: { type: DataTypes.STRING(100), allowNull: true },
       supplier_trn: { type: DataTypes.STRING(50), allowNull: true },
       bill_date: { type: DataTypes.DATEONLY, allowNull: false },
+      currency: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'AED' },
       due_date: { type: DataTypes.DATEONLY, allowNull: true },
       subtotal: { type: DataTypes.DECIMAL(15, 2), allowNull: false, comment: 'Amount excluding VAT; clears the PO accrual' },
       vat_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },

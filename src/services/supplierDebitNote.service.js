@@ -71,7 +71,7 @@ const getBillDebitInfo = async (tenantId, billId) => {
     supplierInvoiceNo: bill.supplier_invoice_no,
     supplierName: (bill.supplier && bill.supplier.company_name) || (bill.company && bill.company.company_name) || '—',
     billDate: bill.bill_date,
-    currency: 'AED',
+    currency: bill.currency || 'AED',
     vatPercentage: round2(n.vatRatio * 100),
     total: n.total,
     paid: n.paid,
@@ -126,7 +126,7 @@ const createDebitNote = async (tenantId, userId, body = {}) => {
     }
     const total = round2(net + vat);
     if (total > n.outstanding + EPS) {
-      throw ApiError.badRequest(`The debit note (AED ${total.toFixed(2)} incl. VAT) is more than the unpaid balance of the bill (AED ${n.outstanding.toFixed(2)})`);
+      throw ApiError.badRequest(`The debit note (${bill.currency || 'AED'} ${total.toFixed(2)} incl. VAT) is more than the unpaid balance of the bill (${bill.currency || 'AED'} ${n.outstanding.toFixed(2)})`);
     }
 
     const partyName = (bill.supplier && bill.supplier.company_name) || (bill.company && bill.company.company_name) || null;

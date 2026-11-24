@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
         comment: 'Vendor when quotation is to supplier (e.g. downstream partner)',
       },
       po_date: { type: DataTypes.DATEONLY, allowNull: false },
+      currency: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'AED' },
       expected_delivery: { type: DataTypes.STRING(255) },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },
       approval_requested_at: { type: DataTypes.DATE, allowNull: true },

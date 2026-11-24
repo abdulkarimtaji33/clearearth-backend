@@ -4027,6 +4027,18 @@ async function runMigration() {
       } catch (e) { if (!isDuplicateSchemaError(e)) console.warn(`  ${tbl}.vat_applicable:`, e.message); }
     }
 
+    console.log('Adding currency to purchase orders, vendor bills and outbounds...');
+    for (const tbl of ['purchase_orders', 'vendor_bills', 'outbounds']) {
+      try {
+        await db.sequelize.query(`ALTER TABLE ${tbl} ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'AED'`);
+      } catch (e) { if (!isDuplicateSchemaError(e)) console.warn(`  ${tbl}.currency:`, e.message); }
+    }
+    // Existing purchase orders printed the deal's currency, so keep that (only rows still on the AED default).
+    try {
+      await db.sequelize.query(`UPDATE purchase_orders po JOIN deals d ON d.id = po.deal_id SET po.currency = d.currency WHERE po.currency = 'AED' AND d.currency IS NOT NULL AND d.currency <> '' AND d.currency <> 'AED'`);
+      await db.sequelize.query(`UPDATE vendor_bills b JOIN purchase_orders po ON po.id = b.purchase_order_id SET b.currency = po.currency WHERE b.currency = 'AED' AND po.currency <> 'AED'`);
+    } catch (e) { console.warn('  currency backfill:', e.message); }
+
     // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).
     try {
       await require('./src/services/outbound.service').backfillFromGrns();

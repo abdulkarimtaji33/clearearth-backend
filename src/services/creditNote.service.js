@@ -131,16 +131,16 @@ const createCreditNote = async (tenantId, userId, body = {}) => {
     }
     const total = round2(subtotal + vat);
     if (total > creditable + EPS) {
-      throw ApiError.badRequest(`The credit (AED ${total.toFixed(2)} incl. VAT) is more than what is left on the invoice (AED ${creditable.toFixed(2)})`);
+      throw ApiError.badRequest(`The credit (${inv.currency || 'AED'} ${total.toFixed(2)} incl. VAT) is more than what is left on the invoice (${inv.currency || 'AED'} ${creditable.toFixed(2)})`);
     }
 
     // Anything above the unpaid balance is money the customer already paid, so it has to be refunded.
     const required = Math.max(0, round2(total - n.outstanding));
     let refund = refundAmount === undefined || refundAmount === null || refundAmount === '' ? required : round2(refundAmount);
     if (refund < required - EPS) {
-      throw ApiError.badRequest(`This credit includes AED ${required.toFixed(2)} the customer has already paid, which must be refunded`);
+      throw ApiError.badRequest(`This credit includes ${inv.currency || 'AED'} ${required.toFixed(2)} the customer has already paid, which must be refunded`);
     }
-    if (refund > n.paid + EPS) throw ApiError.badRequest(`Only AED ${n.paid.toFixed(2)} has been paid on this invoice, so that is the most that can be refunded`);
+    if (refund > n.paid + EPS) throw ApiError.badRequest(`Only ${inv.currency || 'AED'} ${n.paid.toFixed(2)} has been paid on this invoice, so that is the most that can be refunded`);
     if (refund > total + EPS) throw ApiError.badRequest('The refund cannot be more than the credit note');
     if (refund < 0.005) refund = 0;
     let refundAcc = null;

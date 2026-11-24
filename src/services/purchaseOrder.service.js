@@ -2,6 +2,7 @@
  * Purchase Order Service
  */
 const db = require('../models');
+const { cleanCurrency } = require('../utils/currency');
 const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
@@ -246,16 +247,18 @@ const _validateExpenseHead = async (tenantId, accountId) => {
 };
 
 const create = async (tenantId, data, scope = {}) => {
-  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, workOrderId, documentType, expenseAccountId } = data;
+  const { currency, dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, workOrderId, documentType, expenseAccountId } = data;
 
   await _validateParty(tenantId, companyId, supplierId);
   const expenseHeadId = await _validateExpenseHead(tenantId, expenseAccountId);
   const hasC = companyId != null && companyId !== '';
   const hasS = supplierId != null && supplierId !== '';
 
+  let dealCurrency = null;
   if (dealId) {
     const deal = await db.Deal.findOne({ where: { id: dealId, tenant_id: tenantId } });
     if (!deal) throw ApiError.badRequest('Deal not found');
+    dealCurrency = deal.currency || null;
     if (scope.scopeUserId && deal.assigned_to !== scope.scopeUserId) {
       throw ApiError.forbidden('You can only create purchase quotations for your own deals');
     }
@@ -314,6 +317,7 @@ const create = async (tenantId, data, scope = {}) => {
         company_id: hasC ? companyId : null,
         supplier_id: hasS ? supplierId : null,
         po_date: poDate,
+        currency: cleanCurrency(currency, dealCurrency),
         expected_delivery: expectedDelivery || null,
         status: resolvedStatus,
         due_date: dueDate != null && dueDate !== '' ? dueDate : null,
@@ -369,7 +373,7 @@ const create = async (tenantId, data, scope = {}) => {
 
 const update = async (tenantId, poId, data, actor = null, scope = {}) => {
   const po = await getById(tenantId, poId, scope);
-  const { dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, expenseAccountId } = data;
+  const { currency, dealId, companyId, supplierId, poDate, expectedDelivery, items, termsAndConditionsIds, status, dueDate, expenseAccountId } = data;
   const nextExpenseHeadId = expenseAccountId !== undefined
     ? await _validateExpenseHead(tenantId, expenseAccountId)
     : po.expense_account_id;
@@ -428,6 +432,7 @@ const update = async (tenantId, poId, data, actor = null, scope = {}) => {
         company_id: nextCompanyId,
         supplier_id: nextSupplierId,
         po_date: poDate ?? po.po_date,
+        currency: currency !== undefined ? cleanCurrency(currency, po.currency) : po.currency,
         expected_delivery: expectedDelivery !== undefined ? expectedDelivery : po.expected_delivery,
         status: nextStatus,
         due_date: dueDate !== undefined ? (dueDate || null) : po.due_date,

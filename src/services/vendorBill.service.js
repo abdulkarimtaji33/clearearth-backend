@@ -11,6 +11,7 @@
  * with an accrual journal) have that accrual cleared first when their bill is recorded.
  */
 const db = require('../models');
+const { cleanCurrency } = require('../utils/currency');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
@@ -230,7 +231,7 @@ const createBill = async (tenantId, userId, body = {}) => {
   const overage = round2(Math.max(0, subtotal - unbilled));
   if (overage > 0.01 && !(approveOverage === true || approveOverage === 'true')) {
     throw ApiError.badRequest(
-      `The bill is AED ${overage.toFixed(2)} above what is left on the PO (AED ${Math.max(unbilled, 0).toFixed(2)}). Approve the extra amount to post the difference to the expense head.`
+      `The bill is ${po.currency || 'AED'} ${overage.toFixed(2)} above what is left on the PO (${po.currency || 'AED'} ${Math.max(unbilled, 0).toFixed(2)}). Approve the extra amount to post the difference to the expense head.`
     );
   }
 
@@ -253,6 +254,7 @@ const createBill = async (tenantId, userId, body = {}) => {
       tenant_id: tenantId,
       bill_number: billNumber,
       purchase_order_id: po.id,
+      currency: po.currency || 'AED',
       expense_account_id: headAcc.accountId,
       supplier_id: po.supplier_id || null,
       company_id: po.company_id || null,
@@ -458,6 +460,7 @@ const createDirectBill = async (tenantId, userId, body = {}) => {
       tenant_id: tenantId,
       bill_number: billNumber,
       purchase_order_id: null,
+      currency: cleanCurrency(body.currency),
       expense_account_id: expenseAcc.accountId,
       supplier_id: supplier.id,
       company_id: null,

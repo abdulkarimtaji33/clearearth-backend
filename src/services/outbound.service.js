@@ -67,11 +67,13 @@ async function createForGrn(tenantId, grnId, userId = null, transaction = null) 
   const grn = await db.Grn.findOne({ where: { id: grnId, tenant_id: tenantId }, transaction });
   if (!grn) throw ApiError.notFound('GRN not found');
   const items = await db.GrnItem.findAll({ where: { grn_id: grnId }, order: [['id', 'ASC']], transaction });
+  const dealForCurrency = grn.deal_id ? await db.Deal.findOne({ where: { id: grn.deal_id }, attributes: ['currency'], transaction }) : null;
   const row = await db.Outbound.create({
     tenant_id: tenantId,
     outbound_number: await nextNumber(tenantId, transaction),
     grn_id: grnId,
     deal_id: grn.deal_id || null,
+    currency: (dealForCurrency && dealForCurrency.currency) || 'AED',
     work_order_id: grn.work_order_id || null,
     status: 'pending_outbound',
     created_by: userId || grn.created_by || null,
