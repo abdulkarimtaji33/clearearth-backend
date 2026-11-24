@@ -325,6 +325,23 @@ const getById = async (tenantId, dealId, scope = {}) => {
   return deal;
 };
 
+/**
+ * Deal title is system generated: "<first item name> - <company name>".
+ * Falls back to whichever part exists; returns '' when neither does.
+ */
+const buildDealTitle = async (tenantId, { companyId, productServiceId }, transaction) => {
+  const parts = [];
+  if (productServiceId) {
+    const ps = await db.ProductService.findOne({ where: { id: productServiceId }, attributes: ['name'], transaction });
+    if (ps?.name) parts.push(ps.name.trim());
+  }
+  if (companyId) {
+    const co = await db.Company.findOne({ where: { id: companyId, tenant_id: tenantId }, attributes: ['company_name'], transaction });
+    if (co?.company_name) parts.push(co.company_name.trim());
+  }
+  return parts.join(' - ').slice(0, 255);
+};
+
 const create = async (tenantId, data, scope = {}, actor = null) => {
   const transaction = await db.sequelize.transaction();
 
@@ -355,6 +372,10 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
     // Calculate totals
     const totals = calculateDealTotals(items, data.vatPercentage || 5);
 
+    // Title is always generated (client-supplied title is ignored)
+    let generatedTitle = await buildDealTitle(tenantId, { companyId: data.companyId, productServiceId: items[0]?.productServiceId }, transaction);
+    if (!generatedTitle) generatedTitle = data.leadId ? `Deal from Lead ${data.leadId}` : 'Untitled Deal';
+
     // Create deal
     const deal = await db.Deal.create(
       {
@@ -364,7 +385,7 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
         contact_id: data.contactId || null,
         supplier_id: data.supplierId || null,
         downstream_partner_supplier_id: data.downstreamPartnerSupplierId || null,
-        title: data.title,
+        title: generatedTitle,
         description: data.description,
         deal_date: data.dealDate || new Date(),
         subtotal: totals.subtotal,
@@ -557,6 +578,22 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
       totals = calculateDealTotals(data.items, data.vatPercentage || deal.vat_percentage);
     }
 
+    // Title is system generated; recompute only when company or items are part of the update
+    let nextTitle = deal.title;
+    if (data.items !== undefined || data.companyId !== undefined) {
+      let firstPsId;
+      if (data.items !== undefined) firstPsId = data.items[0]?.productServiceId;
+      else {
+        const first = await db.DealItem.findOne({ where: { deal_id: dealId }, order: [['id', 'ASC']], transaction });
+        firstPsId = first?.product_service_id;
+      }
+      const t = await buildDealTitle(tenantId, {
+        companyId: data.companyId !== undefined ? data.companyId : deal.company_id,
+        productServiceId: firstPsId,
+      }, transaction);
+      if (t) nextTitle = t;
+    }
+
     // Update deal
     await deal.update(
       {
@@ -565,7 +602,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         contact_id: data.contactId !== undefined ? data.contactId : deal.contact_id,
         supplier_id: data.supplierId !== undefined ? data.supplierId : deal.supplier_id,
         downstream_partner_supplier_id: data.downstreamPartnerSupplierId !== undefined ? data.downstreamPartnerSupplierId : deal.downstream_partner_supplier_id,
-        title: data.title !== undefined ? data.title : deal.title,
+        title: nextTitle,
         description: data.description !== undefined ? data.description : deal.description,
         deal_date: data.dealDate !== undefined ? data.dealDate : deal.deal_date,
         subtotal: totals ? totals.subtotal : deal.subtotal,
