@@ -2,6 +2,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
+const { cleanCurrency, baseCurrency } = require('../utils/currency');
 const { isManagerRole, verifyLeadApprovalPin } = require('../utils/leadApproval');
 const { Op } = db.Sequelize;
 
@@ -392,7 +393,7 @@ const create = async (tenantId, data, scope = {}, actor = null) => {
         vat_percentage: data.vatPercentage || 5,
         vat_amount: totals.vatAmount,
         total: totals.total,
-        currency: data.currency || 'AED',
+        currency: cleanCurrency(data.currency, baseCurrency()),
         terms_and_conditions_id: (Array.isArray(data.termsAndConditionsIds) && data.termsAndConditionsIds.length > 0)
           ? data.termsAndConditionsIds[0]
           : (data.termsAndConditionsId || null),
@@ -594,6 +595,17 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
       if (t) nextTitle = t;
     }
 
+    // The currency is fixed once a quotation or order exists: their lines and invoices are priced in it.
+    if (data.currency !== undefined && cleanCurrency(data.currency, deal.currency) !== deal.currency) {
+      const [quotationCount, orderCount] = await Promise.all([
+        db.Quotation.count({ where: { deal_id: deal.id, tenant_id: tenantId } }),
+        db.PurchaseOrder.count({ where: { deal_id: deal.id, tenant_id: tenantId } }),
+      ]);
+      if (quotationCount + orderCount > 0) {
+        throw ApiError.badRequest('The currency cannot be changed once a quotation or order exists for this deal');
+      }
+    }
+
     // Update deal
     await deal.update(
       {
@@ -609,7 +621,7 @@ const update = async (tenantId, dealId, data, scope = {}, actor = null) => {
         vat_percentage: data.vatPercentage !== undefined ? data.vatPercentage : deal.vat_percentage,
         vat_amount: totals ? totals.vatAmount : deal.vat_amount,
         total: totals ? totals.total : deal.total,
-        currency: data.currency !== undefined ? data.currency : deal.currency,
+        currency: data.currency !== undefined ? cleanCurrency(data.currency, deal.currency) : deal.currency,
         deal_type: data.dealType !== undefined ? data.dealType : deal.deal_type,
         container_type: data.containerType !== undefined ? data.containerType : deal.container_type,
         location_type: data.locationType !== undefined ? data.locationType : deal.location_type,

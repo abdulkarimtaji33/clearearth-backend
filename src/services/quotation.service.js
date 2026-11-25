@@ -8,7 +8,7 @@ const { nextReferenceNumber } = require('../utils/referenceNumber');
 const SERVICE_QUOTATION_SEED = 654; // old ERP's last service quotation was QT/SERV/654/1
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { isManagerRole, canApproveDirectly } = require('../utils/leadApproval');
-const { baseCurrency } = require('../utils/currency');
+const { baseCurrency, cleanCurrency } = require('../utils/currency');
 const { Op } = db.Sequelize;
 
 const QUOTATION_STATUS = {
@@ -126,12 +126,14 @@ const getById = async (tenantId, quotationId, scope = {}) => {
 
 const create = async (tenantId, data, scope = {}) => {
   const { dealId, preparedBy, quotationDate, quotationAmount, remarks } = data;
-  const currency = /^[A-Za-z]{3}$/.test(String(data.currency || '').trim()) ? String(data.currency).trim().toUpperCase() : baseCurrency();
+  const requestedCurrency = cleanCurrency(data.currency, baseCurrency());
 
   const dealWhere = { id: dealId, tenant_id: tenantId };
   if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
   const deal = await db.Deal.findOne({ where: dealWhere });
   if (!deal) throw ApiError.badRequest('Deal not found');
+  // A quotation always uses the currency of its deal (the lines are priced in it).
+  const currency = cleanCurrency(deal.currency, requestedCurrency);
   const quotableStatuses = ['approved', 'quotation_sent', 'negotiation', 'won'];
   if (!quotableStatuses.includes(deal.status)) {
     throw ApiError.badRequest('Deal must be approved before creating a quotation');
@@ -163,8 +165,6 @@ const create = async (tenantId, data, scope = {}) => {
     } else {
       referenceNumber = await nextReferenceNumber(db.Quotation, SERVICE_QUOTATION_SEED, t);
     }
-    // The deal carries the currency forward to the proforma and tax invoices.
-    if (deal.currency !== currency) await deal.update({ currency }, { transaction: t });
     return db.Quotation.create(
       {
         tenant_id: tenantId,
