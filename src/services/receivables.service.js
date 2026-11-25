@@ -8,7 +8,8 @@ const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
-const { daysOverdue, agingBucketByDueDate, emptyAgingBuckets, addToBucket } = require('../utils/aging');
+const { daysOverdue, agingBucketByDueDate, emptyAgingBuckets, addToBucket } = require('../utils/aging');
+const { baseCurrency } = require('../utils/currency');
 
 const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid'];
 
@@ -281,7 +282,7 @@ const receivePayment = async (tenantId, body, userId = null) => {
     const cur = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
     const bal = Math.max(0, total - cur);
     if (amt - bal > 0.01) {
-      throw ApiError.badRequest(`Allocation for invoice ${row.tax_invoice_number} (AED ${amt}) exceeds its balance due (AED ${bal.toFixed(2)})`);
+      throw ApiError.badRequest(`Allocation for invoice ${row.tax_invoice_number} (${row.currency || baseCurrency()} ${amt}) exceeds its balance due (${row.currency || baseCurrency()} ${bal.toFixed(2)})`);
     }
     applied.push({ row, amt, total, cur });
     totalAmount += amt;
@@ -295,7 +296,7 @@ const receivePayment = async (tenantId, body, userId = null) => {
   let unappliedAmount = Math.max(0, +(effectiveAmountReceived - totalAmount).toFixed(2));
   if (unappliedAmount > 0.005 && !allowUnapplied) {
     throw ApiError.badRequest(
-      `Amount received (AED ${effectiveAmountReceived.toFixed(2)}) exceeds the allocated total (AED ${totalAmount.toFixed(2)}) by AED ${unappliedAmount.toFixed(2)}. ` +
+      `Amount received (${baseCurrency()} ${effectiveAmountReceived.toFixed(2)}) exceeds the allocated total (${baseCurrency()} ${totalAmount.toFixed(2)}) by ${baseCurrency()} ${unappliedAmount.toFixed(2)}. ` +
       `Pass allowUnapplied: true to record the remainder as an advance/unapplied credit for this customer.`
     );
   }
@@ -377,7 +378,7 @@ const receivePayment = async (tenantId, body, userId = null) => {
         const entryId = await jeService.createJournalEntry(tenantId, userId || 1, {
           entryDate: payDate,
           description: unappliedAmount > 0.005
-            ? `Payment Received — ${updatedInvoices.length} invoice(s) + AED ${unappliedAmount.toFixed(2)} advance`
+            ? `Payment Received — ${updatedInvoices.length} invoice(s) + ${baseCurrency()} ${unappliedAmount.toFixed(2)} advance`
             : `Payment Received — ${updatedInvoices.length} invoice(s)`,
           sourceType: 'payment_received',
           sourceId: updatedInvoices[0]?.invoiceId || companyId,
@@ -476,14 +477,14 @@ const applyUnappliedCredit = async (tenantId, userId, paymentTransactionId, allo
     const cur = row.paid_amount != null ? parseNum(row.paid_amount) : 0;
     const bal = Math.max(0, total - cur);
     if (amt - bal > 0.01) {
-      throw ApiError.badRequest(`Allocation for invoice ${row.tax_invoice_number} (AED ${amt}) exceeds its balance due (AED ${bal.toFixed(2)})`);
+      throw ApiError.badRequest(`Allocation for invoice ${row.tax_invoice_number} (${row.currency || baseCurrency()} ${amt}) exceeds its balance due (${row.currency || baseCurrency()} ${bal.toFixed(2)})`);
     }
     applied.push({ row, amt, total, cur });
     totalAmount += amt;
   }
   if (applied.length === 0) throw ApiError.badRequest('No valid allocation amounts provided');
   if (totalAmount - remaining > 0.01) {
-    throw ApiError.badRequest(`Allocation total (AED ${totalAmount.toFixed(2)}) exceeds the remaining unapplied credit (AED ${remaining.toFixed(2)})`);
+    throw ApiError.badRequest(`Allocation total (${baseCurrency()} ${totalAmount.toFixed(2)}) exceeds the remaining unapplied credit (${baseCurrency()} ${remaining.toFixed(2)})`);
   }
 
   const payDate = new Date().toISOString().slice(0, 10);

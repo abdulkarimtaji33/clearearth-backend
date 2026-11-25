@@ -6,6 +6,7 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { resolvePaymentAccount } = require('../utils/paymentAccount');
+const { baseCurrency } = require('../utils/currency');
 
 const EPS = 0.01;
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
@@ -119,7 +120,7 @@ const save = async (tenantId, userId, body = {}) => {
     const cleared = round2(opening + ticked);
     const diff = round2(parseFloat(statementBalance) - cleared);
     if (complete && Math.abs(diff) > EPS) {
-      throw ApiError.badRequest(`The difference is AED ${diff.toFixed(2)}. Tick the missing entries (or fix the statement balance) until the difference is zero, or save it as a draft.`);
+      throw ApiError.badRequest(`The difference is ${baseCurrency()} ${diff.toFixed(2)}. Tick the missing entries (or fix the statement balance) until the difference is zero, or save it as a draft.`);
     }
     const payload = {
       tenant_id: tenantId, account_id: acc.accountId, statement_date: statementDate, statement_balance: round2(statementBalance),

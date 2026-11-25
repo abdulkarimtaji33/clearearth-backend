@@ -3,7 +3,8 @@
  */
 const db = require('../models');
 const ApiError = require('./apiError');
-const jeService = require('../services/journalEntry.service');
+const jeService = require('../services/journalEntry.service');
+const { baseCurrency } = require('./currency');
 
 /** Default chart-of-accounts code per payment method */
 const PAYMENT_METHOD_DEFAULT_ACCOUNT_CODE = {
@@ -96,7 +97,7 @@ async function assertNotOverdrawn(tenantId, accountId, amount, confirmNegative =
   if (after < -0.004) {
     const acc = await db.ChartOfAccounts.findOne({ where: { id: accountId, tenant_id: tenantId }, attributes: ['code', 'name'] });
     throw ApiError.badRequest(
-      `This payment takes ${acc ? `${acc.code} ${acc.name}` : 'the account'} below zero (balance AED ${bal.toFixed(2)}, it would become ${after.toFixed(2)}). Confirm it to continue.`
+      `This payment takes ${acc ? `${acc.code} ${acc.name}` : 'the account'} below zero (balance ${baseCurrency()} ${bal.toFixed(2)}, it would become ${after.toFixed(2)}). Confirm it to continue.`
     );
   }
 }

@@ -7,6 +7,7 @@
 const XLSX = require('xlsx');
 const db = require('../models');
 const { isCashOrBank } = require('../utils/paymentAccount');
+const { baseCurrency } = require('../utils/currency');
 
 const n = (v) => parseFloat(v) || 0;
 const r2 = (v) => Math.round((parseFloat(v) || 0) * 100) / 100;
@@ -277,12 +278,12 @@ const exportVatReport = async (tenantId, { dateFrom, dateTo }) => {
     ['VAT return (FTA VAT 201 layout)'],
     [`Period: ${dateFrom} to ${dateTo}`],
     [],
-    ['Box', 'Description', 'Amount (AED)', 'VAT (AED)', 'Adjustment (AED)'],
+    ['Box', 'Description', `Amount (${baseCurrency()})`, `VAT (${baseCurrency()})`, `Adjustment (${baseCurrency()})`],
     ...rep.boxes.map((b) => [b.box, b.label, b.amount ?? '', b.vat ?? '', b.adjustment || '']),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), 'VAT return');
   const detail = [
-    ['Date', 'Entry', 'Type', 'Party', 'Description', 'Section', 'Amount (AED)', 'VAT (AED)'],
+    ['Date', 'Entry', 'Type', 'Party', 'Description', 'Section', `Amount (${baseCurrency()})`, `VAT (${baseCurrency()})`],
     ...rep.transactions.map((t) => [t.date, t.entry_number, t.source_type, t.party, t.description,
       `${t.side === 'sales' ? 'Output' : 'Input'}${t.adjustment ? ' adjustment' : ''}`, t.net, t.vat]),
   ];

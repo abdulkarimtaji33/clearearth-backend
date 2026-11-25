@@ -5,7 +5,8 @@ const db = require('../models');
 const { Op, fn, col, literal } = db.Sequelize;
 const receivablesService = require('./receivables.service');
 const payablesService = require('./payables.service');
-const driverService = require('./driver.service');
+const driverService = require('./driver.service');
+const { baseCurrency } = require('../utils/currency');
 
 const OPEN_DEAL_STATUSES = ['new', 'approved', 'quotation_sent', 'negotiation'];
 const CLOSED_WON = 'won';
@@ -419,7 +420,7 @@ async function getSalesOverview(tenantId, userId) {
       {
         label: 'My open deals',
         value: openCount,
-        sub: `AED ${openValue.toLocaleString()}`,
+        sub: `${baseCurrency()} ${openValue.toLocaleString()}`,
         format: 'number',
       },
       { label: 'Won this month', value: wonMonthCount, format: 'number' },

@@ -1,6 +1,7 @@
 /**
  * Converts a monetary amount to words, e.g. 472.50 AED -> "UAE Dirham Four Hundred Seventy-Two and Fifty Fils"
  */
+const { NAMES } = require('./currencyNames');
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
   'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
 const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -65,7 +66,8 @@ function amountInWords(amount, currency = 'AED') {
   const num = Math.round((parseFloat(amount) || 0) * 100) / 100;
   const whole = Math.floor(num);
   const fraction = Math.round((num - whole) * 100);
-  const cur = CURRENCY_WORDS[String(currency).toUpperCase()] || { major: String(currency).toUpperCase(), minor: 'Cents' };
+  const code = String(currency).toUpperCase();
+  const cur = CURRENCY_WORDS[code] || { major: NAMES[code] || code, minor: 'Cents' };
 
   let words = `${cur.major} ${integerToWords(whole)}`;
   if (fraction > 0) {

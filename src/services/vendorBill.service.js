@@ -538,7 +538,7 @@ const payBills = async (tenantId, userId, body = {}) => {
     const balance = round2(parseFloat(bill.total) - parseFloat(bill.paid_amount || 0) - parseFloat(bill.debit_note_amount || 0));
     if (bill.status === 'void' || bill.status === 'paid') throw ApiError.badRequest(`${bill.bill_number} is not payable`);
     if (!(amount > EPS)) throw ApiError.badRequest(`Enter an amount for ${bill.bill_number}`);
-    if (amount > balance + 0.01) throw ApiError.badRequest(`Amount for ${bill.bill_number} exceeds its balance (AED ${balance.toFixed(2)})`);
+    if (amount > balance + 0.01) throw ApiError.badRequest(`Amount for ${bill.bill_number} exceeds its balance (${bill.currency || 'AED'} ${balance.toFixed(2)})`);
     return { bill, amount };
   });
   const totalPaid = round2(rows.reduce((s, r) => s + r.amount, 0));

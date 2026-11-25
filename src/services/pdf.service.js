@@ -184,6 +184,7 @@ function resolvePdfAsApproved(recordApproved, options = {}, { allowOverride = tr
 }
 
 const { isVatApplicable } = require('./../utils/lineVat');
+const { baseCurrency } = require('../utils/currency');
 
 function getVat(tenant) {
   return tenant?.trn_number || tenant?.vat_registration_number || '-';
@@ -1148,7 +1149,7 @@ async function generatePayslipPdf(payslipId, tenantId) {
       <div><strong>Payment Status:</strong> ${escapeHtml(payslip.payment_status)}</div>
     </div>
     <table>
-      <tr><th>Earnings</th><th style="text-align:right;">Amount (AED)</th></tr>
+      <tr><th>Earnings</th><th style="text-align:right;">Amount (${baseCurrency()})</th></tr>
       <tr><td>Basic Salary</td><td style="text-align:right;">${formatNum(payslip.basic_salary)}</td></tr>
       <tr><td>Housing Allowance</td><td style="text-align:right;">${formatNum(payslip.housing_allowance)}</td></tr>
       <tr><td>Transport Allowance</td><td style="text-align:right;">${formatNum(payslip.transport_allowance)}</td></tr>
@@ -1157,7 +1158,7 @@ async function generatePayslipPdf(payslipId, tenantId) {
       <tr class="totals-row"><td>Gross Salary</td><td style="text-align:right;">${formatNum(payslip.gross_salary)}</td></tr>
     </table>
     <table>
-      <tr><th>Deductions</th><th style="text-align:right;">Amount (AED)</th></tr>
+      <tr><th>Deductions</th><th style="text-align:right;">Amount (${baseCurrency()})</th></tr>
       <tr><td>Absent Days</td><td style="text-align:right;">${payslip.absent_days}</td></tr>
       <tr><td>Unpaid Leave Days</td><td style="text-align:right;">${payslip.unpaid_leave_days}</td></tr>
       <tr><td>Proration Deduction</td><td style="text-align:right;">${formatNum(payslip.proration_deduction)}</td></tr>
@@ -1165,7 +1166,7 @@ async function generatePayslipPdf(payslipId, tenantId) {
       <tr class="totals-row"><td>Total Deductions</td><td style="text-align:right;">${formatNum(payslip.total_deductions)}</td></tr>
     </table>
     <table>
-      <tr class="totals-row"><td>Net Salary</td><td style="text-align:right;">AED ${formatNum(payslip.net_salary)}</td></tr>
+      <tr class="totals-row"><td>Net Salary</td><td style="text-align:right;">${baseCurrency()} ${formatNum(payslip.net_salary)}</td></tr>
     </table>
     <p style="margin-top:24px;font-size:10px;color:#888;">Generated on ${formatDate(new Date())}</p>
   </body>

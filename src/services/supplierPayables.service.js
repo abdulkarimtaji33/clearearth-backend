@@ -7,6 +7,7 @@ const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const payablesService = require('./payables.service');
 const { daysOverdue } = require('../utils/aging');
+const { baseCurrency } = require('../utils/currency');
 
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -231,7 +232,7 @@ const getSupplierStatement = async (tenantId, supplierId, { dateFrom, dateTo } =
     paidTotal,
     aging,
     openItems: open,
-    currency: 'AED',
+    currency: baseCurrency(),
   };
 };
 

@@ -10,6 +10,7 @@ const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
 const paymentTxService = require('./paymentTransaction.service');
 const { resolvePaymentAccount, assertNotOverdrawn } = require('../utils/paymentAccount');
+const { baseCurrency } = require('../utils/currency');
 
 const EPS = 0.01;
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
@@ -197,8 +198,8 @@ const applyAdvance = async (tenantId, userId, advanceId, body = {}) => {
     const balance = round2(parseFloat(bill.total) - parseFloat(bill.paid_amount || 0) - parseFloat(bill.debit_note_amount || 0));
     const amt = amount === undefined || amount === null || amount === '' ? Math.min(remaining, balance) : round2(amount);
     if (!(amt > EPS)) throw ApiError.badRequest('Nothing to apply: enter an amount greater than zero');
-    if (amt > remaining + EPS) throw ApiError.badRequest(`Only AED ${remaining.toFixed(2)} of this advance is left`);
-    if (amt > balance + EPS) throw ApiError.badRequest(`The bill only has AED ${balance.toFixed(2)} left to pay`);
+    if (amt > remaining + EPS) throw ApiError.badRequest(`Only ${baseCurrency()} ${remaining.toFixed(2)} of this advance is left`);
+    if (amt > balance + EPS) throw ApiError.badRequest(`The bill only has ${bill.currency || baseCurrency()} ${balance.toFixed(2)} left to pay`);
 
     const advAccId = await ensureAdvanceAccount(tenantId, t);
     const apId = await jeService.getSystemAccountId(tenantId, '2000');

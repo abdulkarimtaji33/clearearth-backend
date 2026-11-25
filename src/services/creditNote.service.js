@@ -191,7 +191,7 @@ const createCreditNote = async (tenantId, userId, body = {}) => {
       userId,
       {
         entryDate: date,
-        description: `Credit Note ${creditNoteNumber} — ${inv.tax_invoice_number} (${String(reason).trim()})${refund > 0 ? ` — refunded AED ${refund.toFixed(2)}` : ''}`,
+        description: `Credit Note ${creditNoteNumber} — ${inv.tax_invoice_number} (${String(reason).trim()})${refund > 0 ? ` — refunded ${inv.currency || 'AED'} ${refund.toFixed(2)}` : ''}`,
         sourceType: 'credit_note',
         sourceId: note.id,
         paidTo: customerName,

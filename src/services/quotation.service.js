@@ -8,6 +8,7 @@ const { nextReferenceNumber } = require('../utils/referenceNumber');
 const SERVICE_QUOTATION_SEED = 654; // old ERP's last service quotation was QT/SERV/654/1
 const { applyDateOnlyColumnFilter } = require('../utils/dateRangeWhere');
 const { isManagerRole, canApproveDirectly } = require('../utils/leadApproval');
+const { baseCurrency } = require('../utils/currency');
 const { Op } = db.Sequelize;
 
 const QUOTATION_STATUS = {
@@ -125,7 +126,7 @@ const getById = async (tenantId, quotationId, scope = {}) => {
 
 const create = async (tenantId, data, scope = {}) => {
   const { dealId, preparedBy, quotationDate, quotationAmount, remarks } = data;
-  const currency = /^[A-Za-z]{3}$/.test(String(data.currency || '').trim()) ? String(data.currency).trim().toUpperCase() : 'AED';
+  const currency = /^[A-Za-z]{3}$/.test(String(data.currency || '').trim()) ? String(data.currency).trim().toUpperCase() : baseCurrency();
 
   const dealWhere = { id: dealId, tenant_id: tenantId };
   if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;

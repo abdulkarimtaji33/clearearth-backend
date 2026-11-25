@@ -2,6 +2,7 @@
  * Authentication Service
  */
 const db = require('../models');
+const { baseCurrency } = require('../utils/currency');
 const ApiError = require('../utils/apiError');
 const accessService = require('./access.service');
 const {
@@ -102,6 +103,7 @@ const register = async data => {
         id: tenant.id,
         name: tenant.name,
         companyName: tenant.company_name,
+        baseCurrency: baseCurrency(),
       },
       accessToken,
       refreshToken,
@@ -195,6 +197,7 @@ const login = async ({ email, password }) => {
       id: user.tenant.id,
       name: user.tenant.name,
       companyName: user.tenant.company_name,
+      baseCurrency: baseCurrency(),
     },
     accessToken,
     refreshToken,
@@ -348,6 +351,7 @@ const getCurrentUser = async userId => {
       id: user.tenant.id,
       name: user.tenant.name,
       companyName: user.tenant.company_name,
+      baseCurrency: baseCurrency(),
     },
     permissions,
     access,
