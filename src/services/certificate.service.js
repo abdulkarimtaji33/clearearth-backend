@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const config = require('../config');
 const ApiError = require('../utils/apiError');
 const { nextCertificateNumber } = require('../utils/referenceNumber');
@@ -207,8 +208,9 @@ const getTaskEvidenceForRequest = async (tenantId, requestId) => {
 };
 
 const listRequests = async (tenantId, filters = {}) => {
-  const { offset, limit, search, status, requestedBy, dealId } = filters;
+  const { offset, limit, search, status, requestedBy, dealId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyDateOnlyColumnFilter(where, 'collection_date', dateFrom, dateTo);
   if (status) where.status = status;
   if (requestedBy) where.requested_by = requestedBy;
   if (dealId) where.deal_id = dealId;

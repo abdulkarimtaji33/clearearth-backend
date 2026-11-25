@@ -2,6 +2,7 @@
  * Goods Received Note (GRN) service
  */
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const ApiError = require('../utils/apiError');
 const notificationService = require('./notification.service');
 const { Op } = db.Sequelize;
@@ -109,8 +110,9 @@ async function incrementInventory(tenantId, materialTypeId, quantity, unitOfMeas
 }
 
 const listGrns = async (tenantId, filters = {}) => {
-  const { offset, limit, search, status, workOrderId, dealId } = filters;
+  const { offset, limit, search, status, workOrderId, dealId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyCreatedAtFilter(where, dateFrom, dateTo);
   if (status && GRN_STATUSES.includes(status)) where.status = status;
   if (workOrderId) where.work_order_id = workOrderId;
   if (dealId) where.deal_id = dealId;
@@ -144,9 +146,10 @@ const listGrns = async (tenantId, filters = {}) => {
  * (exact or partial), item name, material type, and GRN status.
  */
 const listInventoryItems = async (tenantId, filters = {}) => {
-  const { offset, limit, search, grnNumber, materialTypeId, status, dealId } = filters;
+  const { offset, limit, search, grnNumber, materialTypeId, status, dealId, dateFrom, dateTo } = filters;
 
   const grnWhere = { tenant_id: tenantId };
+  applyCreatedAtFilter(grnWhere, dateFrom, dateTo);
   if (status && GRN_STATUSES.includes(status)) grnWhere.status = status;
   if (grnNumber) grnWhere.grn_number = { [Op.like]: `%${String(grnNumber).trim()}%` };
   if (dealId) grnWhere.deal_id = dealId;

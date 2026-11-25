@@ -7,10 +7,10 @@ const { getPaginationParams } = require('../utils/helpers');
 // ---- Certificate Requests ----
 
 const listRequests = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, dealId } = req.query;
+  const { page, pageSize, search, status, dealId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const requestedBy = req.query.mine === 'true' ? req.user.id : undefined;
-  const result = await certificateService.listRequests(req.tenant.id, { ...pagination, search, status, requestedBy, dealId });
+  const result = await certificateService.listRequests(req.tenant.id, { ...pagination, search, status, requestedBy, dealId, dateFrom, dateTo });
   return ApiResponse.paginated(res, result.requests, {
     page: pagination.page,
     pageSize: pagination.pageSize,

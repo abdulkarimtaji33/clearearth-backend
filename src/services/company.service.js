@@ -92,6 +92,7 @@ async function loadCompanyFinanceSnapshot(tenantId, companyId) {
       taxInvoices: [],
       workOrders: [],
       receivablesOutstanding: 0,
+      receivablesByCurrency: {},
       receivablesAging: { current: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0 },
     };
   }
@@ -144,11 +145,14 @@ async function loadCompanyFinanceSnapshot(tenantId, companyId) {
   ]);
 
   let receivablesOutstanding = 0;
+  const receivablesByCurrency = {};
   const receivablesAging = { current: 0, bucket_31_60: 0, bucket_61_90: 0, bucket_over_90: 0 };
   for (const ti of taxInvoices) {
     const bal = receivablesService.balanceDue(ti.get ? ti.get({ plain: true }) : ti);
     if (bal <= 0.005) continue;
     receivablesOutstanding += bal;
+    const curCode = (ti.get ? ti.get({ plain: true }) : ti).currency || 'AED';
+    receivablesByCurrency[curCode] = (receivablesByCurrency[curCode] || 0) + bal;
     const plain = ti.get({ plain: true });
     const dOpen = Math.floor(
       (new Date() - new Date(`${plain.invoice_date}T12:00:00`)) / 86400000,
@@ -170,6 +174,7 @@ async function loadCompanyFinanceSnapshot(tenantId, companyId) {
     }),
     workOrders: workOrders.map(w => w.get({ plain: true })),
     receivablesOutstanding,
+    receivablesByCurrency,
     receivablesAging,
   };
 }

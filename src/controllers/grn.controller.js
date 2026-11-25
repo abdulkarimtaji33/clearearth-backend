@@ -8,7 +8,7 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getFileUrl } = require('../middlewares/upload');
 
 const list = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, workOrderId, dealId } = req.query;
+  const { page, pageSize, search, status, workOrderId, dealId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await grnService.listGrns(req.tenant.id, {
     ...pagination,
@@ -16,6 +16,8 @@ const list = asyncHandler(async (req, res) => {
     status,
     workOrderId,
     dealId,
+    dateFrom,
+    dateTo,
   });
   return ApiResponse.paginated(res, result.grns, {
     page: pagination.page,
@@ -30,7 +32,7 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const listInventory = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, grnNumber, materialTypeId, status, dealId } = req.query;
+  const { page, pageSize, search, grnNumber, materialTypeId, status, dealId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await grnService.listInventoryItems(req.tenant.id, {
     ...pagination,
@@ -39,6 +41,8 @@ const listInventory = asyncHandler(async (req, res) => {
     materialTypeId,
     status,
     dealId,
+    dateFrom,
+    dateTo,
   });
   return ApiResponse.paginated(res, result.items, {
     page: pagination.page,

@@ -4028,7 +4028,7 @@ async function runMigration() {
     }
 
     console.log('Adding currency to purchase orders, vendor bills and outbounds...');
-    for (const tbl of ['purchase_orders', 'vendor_bills', 'outbounds']) {
+    for (const tbl of ['purchase_orders', 'vendor_bills', 'outbounds', 'commissions']) {
       try {
         await db.sequelize.query(`ALTER TABLE ${tbl} ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'AED'`);
       } catch (e) { if (!isDuplicateSchemaError(e)) console.warn(`  ${tbl}.currency:`, e.message); }
@@ -4037,7 +4037,13 @@ async function runMigration() {
     try {
       await db.sequelize.query(`UPDATE purchase_orders po JOIN deals d ON d.id = po.deal_id SET po.currency = d.currency WHERE po.currency = 'AED' AND d.currency IS NOT NULL AND d.currency <> '' AND d.currency <> 'AED'`);
       await db.sequelize.query(`UPDATE vendor_bills b JOIN purchase_orders po ON po.id = b.purchase_order_id SET b.currency = po.currency WHERE b.currency = 'AED' AND po.currency <> 'AED'`);
+      await db.sequelize.query(`UPDATE commissions c JOIN quotations q ON q.id = c.quotation_id SET c.currency = q.currency WHERE c.currency = 'AED' AND q.currency IS NOT NULL AND q.currency <> 'AED'`);
     } catch (e) { console.warn('  currency backfill:', e.message); }
+
+    // Terms & Conditions can hold long formatted text (pasted from Word): TEXT (64 KB) was too small and failed with a 500.
+    try {
+      await db.sequelize.query('ALTER TABLE terms_and_conditions MODIFY COLUMN content MEDIUMTEXT NOT NULL');
+    } catch (e) { console.warn('  terms_and_conditions.content:', e.message); }
 
     // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).
     try {

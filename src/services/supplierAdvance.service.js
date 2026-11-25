@@ -4,6 +4,7 @@
  *   Apply:   Dr 2000 Accounts Payable / Cr 1350 (reduces the bill's balance).
  */
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
@@ -134,8 +135,9 @@ const getAdvance = async (tenantId, id) => {
 };
 
 const listAdvances = async (tenantId, filters = {}) => {
-  const { offset, limit, search, supplierId, openOnly } = filters;
+  const { offset, limit, search, supplierId, openOnly, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyDateOnlyColumnFilter(where, 'advance_date', dateFrom, dateTo);
   if (supplierId) where.supplier_id = supplierId;
   if (openOnly === true || openOnly === 'true') where[Op.and] = [db.sequelize.literal('amount - applied_amount > 0.005')];
   if (search) {

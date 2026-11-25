@@ -4,9 +4,9 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const list = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, supplierId, vendorBillId } = req.query;
+  const { page, pageSize, search, supplierId, vendorBillId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const result = await svc.listDebitNotes(req.tenant.id, { ...pagination, search, supplierId, vendorBillId });
+  const result = await svc.listDebitNotes(req.tenant.id, { ...pagination, search, supplierId, vendorBillId, dateFrom, dateTo });
   return ApiResponse.paginated(res, result.debitNotes, {
     page: pagination.page,
     pageSize: pagination.pageSize,

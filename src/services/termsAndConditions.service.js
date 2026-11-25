@@ -35,11 +35,29 @@ const getById = async (tenantId, id) => {
   return terms;
 };
 
+// Clear messages instead of a database error (title 255, category 100 characters).
+const cleanText = (v) => (v === undefined || v === null ? '' : String(v));
+const validateFields = ({ title, content, category }, { partial = false } = {}) => {
+  if (!partial || title !== undefined) {
+    const t = cleanText(title).trim();
+    if (!t) throw ApiError.badRequest('Title is required');
+    if (t.length > 255) throw ApiError.badRequest(`Title is too long (${t.length} characters, the limit is 255)`);
+  }
+  if (!partial || content !== undefined) {
+    const c = cleanText(content).replace(/<[^>]*>/g, '').trim();
+    if (!c) throw ApiError.badRequest('Terms content is required');
+  }
+  if (category !== undefined && category !== null && cleanText(category).length > 100) {
+    throw ApiError.badRequest('Category is too long (the limit is 100 characters)');
+  }
+};
+
 const DEFAULT_ADMIN_ONLY = 'Only an administrator can choose the default Terms & Conditions';
 
 // Several terms can be defaults: all of them are pre-selected when a quotation is created.
 const create = async (tenantId, data, { canSetDefault = false } = {}) => {
   const { title, content, category, isDefault } = data;
+  validateFields({ title, content, category });
 
   if (isDefault && !canSetDefault) throw ApiError.forbidden(DEFAULT_ADMIN_ONLY);
 
@@ -58,6 +76,7 @@ const create = async (tenantId, data, { canSetDefault = false } = {}) => {
 const update = async (tenantId, id, data, { canSetDefault = false } = {}) => {
   const terms = await getById(tenantId, id);
   const { title, content, category, isDefault, status } = data;
+  validateFields({ title, content, category }, { partial: true });
 
   if (isDefault !== undefined && Boolean(isDefault) !== Boolean(terms.is_default) && !canSetDefault) {
     throw ApiError.forbidden(DEFAULT_ADMIN_ONLY);

@@ -115,6 +115,7 @@ const createFromQuotation = async (tenantId, quotation, transaction = null) => {
       quotation_id: quotation.id,
       deal_id: quotation.deal_id || null,
       quotation_amount: amount,
+      currency: quotation.currency || 'AED',
       commission_percentage: pct,
       commission_amount: commissionAmount,
       status: 'accrued',

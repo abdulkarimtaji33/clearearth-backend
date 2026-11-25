@@ -5,13 +5,15 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const listWorkOrders = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dealId, status } = req.query;
+  const { page, pageSize, search, dealId, status, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await workOrderService.getAll(req.tenant.id, {
     ...pagination,
     search,
     dealId,
     status,
+    dateFrom,
+    dateTo,
   });
   return ApiResponse.paginated(res, result.workOrders, {
     page: pagination.page,

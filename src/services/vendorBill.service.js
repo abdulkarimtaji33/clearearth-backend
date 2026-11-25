@@ -11,6 +11,7 @@
  * with an accrual journal) have that accrual cleared first when their bill is recorded.
  */
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { cleanCurrency } = require('../utils/currency');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
@@ -118,8 +119,9 @@ const listAwaitingBill = async (tenantId) => {
 };
 
 const listBills = async (tenantId, filters = {}) => {
-  const { offset, limit, search, status, supplierId, purchaseOrderId } = filters;
+  const { offset, limit, search, status, supplierId, purchaseOrderId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyDateOnlyColumnFilter(where, 'bill_date', dateFrom, dateTo);
   if (status === 'unpaid') where.status = { [Op.in]: ['open', 'partial'] };
   else if (status) where.status = status;
   if (supplierId) where.supplier_id = supplierId;

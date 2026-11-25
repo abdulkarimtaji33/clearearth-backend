@@ -7,6 +7,7 @@
  * is already (partly) paid, only the unpaid part can be credited here.
  */
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
@@ -234,8 +235,9 @@ const getCreditNote = async (tenantId, id) => {
 };
 
 const listCreditNotes = async (tenantId, filters = {}) => {
-  const { offset, limit, search, taxInvoiceId } = filters;
+  const { offset, limit, search, taxInvoiceId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyDateOnlyColumnFilter(where, 'credit_date', dateFrom, dateTo);
   if (taxInvoiceId) where.tax_invoice_id = taxInvoiceId;
   if (search) {
     const s = `%${String(search).trim()}%`;

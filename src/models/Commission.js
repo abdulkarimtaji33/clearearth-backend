@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       quotation_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'quotations', key: 'id' } },
       deal_id: { type: DataTypes.INTEGER, allowNull: true },
       quotation_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false },
+      currency: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'AED' },
       commission_percentage: { type: DataTypes.DECIMAL(5, 2), allowNull: false },
       commission_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false },
       status: { type: DataTypes.ENUM('accrued', 'paid', 'in_payroll'), allowNull: false, defaultValue: 'accrued' },

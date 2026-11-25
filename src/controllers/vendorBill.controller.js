@@ -9,9 +9,9 @@ const awaitingBill = asyncHandler(async (req, res) => {
 });
 
 const list = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, supplierId, purchaseOrderId } = req.query;
+  const { page, pageSize, search, status, supplierId, purchaseOrderId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const result = await vendorBillService.listBills(req.tenant.id, { ...pagination, search, status, supplierId, purchaseOrderId });
+  const result = await vendorBillService.listBills(req.tenant.id, { ...pagination, search, status, supplierId, purchaseOrderId, dateFrom, dateTo });
   return ApiResponse.paginated(res, result.bills, {
     page: pagination.page,
     pageSize: pagination.pageSize,

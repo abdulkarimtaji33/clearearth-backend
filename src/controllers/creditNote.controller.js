@@ -4,9 +4,9 @@ const { asyncHandler } = require('../middlewares/errorHandler');
 const { getPaginationParams } = require('../utils/helpers');
 
 const list = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, taxInvoiceId } = req.query;
+  const { page, pageSize, search, taxInvoiceId, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
-  const result = await creditNoteService.listCreditNotes(req.tenant.id, { ...pagination, search, taxInvoiceId });
+  const result = await creditNoteService.listCreditNotes(req.tenant.id, { ...pagination, search, taxInvoiceId, dateFrom, dateTo });
   return ApiResponse.paginated(res, result.creditNotes, {
     page: pagination.page,
     pageSize: pagination.pageSize,

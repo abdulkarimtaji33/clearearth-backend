@@ -8,7 +8,7 @@ const list = asyncHandler(async (req, res) => {
   const { kind } = req.params;
   if (!registerService.KINDS.includes(kind)) throw ApiError.notFound('Unknown register');
   const pagination = getPaginationParams(req.query.page, req.query.pageSize);
-  const result = await registerService.list(req.tenant.id, kind, { search: req.query.search, docType: req.query.type, ...pagination });
+  const result = await registerService.list(req.tenant.id, kind, { search: req.query.search, docType: req.query.type, dateFrom: req.query.dateFrom, dateTo: req.query.dateTo, ...pagination });
   return ApiResponse.paginated(res, result.rows, { page: pagination.page, pageSize: pagination.pageSize, totalItems: result.total });
 });
 

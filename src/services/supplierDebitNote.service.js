@@ -4,6 +4,7 @@
  * The debit note reduces the bill's balance. Only the unpaid part of a bill can be debited here.
  */
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const jeService = require('./journalEntry.service');
@@ -23,7 +24,7 @@ const REASONS = [
 const includes = () => [
   { model: db.Supplier, as: 'supplier', attributes: ['id', 'company_name', 'vat_number'], required: false },
   { model: db.Company, as: 'company', attributes: ['id', 'company_name'], required: false },
-  { model: db.VendorBill, as: 'vendorBill', attributes: ['id', 'bill_number', 'supplier_invoice_no', 'bill_date'], required: false },
+  { model: db.VendorBill, as: 'vendorBill', attributes: ['id', 'bill_number', 'supplier_invoice_no', 'bill_date', 'currency'], required: false },
   { model: db.User, as: 'createdByUser', attributes: ['id', 'first_name', 'last_name'], required: false },
 ];
 
@@ -193,8 +194,9 @@ const getDebitNote = async (tenantId, id) => {
 };
 
 const listDebitNotes = async (tenantId, filters = {}) => {
-  const { offset, limit, search, supplierId, vendorBillId } = filters;
+  const { offset, limit, search, supplierId, vendorBillId, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyDateOnlyColumnFilter(where, 'note_date', dateFrom, dateTo);
   if (supplierId) where.supplier_id = supplierId;
   if (vendorBillId) where.vendor_bill_id = vendorBillId;
   if (search) {

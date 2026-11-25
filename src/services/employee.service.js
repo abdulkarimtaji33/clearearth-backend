@@ -2,6 +2,7 @@
  * Employee Service (HRM)
  */
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const userService = require('./user.service');
@@ -161,8 +162,9 @@ const requireEmployeeForUser = async (tenantId, userId) => {
 };
 
 const list = async (tenantId, filters = {}) => {
-  const { offset, limit, search, departmentId, status } = filters;
+  const { offset, limit, search, departmentId, status, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyDateOnlyColumnFilter(where, 'date_of_joining', dateFrom, dateTo);
   if (departmentId) where.department_id = departmentId;
   if (status) where.employment_status = status;
   if (search) {

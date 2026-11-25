@@ -13,6 +13,19 @@ const CURRENCY_WORDS = {
   GBP: { major: 'British Pound', minor: 'Pence' },
   SAR: { major: 'Saudi Riyal', minor: 'Halala' },
   KWD: { major: 'Kuwaiti Dinar', minor: 'Fils' },
+  QAR: { major: 'Qatari Riyal', minor: 'Dirham' },
+  OMR: { major: 'Omani Rial', minor: 'Baisa' },
+  BHD: { major: 'Bahraini Dinar', minor: 'Fils' },
+  INR: { major: 'Indian Rupee', minor: 'Paisa' },
+  PKR: { major: 'Pakistani Rupee', minor: 'Paisa' },
+  CNY: { major: 'Chinese Yuan', minor: 'Fen' },
+  JPY: { major: 'Japanese Yen', minor: 'Sen' },
+  CHF: { major: 'Swiss Franc', minor: 'Rappen' },
+  CAD: { major: 'Canadian Dollar', minor: 'Cent' },
+  AUD: { major: 'Australian Dollar', minor: 'Cent' },
+  EGP: { major: 'Egyptian Pound', minor: 'Piastre' },
+  TRY: { major: 'Turkish Lira', minor: 'Kurus' },
+  ZAR: { major: 'South African Rand', minor: 'Cent' },
 };
 
 function threeDigitsToWords(n) {

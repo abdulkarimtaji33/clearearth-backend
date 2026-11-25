@@ -18,7 +18,7 @@ const sanitizeWorkOrderDeal = (workOrder, hideFinancials) => {
 };
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dealId, status, overdue, assignedTo, unassigned, sort } = req.query;
+  const { page, pageSize, search, dealId, status, overdue, assignedTo, unassigned, sort, dateFrom, dateTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await workOrderService.getAll(req.tenant.id, {
     ...pagination,
@@ -29,6 +29,8 @@ const getAll = asyncHandler(async (req, res) => {
     unassigned: unassigned === 'true',
     assignedTo,
     sort,
+    dateFrom,
+    dateTo,
   });
   return ApiResponse.paginated(res, result.workOrders, {
     page: pagination.page,

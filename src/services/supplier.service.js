@@ -155,8 +155,13 @@ const getById = async (tenantId, supplierId) => {
   ]);
 
   let payablesOutstanding = 0;
+  const payablesByCurrency = {};
   for (const po of purchaseOrders) {
-    payablesOutstanding += payablesService.balanceDue(po.get({ plain: true }));
+    const poPlain = po.get({ plain: true });
+    const due = payablesService.balanceDue(poPlain);
+    payablesOutstanding += due;
+    const curCode = poPlain.currency || 'AED';
+    payablesByCurrency[curCode] = (payablesByCurrency[curCode] || 0) + due;
   }
 
   plain.finance = {
@@ -168,6 +173,7 @@ const getById = async (tenantId, supplierId) => {
     }),
     expenses: expenses.map(e => e.get({ plain: true })),
     payablesOutstanding,
+    payablesByCurrency,
   };
 
   return plain;

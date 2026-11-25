@@ -120,11 +120,15 @@ async function purchaseBills(tenantId) {
 const KINDS = { purchase, service, sales, sales_invoices: salesInvoices, purchase_bills: purchaseBills };
 
 /** kind: purchase | service | sales. `docType` limits to one document type (e.g. "Sales Order"). */
-async function list(tenantId, kind, { search, docType, offset = 0, limit = 25 } = {}) {
+async function list(tenantId, kind, { search, docType, dateFrom, dateTo, offset = 0, limit = 25 } = {}) {
   const fn = KINDS[kind];
   if (!fn) throw Object.assign(new Error('Unknown register'), { statusCode: 404 });
   let rows = await fn(tenantId);
   if (docType) rows = rows.filter((r) => r.type === docType);
+  if (dateFrom || dateTo) {
+    const d = (r) => (r.date ? String(r.date).slice(0, 10) : '');
+    rows = rows.filter((r) => d(r) && (!dateFrom || d(r) >= dateFrom) && (!dateTo || d(r) <= dateTo));
+  }
   if (search) {
     const s = String(search).trim().toLowerCase();
     rows = rows.filter((r) => [r.reference, r.bill_reference, r.party, r.status, r.type].some((v) => String(v || '').toLowerCase().includes(s)));

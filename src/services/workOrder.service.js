@@ -2,6 +2,7 @@
  * Work Order Service
  */
 const db = require('../models');
+const { applyDateOnlyColumnFilter, applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const ApiError = require('../utils/apiError');
 const { Op } = db.Sequelize;
 const purchaseOrderService = require('./purchaseOrder.service');
@@ -272,8 +273,9 @@ const summarizeTasks = (tasks, today) => {
 };
 
 const getAll = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dealId, status, overdue, assignedTo, unassigned, sort } = filters;
+  const { offset, limit, search, dealId, status, overdue, assignedTo, unassigned, sort, dateFrom, dateTo } = filters;
   const where = { tenant_id: tenantId };
+  applyCreatedAtFilter(where, dateFrom, dateTo);
   const today = new Date().toISOString().slice(0, 10);
 
   // Task-level filters (mobile): restrict to work orders that have a matching open task.
