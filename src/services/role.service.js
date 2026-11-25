@@ -7,6 +7,7 @@ const catalog = require('../config/accessCatalog');
 const accessService = require('./access.service');
 const accessAudit = require('./accessAudit.service');
 const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
+const { isNonEscalating } = require('../utils/accessRules');
 const { Op } = db.Sequelize;
 
 const IMMUTABLE_ROLES = ['super_admin'];
@@ -156,7 +157,7 @@ const getById = async (tenantId, roleId) => {
 /** Which permissions the actor may hand out (everything they hold themselves; super_admin: all). */
 const assertCanGrant = (actorAccess, permissionNames, roleLabel = 'this role') => {
   if (!actorAccess || actorAccess.isSuperAdmin) return;
-  const missing = permissionNames.filter((n) => !actorAccess.has(n));
+  const missing = permissionNames.filter((n) => !isNonEscalating(n) && !actorAccess.has(n));
   if (missing.length) {
     throw ApiError.forbidden(
       `You can only grant permissions you hold yourself. Not allowed for ${roleLabel}: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}`
