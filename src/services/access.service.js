@@ -22,6 +22,8 @@ class Access {
     this.roleId = roleId;
     this.roleName = roleName;
     this.isSuperAdmin = roleName === 'super_admin';
+    // Administrators can do everything inside their company, whatever permissions a role (old, new or custom) carries.
+    this.isCompanyAdmin = FULL_ACCESS_ROLES.includes(roleName);
     this.permissions = permissions; // Set<string> — effective
     this.scopes = scopes || {};
     this.hiddenGroups = hiddenGroups || new Set();
@@ -30,7 +32,10 @@ class Access {
   }
 
   has(permission) {
-    return this.isSuperAdmin || this.permissions.has(permission);
+    if (this.isSuperAdmin) return true;
+    // The cross-company platform dashboard is the only thing an administrator does not hold.
+    if (this.isCompanyAdmin && permission !== 'dashboard.view_super_admin') return true;
+    return this.permissions.has(permission);
   }
 
   hasAny(...permissions) {
