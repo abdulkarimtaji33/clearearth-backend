@@ -5,7 +5,7 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { hashPassword, generateToken } = require('../utils/helpers');
 const { Op } = db.Sequelize;
-const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
 const { isNonEscalating } = require('../utils/accessRules');
 
 const getAll = async (tenantId, filters) => {
