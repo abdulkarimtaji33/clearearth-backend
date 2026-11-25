@@ -5,7 +5,8 @@ const db = require('../models');
 const ApiError = require('../utils/apiError');
 const { hashPassword, generateToken } = require('../utils/helpers');
 const { Op } = db.Sequelize;
-const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
+const { applyCreatedAtFilter } = require('../utils/dateRangeWhere');
+const { isNonEscalating } = require('../utils/accessRules');
 
 const getAll = async (tenantId, filters) => {
   const { offset, limit, search, status, roleId, dateFrom, dateTo, unlinked } = filters;
@@ -118,7 +119,7 @@ const assertCanAssignRole = async (tenantId, roleId, actor) => {
   });
   if (!role) return;
   if (role.name === 'super_admin') throw ApiError.forbidden('Only a Super Admin can assign the Super Admin role');
-  const missing = role.permissions.map((p) => p.name).filter((n) => !access.has(n));
+  const missing = role.permissions.map((p) => p.name).filter((n) => !isNonEscalating(n) && !access.has(n));
   if (missing.length) {
     throw ApiError.forbidden(
       `You cannot assign "${role.display_name}" because it grants permissions you do not hold (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}).`

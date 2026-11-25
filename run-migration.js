@@ -4054,6 +4054,15 @@ async function runMigration() {
     console.log('Setting up dynamic access control (catalog, scopes, field rules, overrides)...');
     await require('./src/database/accessControl.setup').ensureAccessControl(db.sequelize, console.log);
 
+    // Administrators can do everything inside their company: give admin and tenant_admin every catalog permission
+    // (the platform-wide super admin dashboard excepted). Runs on every deploy so new permissions are included.
+    await db.sequelize.query(
+      `INSERT IGNORE INTO role_permissions (role_id, permission_id)
+       SELECT r.id, p.id FROM roles r JOIN permissions p
+        WHERE r.name IN ('admin', 'tenant_admin') AND p.is_catalog = 1 AND p.name <> 'dashboard.view_super_admin'`
+    );
+    console.log('  Administrator roles hold every permission');
+
     console.log('✅ Migration completed successfully!');
     process.exit(0);
   } catch (error) {

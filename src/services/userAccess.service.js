@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const catalog = require('../config/accessCatalog');
 const accessService = require('./access.service');
 const accessAudit = require('./accessAudit.service');
+const { isNonEscalating } = require('../utils/accessRules');
 
 const loadTarget = async (tenantId, userId) => {
   const loaded = await accessService.getAccessForUserId(tenantId, userId);
@@ -111,7 +112,7 @@ const saveOverrides = async (tenantId, userId, items = [], actor = {}) => {
     if (it.effect === 'grant' && roleNames.has(perm.name)) { dropped += 1; continue; }
     if (it.effect === 'revoke' && !roleNames.has(perm.name)) { dropped += 1; continue; }
 
-    if (it.effect === 'grant' && actor.access && !actor.access.isSuperAdmin && !actor.access.has(perm.name)) {
+    if (it.effect === 'grant' && actor.access && !actor.access.isSuperAdmin && !isNonEscalating(perm.name) && !actor.access.has(perm.name)) {
       throw ApiError.forbidden(`You can only grant permissions you hold yourself (${perm.name}).`);
     }
     if (it.effect === 'revoke' && actor.userId === user.id && ['roles.update', 'roles.read', 'users.update'].includes(perm.name)) {

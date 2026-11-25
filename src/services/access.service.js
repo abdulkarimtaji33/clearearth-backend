@@ -11,6 +11,7 @@
  */
 const db = require('../models');
 const catalog = require('../config/accessCatalog');
+const FULL_ACCESS_ROLES = ['admin', 'tenant_admin'];
 
 const CACHE_TTL_MS = 10 * 1000;
 const cache = new Map(); // key: userId -> { at, access }
@@ -92,6 +93,11 @@ async function buildAccess(user) {
   }
 
   const effective = new Set(rolePerms);
+  // Administrators can do everything inside their company: every catalog permission, including ones added later.
+  // (dashboard.view_super_admin is the cross-company platform dashboard and stays with Super Admin.)
+  if (FULL_ACCESS_ROLES.includes(role?.name)) {
+    catalog.PERMISSIONS.forEach((p) => { if (p.name !== 'dashboard.view_super_admin') effective.add(p.name); });
+  }
   grants.forEach((n) => effective.add(n));
   revokes.forEach((n) => effective.delete(n));
 
