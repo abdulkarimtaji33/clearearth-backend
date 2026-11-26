@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
         references: { model: 'tenants', key: 'id' },
       },
       title: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.TEXT('medium'),
         allowNull: false,
       },
       content: {

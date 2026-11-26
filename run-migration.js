@@ -4043,6 +4043,7 @@ async function runMigration() {
     // Terms & Conditions can hold long formatted text (pasted from Word): TEXT (64 KB) was too small and failed with a 500.
     try {
       await db.sequelize.query('ALTER TABLE terms_and_conditions MODIFY COLUMN content MEDIUMTEXT NOT NULL');
+      await db.sequelize.query('ALTER TABLE terms_and_conditions MODIFY COLUMN title MEDIUMTEXT NOT NULL');
     } catch (e) { console.warn('  terms_and_conditions.content:', e.message); }
 
     // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).

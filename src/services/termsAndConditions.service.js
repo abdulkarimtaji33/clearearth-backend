@@ -35,13 +35,12 @@ const getById = async (tenantId, id) => {
   return terms;
 };
 
-// Clear messages instead of a database error (title 255, category 100 characters).
+// Clear messages instead of a database error (the title has no length limit, like the content; category is 100).
 const cleanText = (v) => (v === undefined || v === null ? '' : String(v));
 const validateFields = ({ title, content, category }, { partial = false } = {}) => {
   if (!partial || title !== undefined) {
     const t = cleanText(title).trim();
     if (!t) throw ApiError.badRequest('Title is required');
-    if (t.length > 255) throw ApiError.badRequest(`Title is too long (${t.length} characters, the limit is 255)`);
   }
   if (!partial || content !== undefined) {
     const c = cleanText(content).replace(/<[^>]*>/g, '').trim();
