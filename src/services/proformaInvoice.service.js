@@ -195,6 +195,9 @@ const create = async (tenantId, userId, body, scope = {}) => {
   if (!quotationId) throw ApiError.badRequest('quotationId is required');
 
   const quotation = await quotationService.getById(tenantId, quotationId, scope);
+  if (await require('./quotationCorrection.service').hasOpen(tenantId, quotationId)) {
+    throw ApiError.badRequest('Sales has been asked to correct this quotation. Generate the invoice after sales marks it as corrected.');
+  }
   const dealId = quotation.deal_id;
 
   const existing = await db.ProformaInvoice.findOne({

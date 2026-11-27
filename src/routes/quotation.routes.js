@@ -8,6 +8,13 @@ const { body } = require('express-validator');
 router.use(authenticate);
 
 router.get('/', quotationController.getAll);
+const correctionController = require('../controllers/quotationCorrection.controller');
+router.get('/:id/correction-requests', correctionController.list);
+router.post('/:id/correction-requests', authorize('invoices.generate', 'accounting.read'), [
+  body('message').isString().trim().notEmpty().withMessage('Describe what sales should correct'),
+  validate,
+], correctionController.create);
+router.post('/:id/correction-requests/:requestId/resolve', authorize('quotations.update'), correctionController.resolve);
 router.get('/:id/pickup-request/prefill', quotationController.getPickupRequestPrefill);
 router.get('/:id/pickup-request', quotationController.getPickupRequest);
 router.get('/:id', quotationController.getById);

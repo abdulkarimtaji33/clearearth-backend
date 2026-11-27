@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middlewares/auth');
 router.use(authenticate);
 
 router.get('/', authorize('inspection_requests.read'), inspectionRequestController.getAll);
+router.get('/requesters', authorize('inspection_requests.read'), inspectionRequestController.getRequesters);
 router.get('/:id', authorize('inspection_requests.read'), inspectionRequestController.getById);
 router.patch('/:id/status', authorize('inspection_requests.update'), inspectionRequestController.updateStatus);
 router.patch('/:id/priority', authorize('inspection_requests.update'), inspectionRequestController.updatePriority);

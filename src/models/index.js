@@ -91,6 +91,11 @@ const SupplierAdvance = require('./SupplierAdvance')(sequelize, DataTypes);
 const SupplierAdvanceApplication = require('./SupplierAdvanceApplication')(sequelize, DataTypes);
 const StorageFacility = require('./StorageFacility')(sequelize, DataTypes);
 const PickupRequest = require('./PickupRequest')(sequelize, DataTypes);
+const QuotationCorrectionRequest = require('./QuotationCorrectionRequest')(sequelize, DataTypes);
+const WarehouseTag = require('./WarehouseTag')(sequelize, DataTypes);
+const WarehouseBatchTag = require('./WarehouseBatchTag')(sequelize, DataTypes);
+const WarehouseBatch = require('./WarehouseBatch')(sequelize, DataTypes);
+const WarehouseMovement = require('./WarehouseMovement')(sequelize, DataTypes);
 const PickupNoteDetail = require('./PickupNoteDetail')(sequelize, DataTypes);
 const PickupNoteItem = require('./PickupNoteItem')(sequelize, DataTypes);
 const Outbound = require('./Outbound')(sequelize, DataTypes);
@@ -227,6 +232,11 @@ const db = {
   SupplierAdvanceApplication,
   StorageFacility,
   PickupRequest,
+  QuotationCorrectionRequest,
+  WarehouseTag,
+  WarehouseBatchTag,
+  WarehouseBatch,
+  WarehouseMovement,
   PickupNoteDetail,
   PickupNoteItem,
   Outbound,

@@ -8,7 +8,7 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getFileUrl } = require('../middlewares/upload');
 
 const list = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, status, workOrderId, dealId, dateFrom, dateTo } = req.query;
+  const { page, pageSize, search, status, workOrderId, dealId, dateFrom, dateTo, pickupFrom, pickupTo } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const result = await grnService.listGrns(req.tenant.id, {
     ...pagination,
@@ -18,6 +18,8 @@ const list = asyncHandler(async (req, res) => {
     dealId,
     dateFrom,
     dateTo,
+    pickupFrom,
+    pickupTo,
   });
   return ApiResponse.paginated(res, result.grns, {
     page: pagination.page,

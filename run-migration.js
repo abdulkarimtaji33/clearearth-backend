@@ -4040,11 +4040,107 @@ async function runMigration() {
       await db.sequelize.query(`UPDATE commissions c JOIN quotations q ON q.id = c.quotation_id SET c.currency = q.currency WHERE c.currency = 'AED' AND q.currency IS NOT NULL AND q.currency <> 'AED'`);
     } catch (e) { console.warn('  currency backfill:', e.message); }
 
+    console.log('Adding quote expiry to quotations and photos to pickup requests...');
+    try {
+      await db.sequelize.query('ALTER TABLE quotations ADD COLUMN expiry_date DATE NULL');
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  quotations.expiry_date:', e.message); }
+    try {
+      await db.sequelize.query('ALTER TABLE pickup_requests ADD COLUMN photos LONGTEXT NULL');
+    } catch (e) { if (!isDuplicateSchemaError(e)) console.warn('  pickup_requests.photos:', e.message); }
+
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS quotation_correction_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        quotation_id INT NOT NULL,
+        requested_by INT NOT NULL,
+        message TEXT NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'open',
+        response_note TEXT NULL,
+        responded_by INT NULL,
+        responded_at DATETIME NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_qcr_quotation (quotation_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log('Creating warehouse tracking tables...');
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS warehouse_tags (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        name VARCHAR(80) NOT NULL,
+        tag_group VARCHAR(20) NOT NULL,
+        blocks_processing TINYINT(1) NOT NULL DEFAULT 0,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_wh_tag (tenant_id, name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS warehouse_batches (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        batch_code VARCHAR(60) NOT NULL,
+        receipt_code VARCHAR(60) NULL,
+        parent_batch_id INT NULL,
+        grn_id INT NULL,
+        grn_item_id INT NULL,
+        deal_id INT NULL,
+        customer_name VARCHAR(255) NULL,
+        item_name VARCHAR(255) NOT NULL,
+        quantity DECIMAL(15,2) NOT NULL DEFAULT 0,
+        unit_of_measure VARCHAR(20) NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'inspection_pending',
+        location VARCHAR(120) NULL,
+        handling_category VARCHAR(40) NULL,
+        received_at DATETIME NULL,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_wh_batch_code (tenant_id, batch_code),
+        INDEX idx_wh_batch_grn_item (grn_item_id),
+        INDEX idx_wh_batch_parent (parent_batch_id),
+        INDEX idx_wh_batch_status (tenant_id, status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS warehouse_batch_tags (
+        batch_id INT NOT NULL,
+        tag_id INT NOT NULL,
+        PRIMARY KEY (batch_id, tag_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS warehouse_movements (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        batch_id INT NOT NULL,
+        action VARCHAR(40) NOT NULL,
+        quantity DECIMAL(15,2) NULL,
+        from_status VARCHAR(30) NULL,
+        to_status VARCHAR(30) NULL,
+        from_location VARCHAR(120) NULL,
+        to_location VARCHAR(120) NULL,
+        notes TEXT NULL,
+        user_id INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_wh_mv_batch (batch_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // Terms & Conditions can hold long formatted text (pasted from Word): TEXT (64 KB) was too small and failed with a 500.
     try {
       await db.sequelize.query('ALTER TABLE terms_and_conditions MODIFY COLUMN content MEDIUMTEXT NOT NULL');
       await db.sequelize.query('ALTER TABLE terms_and_conditions MODIFY COLUMN title MEDIUMTEXT NOT NULL');
     } catch (e) { console.warn('  terms_and_conditions.content:', e.message); }
+
+    try {
+      const made = await require('./src/services/warehouse.service').backfillFromGrns();
+      if (made) console.log(`  Warehouse tracking: created ${made} batches from approved GRNs`);
+    } catch (e) { console.warn('  warehouse backfill:', e.message); }
 
     // Every GRN gets an outbound entry; backfill the ones that already exist (idempotent).
     try {

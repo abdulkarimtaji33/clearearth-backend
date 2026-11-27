@@ -67,6 +67,7 @@ const update = asyncHandler(async (req, res) => {
 
 const approve = asyncHandler(async (req, res) => {
   assertCanModifyQuotationsAndOrders(req);
+  await pickupRequestService.assertReadyForApproval(req.tenant.id, 'purchase_order', req.params.id, req.body.pickupRequest);
   const scope = getSalesScope(req);
   const po = await purchaseOrderService.approve(req.tenant.id, req.params.id, {
     userId: req.user.id,
@@ -104,6 +105,7 @@ const reschedulePickupDate = asyncHandler(async (req, res) => {
 
 const requestApproval = asyncHandler(async (req, res) => {
   assertCanModifyQuotationsAndOrders(req);
+  await pickupRequestService.assertReadyForApproval(req.tenant.id, 'purchase_order', req.params.id, req.body.pickupRequest);
   const scope = getSalesScope(req);
   const po = await purchaseOrderService.requestApproval(req.tenant.id, req.params.id, req.user, scope, req.body.requestedPickupDate);
   await purchaseOrderService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);

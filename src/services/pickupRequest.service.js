@@ -1,6 +1,8 @@
 const db = require('../models');
 const ApiError = require('../utils/apiError');
 
+const { Op } = db.Sequelize;
+
 const SOURCES = { quotation: 'Quotation', purchase_order: 'PurchaseOrder' };
 
 const CERT_LABELS = {
@@ -26,9 +28,46 @@ const loadSource = async (tenantId, sourceType, sourceId) => {
   return row;
 };
 
+const PHOTO_LIMIT = 20;
+const cleanPhotos = (v) => (Array.isArray(v)
+  ? v.filter((p) => p && typeof p.url === 'string' && p.url.startsWith('/uploads/'))
+    .slice(0, PHOTO_LIMIT)
+    .map((p) => ({ url: p.url, name: String(p.name || '').slice(0, 200) }))
+  : undefined);
+
+/** The one pickup / delivery request of the deal this record belongs to (it may sit on a sibling quotation / order). */
+const dealRequest = async (tenantId, source) => {
+  if (!source?.deal_id) return null;
+  const [qs, pos] = await Promise.all([
+    db.Quotation.findAll({ where: { tenant_id: tenantId, deal_id: source.deal_id }, attributes: ['id', 'status'] }),
+    db.PurchaseOrder.findAll({ where: { tenant_id: tenantId, deal_id: source.deal_id }, attributes: ['id', 'status'] }),
+  ]);
+  const conds = [];
+  if (qs.length) conds.push({ source_type: 'quotation', source_id: qs.map((x) => x.id) });
+  if (pos.length) conds.push({ source_type: 'purchase_order', source_id: pos.map((x) => x.id) });
+  if (!conds.length) return null;
+  const row = await db.PickupRequest.findOne({ where: { tenant_id: tenantId, [Op.or]: conds }, order: [['id', 'ASC']] });
+  if (!row) return null;
+  const owner = row.source_type === 'quotation' ? qs.find((x) => x.id === row.source_id) : pos.find((x) => x.id === row.source_id);
+  return { row, ownerApproved: String(owner?.status || '').toLowerCase() === 'approved' };
+};
+
+/** A quotation / client purchase quotation cannot be approved (or sent for approval) without a pickup / delivery request. */
+const assertReadyForApproval = async (tenantId, sourceType, sourceId, data) => {
+  const source = await loadSource(tenantId, sourceType, sourceId);
+  const own = await db.PickupRequest.findOne({ where: { tenant_id: tenantId, source_type: sourceType, source_id: sourceId } });
+  const dealLevel = await dealRequest(tenantId, source);
+  const provided = data && typeof data === 'object' && str(data.requestDate, 10);
+  if (!provided && !own && !dealLevel) {
+    throw ApiError.badRequest('Schedule a pickup or delivery request (with a date) before approving this quotation');
+  }
+};
+
 /** Default values for the form, built from the deal, its company/contact, items, WDS and certificates. */
 const prefill = async (tenantId, sourceType, sourceId, user = null) => {
   const source = await loadSource(tenantId, sourceType, sourceId);
+  const existingRequest = await dealRequest(tenantId, source);
+  if (existingRequest) return shape(existingRequest.row);
   const deal = source.deal || null;
   const out = {
     requestType: 'pickup',
@@ -100,6 +139,7 @@ const shape = r => {
     laborRequired: p.labor_required, laborCount: p.labor_count,
     wdsNumber: p.wds_number, wdsFoodType: p.wds_food_type, dmInspectionRequired: p.dm_inspection_required,
     pickupNoteRequired: p.pickup_note_required, grnRequired: p.grn_required,
+    photos: p.photos || [],
     certificates: p.certificates || [],
     certificateLabels: (p.certificates || []).map(c => CERT_LABELS[c] || c),
     additionalNotes: p.additional_notes, requestedBy: p.requested_by, createdAt: p.created_at, updatedAt: p.updated_at,
@@ -143,11 +183,20 @@ const save = async (tenantId, sourceType, sourceId, data, userId = null) => {
     additional_notes: str(data.additionalNotes, 5000),
     requested_by: str(data.requestedBy, 255),
   };
+  const photos = cleanPhotos(data.photos);
+  if (photos !== undefined) fields.photos = photos;
   const where = { tenant_id: tenantId, source_type: sourceType, source_id: sourceId };
+  // Only one request per deal: a request already made for another quotation / order of this deal moves here (or is refused once approved).
+  const source = await loadSource(tenantId, sourceType, sourceId);
+  const dealLevel = await dealRequest(tenantId, source);
+  if (dealLevel && !(dealLevel.row.source_type === sourceType && Number(dealLevel.row.source_id) === Number(sourceId))) {
+    if (dealLevel.ownerApproved) throw ApiError.badRequest('This deal already has a pickup / delivery request');
+    await dealLevel.row.update({ source_type: sourceType, source_id: sourceId });
+  }
   const existing = await db.PickupRequest.findOne({ where });
   if (existing) await existing.update(fields);
   else await db.PickupRequest.create({ ...where, ...fields, created_by: userId });
   return getBySource(tenantId, sourceType, sourceId);
 };
 
-module.exports = { prefill, getBySource, save, CERT_LABELS };
+module.exports = { prefill, getBySource, save, assertReadyForApproval, CERT_LABELS };

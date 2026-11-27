@@ -18,6 +18,16 @@ const DEFAULT_BANK_DETAILS = {
   ibanUsd: 'AE55 0030 0128 8280 3830 001 [USD]',
 };
 
+// Bank details printed on proforma invoices.
+const PFI_BANK_DETAILS = {
+  accountTitle: 'CLEAR EARTH RECYCLING LLC',
+  iban: 'AE070030012882803820001',
+  accountNumber: '12882803820001',
+  swift: 'ADCBAEAAXXX',
+  bankName: 'ABU DHABI COMMERCIAL BANK',
+  branch: '751 / IBD-AL RIGGAH ROAD',
+};
+
 const CURRENCY_SYMBOLS = { AED: 'AED', USD: '$', EUR: '€', GBP: '£', SAR: 'SAR', KWD: 'KWD' };
 
 let cachedLogoDataUri = null;
@@ -186,6 +196,12 @@ function resolvePdfAsApproved(recordApproved, options = {}, { allowOverride = tr
 const { isVatApplicable } = require('./../utils/lineVat');
 const { baseCurrency } = require('../utils/currency');
 
+/** Tax registration number shown as "TRN: <digits>" (the label is in the template). */
+function trnDigits(v) {
+  const x = String(v || '').replace(/^s*(TRN|VAT)s*(No.?)?s*[:-]?s*/i, '').trim();
+  return x || '-';
+}
+
 function getVat(tenant) {
   return tenant?.trn_number || tenant?.vat_registration_number || '-';
 }
@@ -204,8 +220,12 @@ function getTermSortOrder(term) {
   return term.DealTerm?.sort_order ?? term.PurchaseOrderTerm?.sort_order ?? 0;
 }
 
-function buildTermsSectionHtml(termsList) {
-  if (!termsList?.length) return '<ul><li>No specific terms and conditions.</li></ul>';
+// Quote validity is shown as the quote expiry in the document details, never as a term (it makes no sense on invoices).
+const isQuoteValidityTerm = (t) => /valid(ity)?[^.]*days?|quotw*s+(iss+)?valid|valids+for|validity/i.test(String(t.title || ''));
+
+function buildTermsSectionHtml(termsListAll) {
+  const termsList = (termsListAll || []).filter((t) => !isQuoteValidityTerm(t));
+  if (!termsList.length) return '<ul><li>No specific terms and conditions.</li></ul>';
   const items = termsList
     .sort((a, b) => getTermSortOrder(a) - getTermSortOrder(b))
     .map((t) => `<li>${(t.title || '').replace(/</g, '&lt;')}</li>`)
@@ -344,6 +364,7 @@ async function generateQuotationPdf(quotationId, tenantId, options = {}) {
   const metaLinesHtml = buildMetaLinesHtml([
     [approved ? 'Order Number' : 'Quote Number', quoteNumber],
     [approved ? 'Order Date' : 'Quote Date', quoteDate],
+    ...(!approved && quotation.expiry_date ? [['Quote Expiry', formatDate(quotation.expiry_date)]] : []),
   ]);
   const fromAddr = [tenant.address, tenant.city].filter(Boolean).join(', ') || '-';
   const toAddr = company ? [company.address, company.city].filter(Boolean).join(', ') || '-' : '-';
@@ -836,21 +857,21 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
     subtotal += amount;
     totalVat += tax;
     const unit = formatUom(uomMap, item.unit_of_measure || item.productService?.unit_of_measure);
-    const qtyDisplay = unit ? `${formatCompactNum(qty)} (${escapeHtml(unit)})` : formatCompactNum(qty);
-    const vatDisplay = formatCompactNum(tax);
+    const qtyDisplay = unit ? `${formatNum(qty)} (${escapeHtml(unit)})` : formatNum(qty);
+    const vatDisplay = formatNum(tax);
     itemsHtml += `<tr>
       <td>${formatItemWithDescription(item.productService?.name, item.description)}</td>
-      <td class="text-right">${formatCompactNum(unitPrice)}</td>
+      <td class="text-right">${formatNum(unitPrice)}</td>
       <td class="text-right">${qtyDisplay}</td>
-      <td class="text-right">${formatCompactNum(amount)}</td>
+      <td class="text-right">${formatNum(amount)}</td>
       <td class="text-right">${vatDisplay}</td>
-      <td class="text-right">${formatCompactNum(total)}</td>
+      <td class="text-right">${formatNum(total)}</td>
     </tr>`;
   });
 
   const others = 0;
   const grandTotal = subtotal + totalVat + others;
-  const vatLabel = isRcm ? 'Value-Added Tax' : `Value-Added Tax (${formatCompactNum(vatPct * 100)}%)`;
+  const vatLabel = isRcm ? 'Value-Added Tax' : `Value-Added Tax (${formatNum(vatPct * 100)}%)`;
   const documentTitle = 'PROFORMA INVOICE';
   const metaLinesHtml = buildMetaLinesHtml([
     ['Invoice Number', invoice.proforma_number],
@@ -861,7 +882,7 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
 
   const termsSectionHtml = buildTermsSectionHtml(invoice.deal?.termsList || []);
 
-  const html = renderTemplate(path.join(__dirname, '../templates/quotation.html'), {
+  const html = renderTemplate(path.join(__dirname, '../templates/proforma-invoice.html'), {
     logoDataUri: getLogoDataUri(),
     stampDataUri: getStampDataUri(),
     signatureImgHtml: buildSignatureImgHtml(invoice.createdByUser, tenant),
@@ -872,20 +893,26 @@ async function generateProformaInvoicePdf(proformaInvoiceId, tenantId) {
     fromEmail: tenant.email || '-',
     fromPhone: tenant.phone || '-',
     fromAddress: fromAddr,
-    fromVat: getVat(tenant),
+    fromVat: trnDigits(getVat(tenant)),
     toContactName: personFullName(invoice.deal?.contact) || '-',
     toCompany: company?.company_name || '-',
     toEmail: company?.email || '-',
     toPhone: company?.phone || '-',
     toAddress: toAddr,
-    toVat: company?.vat_number || '-',
+    toVat: trnDigits(company?.vat_number),
     itemsHtml,
     currency,
-    subtotal: formatCompactNum(subtotal),
-    totalVat: formatCompactNum(totalVat),
-    vatAmountDisplay: `${currency} ${formatCompactNum(totalVat)}`,
-    others: formatCompactNum(others),
-    grandTotal: formatCompactNum(grandTotal),
+    subtotal: formatNum(subtotal),
+    totalVat: formatNum(totalVat),
+    vatAmountDisplay: `${currency} ${formatNum(totalVat)}`,
+    grandTotal: formatNum(grandTotal),
+    amountInWords: escapeHtml(amountInWords(grandTotal, currency)),
+    bankAccountTitle: PFI_BANK_DETAILS.accountTitle,
+    bankIban: PFI_BANK_DETAILS.iban,
+    bankAccountNumber: PFI_BANK_DETAILS.accountNumber,
+    bankSwift: PFI_BANK_DETAILS.swift,
+    bankName: PFI_BANK_DETAILS.bankName,
+    bankBranch: PFI_BANK_DETAILS.branch,
     vatLabel,
     dealType,
     termsSectionHtml,

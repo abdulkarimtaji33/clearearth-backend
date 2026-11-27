@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<style>
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+  font-family:Arial, Helvetica, sans-serif;
+  font-size:13.5px;
+  margin:0;
+  color:#333;
+}
+
+/* HEADER */
+
+.doc-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  width:100%;
+}
+
+.logo{
+  width:130px;
+}
+
+.doc-header-right{
+  text-align:right;
+}
+
+.doc-title{
+  font-size:24px;
+  font-weight:800;
+  color:#1e8449;
+  letter-spacing:0.5px;
+  margin-bottom:6px;
+}
+
+.doc-meta{
+  font-size:12.5px;
+  color:#333;
+}
+
+.doc-meta-line{
+  margin:1px 0;
+}
+
+.header-divider{
+  height:2px;
+  background:#1e8449;
+  width:100%;
+  margin:12px 0 16px 0;
+}
+
+/* PARTY INFO */
+
+.party-grid{
+  display:flex;
+  width:100%;
+  gap:24px;
+  margin-bottom:14px;
+}
+
+.party-col{
+  width:50%;
+}
+
+.party-line{
+  font-size:12.5px;
+  color:#2b3a55;
+  margin:2px 0;
+}
+
+.party-line strong{
+  color:#1a1a1a;
+}
+
+.party-label{
+  font-size:12.5px;
+  font-weight:800;
+  color:#1e8449;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  margin-bottom:4px;
+}
+
+.party-divider{
+  height:1px;
+  background:#8fca9b;
+  width:100%;
+  margin-bottom:14px;
+}
+
+/* SALUTATION */
+
+.salutation{
+  font-size:13.5px;
+  margin-bottom:12px;
+  color:#333;
+}
+
+/* ITEMS TABLE */
+
+.items-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-bottom:14px;
+}
+
+.items-table th{
+  background:#1e8449;
+  color:#fff;
+  padding:10px 10px;
+  font-size:12.5px;
+  text-align:left;
+  font-weight:700;
+}
+
+.items-table th.text-right{
+  text-align:right;
+}
+
+.items-table td{
+  padding:10px 10px;
+  font-size:12.5px;
+  border-bottom:1px solid #e3e3e3;
+  vertical-align:top;
+}
+
+.text-right{
+  text-align:right;
+}
+
+/* TOTALS */
+
+.totals-wrap{
+  display:flex;
+  justify-content:flex-end;
+  margin-bottom:18px;
+}
+
+.totals-box{
+  width:280px;
+}
+
+.totals-row{
+  display:flex;
+  justify-content:space-between;
+  padding:5px 0;
+  font-size:12.5px;
+  color:#333;
+}
+
+.totals-row.totals-final{
+  border-top:1px solid #999;
+  margin-top:4px;
+  padding-top:8px;
+  font-weight:800;
+  font-size:13.5px;
+}
+
+/* TERMS */
+
+.terms{
+  font-size:12px;
+  color:#333;
+  margin-bottom:26px;
+}
+
+.terms-title{
+  font-weight:700;
+  margin-bottom:4px;
+}
+
+.terms ul{
+  margin:0;
+  padding-left:16px;
+}
+
+.terms li{
+  margin:2px 0;
+  color:#555;
+}
+
+.rcm-note{
+  font-size:11.5px;
+  color:#b71c1c;
+  margin-top:4px;
+}
+
+.words{
+  font-size:12.5px;
+  margin:0 0 14px 0;
+  color:#333;
+}
+
+.bank{
+  font-size:12px;
+  margin-bottom:18px;
+  color:#333;
+}
+
+.bank-line{
+  margin:2px 0;
+}
+
+/* SIGNATURES */
+
+.sign-row{
+  display:flex;
+  justify-content:space-between;
+  margin-top:10px;
+}
+
+.sign-col{
+  width:45%;
+  text-align:center;
+}
+
+.stamp-wrap{
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  gap:8px;
+  height:110px;
+}
+
+.stamp{
+  width:110px;
+  opacity:0.95;
+}
+
+/* The signature sits beside the stamp (not overlapping it), so both remain fully legible. */
+.signature{
+  max-width:110px;
+  max-height:80px;
+}
+
+.sign-line{
+  border-top:1px solid #333;
+  margin-bottom:6px;
+  position:relative;
+  z-index:1;
+}
+
+.sign-label{
+  font-size:12.5px;
+  font-weight:700;
+  color:#1a1a1a;
+}
+
+/* FOOTER */
+
+.footer-bar{
+  height:10px;
+  margin-top:24px;
+  background:linear-gradient(90deg,#1e8449,#5fb37a,#bfe3cc);
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="doc-header">
+  <img class="logo" src="{{logoDataUri}}">
+  <div class="doc-header-right">
+    <div class="doc-title">{{documentTitle}}</div>
+    <div class="doc-meta">{{metaLinesHtml}}</div>
+  </div>
+</div>
+
+<div class="header-divider"></div>
+
+<div class="party-grid">
+  <div class="party-col">
+    <div class="party-label">From</div>
+    <div class="party-line"><strong>Name:</strong> {{fromContactName}}</div>
+    <div class="party-line"><strong>Company:</strong> {{fromCompany}}</div>
+    <div class="party-line"><strong>Email:</strong> {{fromEmail}}</div>
+    <div class="party-line"><strong>Phone:</strong> {{fromPhone}}</div>
+    <div class="party-line"><strong>Address:</strong> {{fromAddress}}</div>
+    <div class="party-line"><strong>TRN:</strong> {{fromVat}}</div>
+  </div>
+  <div class="party-col">
+    <div class="party-label">To</div>
+    <div class="party-line"><strong>Name:</strong> {{toContactName}}</div>
+    <div class="party-line"><strong>Company:</strong> {{toCompany}}</div>
+    <div class="party-line"><strong>Email:</strong> {{toEmail}}</div>
+    <div class="party-line"><strong>Phone:</strong> {{toPhone}}</div>
+    <div class="party-line"><strong>Address:</strong> {{toAddress}}</div>
+    <div class="party-line"><strong>TRN:</strong> {{toVat}}</div>
+  </div>
+</div>
+
+<div class="party-divider"></div>
+
+<div class="salutation">Dear {{toCompany}},</div>
+
+<table class="items-table">
+<thead>
+<tr>
+<th style="width:34%">Description</th>
+<th style="width:14%" class="text-right">Unit Charge ({{currency}})</th>
+<th style="width:16%" class="text-right">Quantity</th>
+<th style="width:12%" class="text-right">Amount ({{currency}})</th>
+<th style="width:10%" class="text-right">VAT ({{currency}})</th>
+<th style="width:14%" class="text-right">Total ({{currency}})</th>
+</tr>
+</thead>
+<tbody>
+{{itemsHtml}}
+</tbody>
+</table>
+
+<div class="totals-wrap">
+  <div class="totals-box">
+    <div class="totals-row"><span>Subtotal</span><span>{{currency}} {{subtotal}}</span></div>
+    <div class="totals-row"><span>{{vatLabel}}</span><span>{{vatAmountDisplay}}</span></div>
+    <div class="totals-row totals-final"><span>Total</span><span>{{currency}} {{grandTotal}}</span></div>
+  </div>
+</div>
+{{rcmNoteHtml}}
+
+<div class="words"><strong>Amount in words:</strong> {{amountInWords}} only</div>
+
+<div class="bank">
+  <div class="terms-title">Bank Details:</div>
+  <div class="bank-line"><strong>Account Title:</strong> {{bankAccountTitle}}</div>
+  <div class="bank-line"><strong>IBAN:</strong> {{bankIban}}</div>
+  <div class="bank-line"><strong>Account Number:</strong> {{bankAccountNumber}}</div>
+  <div class="bank-line"><strong>BIC / SWIFT:</strong> {{bankSwift}}</div>
+  <div class="bank-line"><strong>Bank:</strong> {{bankName}}</div>
+  <div class="bank-line"><strong>Branch Code / Branch Name:</strong> {{bankBranch}}</div>
+</div>
+
+<div class="terms">
+<div class="terms-title">Terms &amp; Conditions:</div>
+{{termsSectionHtml}}
+</div>
+
+<div class="sign-row">
+  <div class="sign-col">
+    <div class="stamp-wrap">
+      {{signatureImgHtml}}
+      <img class="stamp" src="{{stampDataUri}}">
+    </div>
+    <div class="sign-line"></div>
+    <div class="sign-label">For {{fromCompany}}</div>
+  </div>
+  <div class="sign-col">
+    <div class="stamp-wrap"></div>
+    <div class="sign-line"></div>
+    <div class="sign-label">For {{toCompany}}</div>
+  </div>
+</div>
+
+<div class="footer-bar"></div>
+
+</body>
+</html>

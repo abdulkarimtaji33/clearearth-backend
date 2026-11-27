@@ -40,6 +40,7 @@ module.exports = (sequelize, DataTypes) => {
       pickup_note_required: { type: DataTypes.BOOLEAN, allowNull: true },
       grn_required: { type: DataTypes.BOOLEAN, allowNull: true },
       certificates: json('certificates'),
+      photos: json('photos'),
       additional_notes: { type: DataTypes.TEXT, allowNull: true },
       requested_by: { type: DataTypes.STRING(255), allowNull: true },
       created_by: { type: DataTypes.INTEGER, allowNull: true },

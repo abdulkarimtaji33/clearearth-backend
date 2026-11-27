@@ -109,10 +109,59 @@ async function incrementInventory(tenantId, materialTypeId, quantity, unitOfMeas
   }
 }
 
+/**
+ * Pickup / delivery date per deal: the date operations confirmed, else the date in the deal's pickup / delivery
+ * request, else the date sales requested. Returns Map<dealId, 'YYYY-MM-DD'>.
+ */
+const pickupDatesByDeal = async (tenantId, dealIds) => {
+  const ids = [...new Set((dealIds || []).filter(Boolean))];
+  const out = new Map();
+  if (!ids.length) return out;
+  const attrs = ['id', 'deal_id', 'confirmed_pickup_date', 'requested_pickup_date'];
+  const [qs, pos] = await Promise.all([
+    db.Quotation.findAll({ where: { tenant_id: tenantId, deal_id: ids }, attributes: attrs, raw: true }),
+    db.PurchaseOrder.findAll({ where: { tenant_id: tenantId, deal_id: ids }, attributes: attrs, raw: true }),
+  ]);
+  const dealOf = { quotation: new Map(qs.map((q) => [q.id, q.deal_id])), purchase_order: new Map(pos.map((p) => [p.id, p.deal_id])) };
+  const reqs = await db.PickupRequest.findAll({
+    where: {
+      tenant_id: tenantId,
+      [Op.or]: [
+        ...(qs.length ? [{ source_type: 'quotation', source_id: qs.map((q) => q.id) }] : []),
+        ...(pos.length ? [{ source_type: 'purchase_order', source_id: pos.map((p) => p.id) }] : []),
+      ],
+    },
+    attributes: ['source_type', 'source_id', 'request_date'],
+    raw: true,
+  }).catch(() => []);
+  const asDay = (v) => (v ? String(v).slice(0, 10) : null);
+  const best = new Map(); // dealId -> { confirmed, request, requested }
+  const slot = (id) => { if (!best.has(id)) best.set(id, {}); return best.get(id); };
+  [...qs, ...pos].forEach((r) => {
+    const s = slot(r.deal_id);
+    s.confirmed = s.confirmed || asDay(r.confirmed_pickup_date);
+    s.requested = s.requested || asDay(r.requested_pickup_date);
+  });
+  reqs.forEach((r) => {
+    const d = dealOf[r.source_type]?.get(r.source_id);
+    if (d) { const s = slot(d); s.request = s.request || asDay(r.request_date); }
+  });
+  best.forEach((s, id) => { const v = s.confirmed || s.request || s.requested; if (v) out.set(id, v); });
+  return out;
+};
+
 const listGrns = async (tenantId, filters = {}) => {
-  const { offset, limit, search, status, workOrderId, dealId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, status, workOrderId, dealId, dateFrom, dateTo, pickupFrom, pickupTo } = filters;
   const where = { tenant_id: tenantId };
   applyCreatedAtFilter(where, dateFrom, dateTo);
+  if (pickupFrom || pickupTo) {
+    const dealRows = await db.Grn.findAll({ where: { tenant_id: tenantId, deal_id: { [Op.ne]: null } }, attributes: ['deal_id'], group: ['deal_id'], raw: true });
+    const dates = await pickupDatesByDeal(tenantId, dealRows.map((r) => r.deal_id));
+    const inRange = [...dates.entries()]
+      .filter(([, d]) => (!pickupFrom || d >= String(pickupFrom).slice(0, 10)) && (!pickupTo || d <= String(pickupTo).slice(0, 10)))
+      .map(([id]) => id);
+    where.deal_id = inRange.length ? { [Op.in]: inRange } : { [Op.in]: [0] };
+  }
   if (status && GRN_STATUSES.includes(status)) where.status = status;
   if (workOrderId) where.work_order_id = workOrderId;
   if (dealId) where.deal_id = dealId;
@@ -136,7 +185,10 @@ const listGrns = async (tenantId, filters = {}) => {
     distinct: true,
   });
 
-  return { grns: rows.map((r) => r.get({ plain: true })), total: count };
+  const grns = rows.map((r) => r.get({ plain: true }));
+  const dates = await pickupDatesByDeal(tenantId, grns.map((g) => g.deal_id));
+  grns.forEach((g) => { g.pickup_delivery_date = dates.get(g.deal_id) || null; });
+  return { grns, total: count };
 };
 
 /**
@@ -470,6 +522,12 @@ const approveGrn = async (tenantId, id, userId) => {
     );
 
     await t.commit();
+
+    try {
+      await require('./warehouse.service').createForGrn(tenantId, grn.id, userId);
+    } catch (e) {
+      console.warn('[Warehouse] batch creation on GRN approval skipped:', e.message);
+    }
 
     if (grn.deal_id) {
       try {

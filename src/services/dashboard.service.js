@@ -537,6 +537,8 @@ async function getInspectionOverview(tenantId, userId) {
       ],
       where: {
         status: { [Op.notIn]: ['report_submitted', 'inspection_completed'] },
+        // Rejected requests are finished business for the inspection team: they leave the dashboard.
+        [Op.or]: [{ response_status: null }, { response_status: { [Op.ne]: 'rejected' } }],
       },
       order: [
         [db.sequelize.literal(`FIELD(priority, 'critical', 'high', 'medium', 'low')`), 'ASC'],
@@ -566,10 +568,10 @@ async function getInspectionOverview(tenantId, userId) {
   return {
     role: 'inspection_team',
     kpis: [
-      { label: 'New requests', value: newCount, format: 'number', highlight: newCount > 0 },
-      { label: 'In progress', value: inProgress, format: 'number' },
-      { label: 'Completed this week', value: completedThisWeek, format: 'number' },
-      { label: 'Completed this month', value: completedThisMonth, format: 'number' },
+      { label: 'New requests', value: newCount, format: 'number', highlight: newCount > 0, href: '/erp/inspection-requests?stage=request_submitted' },
+      { label: 'In progress', value: inProgress, format: 'number', href: '/erp/inspection-requests?stage=team_assigned' },
+      { label: 'Completed this week', value: completedThisWeek, format: 'number', href: `/erp/inspection-requests?stage=completed&updatedFrom=${new Date(weekStart).toISOString().slice(0, 10)}` },
+      { label: 'Completed this month', value: completedThisMonth, format: 'number', href: `/erp/inspection-requests?stage=completed&updatedFrom=${new Date(monthStart()).toISOString().slice(0, 10)}` },
     ],
     actionables: openRequests.slice(0, 15).map((r) => ({
       id: `insp-${r.id}`,

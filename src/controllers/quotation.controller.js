@@ -71,6 +71,7 @@ const remove = asyncHandler(async (req, res) => {
 
 const approve = asyncHandler(async (req, res) => {
   assertCanModifyQuotationsAndOrders(req);
+  await pickupRequestService.assertReadyForApproval(req.tenant.id, 'quotation', req.params.id, req.body.pickupRequest);
   const scope = getSalesScope(req);
   const quotation = await quotationService.approve(req.tenant.id, req.params.id, scope, {
     userId: req.user.id,
@@ -109,6 +110,7 @@ const reschedulePickupDate = asyncHandler(async (req, res) => {
 
 const requestApproval = asyncHandler(async (req, res) => {
   assertCanModifyQuotationsAndOrders(req);
+  await pickupRequestService.assertReadyForApproval(req.tenant.id, 'quotation', req.params.id, req.body.pickupRequest);
   const scope = getSalesScope(req);
   const quotation = await quotationService.requestApproval(req.tenant.id, req.params.id, scope, req.user, req.body.requestedPickupDate);
   await quotationService.setPickupRequestNote(req.tenant.id, req.params.id, req.body.pickupRequestNote);

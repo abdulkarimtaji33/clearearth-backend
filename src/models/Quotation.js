@@ -10,6 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       deal_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'deals', key: 'id' } },
       prepared_by: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'users', key: 'id' } },
       quotation_date: { type: DataTypes.DATEONLY, allowNull: false },
+      expiry_date: { type: DataTypes.DATEONLY, allowNull: true, comment: 'Date until which the quoted price holds (chosen by sales)' },
       quotation_amount: { type: DataTypes.DECIMAL(15, 2), allowNull: false, defaultValue: 0 },
       currency: { type: DataTypes.STRING(10), defaultValue: 'AED' },
       status: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'new' },

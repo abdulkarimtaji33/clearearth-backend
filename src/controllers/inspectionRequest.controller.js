@@ -5,7 +5,7 @@ const { getPaginationParams } = require('../utils/helpers');
 const { getSalesScope } = require('../utils/scopeHelper');
 
 const getAll = asyncHandler(async (req, res) => {
-  const { page, pageSize, search, dealId, status, priority, responseStatus, dateFrom, dateTo } = req.query;
+  const { page, pageSize, search, dealId, status, priority, responseStatus, dateFrom, dateTo, requestedBy, updatedFrom } = req.query;
   const pagination = getPaginationParams(page, pageSize);
   const scope = getSalesScope(req);
   const result = await inspectionRequestService.getAll(req.tenant.id, {
@@ -17,6 +17,8 @@ const getAll = asyncHandler(async (req, res) => {
     responseStatus,
     dateFrom,
     dateTo,
+    requestedBy,
+    updatedFrom,
     ...scope,
   });
   return ApiResponse.paginated(res, result.inspectionRequests, {
@@ -24,6 +26,12 @@ const getAll = asyncHandler(async (req, res) => {
     pageSize: pagination.pageSize,
     totalItems: result.total,
   });
+});
+
+const getRequesters = asyncHandler(async (req, res) => {
+  const scope = getSalesScope(req);
+  const rows = await inspectionRequestService.getRequesters(req.tenant.id, scope);
+  return ApiResponse.success(res, rows);
 });
 
 const getById = asyncHandler(async (req, res) => {
@@ -59,4 +67,4 @@ const rejectRequest = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, request, 'Inspection request rejected');
 });
 
-module.exports = { getAll, getById, updateStatus, updatePriority, acceptRequest, rejectRequest };
+module.exports = { getAll, getRequesters, getById, updateStatus, updatePriority, acceptRequest, rejectRequest };

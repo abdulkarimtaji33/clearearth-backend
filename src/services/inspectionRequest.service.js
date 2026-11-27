@@ -12,7 +12,7 @@ const VALID_PRIORITIES = ['critical', 'high', 'medium', 'low'];
 const VALID_RESPONSE_STATUSES = ['pending', 'accepted', 'rejected'];
 
 const getAll = async (tenantId, filters = {}) => {
-  const { offset, limit, search, dealId, status, priority, responseStatus, scopeUserId, dateFrom, dateTo } = filters;
+  const { offset, limit, search, dealId, status, priority, responseStatus, scopeUserId, dateFrom, dateTo, requestedBy, updatedFrom } = filters;
 
   const dealWhere = { tenant_id: tenantId };
   if (scopeUserId) dealWhere.assigned_to = scopeUserId;
@@ -29,7 +29,10 @@ const getAll = async (tenantId, filters = {}) => {
   }
 
   const requestWhere = {};
-  if (status) requestWhere.status = status;
+  if (status === 'completed') requestWhere.status = { [Op.in]: ['inspection_completed', 'report_submitted'] };
+  else if (status) requestWhere.status = status;
+  if (requestedBy) requestWhere.requested_by = requestedBy;
+  if (updatedFrom && /^\d{4}-\d{2}-\d{2}/.test(String(updatedFrom))) requestWhere.updated_at = { [Op.gte]: new Date(`${String(updatedFrom).slice(0, 10)}T00:00:00`) };
   if (priority) requestWhere.priority = priority;
   if (responseStatus) requestWhere.response_status = responseStatus;
   applyCreatedAtFilter(requestWhere, dateFrom, dateTo);
@@ -114,6 +117,25 @@ const getById = async (tenantId, requestId, scope = {}) => {
 
   if (!request) throw ApiError.notFound('Inspection request not found');
   return request;
+};
+
+/** People who have requested inspections (for the "requested by" filter). */
+const getRequesters = async (tenantId, scope = {}) => {
+  const dealWhere = { tenant_id: tenantId };
+  if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
+  const rows = await db.DealInspectionRequest.findAll({
+    attributes: ['requested_by'],
+    include: [
+      { model: db.Deal, as: 'deal', where: dealWhere, required: true, attributes: [] },
+      { model: db.User, as: 'requestedByUser', attributes: ['id', 'first_name', 'last_name'], required: true },
+    ],
+    group: ['requested_by', 'requestedByUser.id'],
+  });
+  return rows
+    .map((r) => r.requestedByUser)
+    .filter(Boolean)
+    .map((u) => ({ id: u.id, name: [u.first_name, u.last_name].filter(Boolean).join(' ') }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 };
 
 const updateStatus = async (tenantId, requestId, status, scope = {}) => {
