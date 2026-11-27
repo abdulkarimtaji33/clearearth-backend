@@ -345,7 +345,9 @@ const split = async (tenantId, id, user, groups) => {
   if (total > remaining + 0.0001) throw ApiError.badRequest(`The groups add up to ${total} but only ${remaining} ${batch.unit_of_measure || ''} is left to assign`.trim());
 
   await db.sequelize.transaction(async (t) => {
-    const parentTags = await db.WarehouseBatchTag.findAll({ where: { batch_id: batch.id }, transaction: t });
+    const pendingTag = await tagByName(tenantId, 'Pending Inspection', t);
+    // A split group has been looked at, so it does not inherit the pending-inspection tag.
+    const parentTags = (await db.WarehouseBatchTag.findAll({ where: { batch_id: batch.id }, transaction: t })).filter((x) => !pendingTag || x.tag_id !== pendingTag.id);
     let seq = children.length;
     for (const g of parsed) {
       seq += 1;
