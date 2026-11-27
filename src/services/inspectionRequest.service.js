@@ -124,16 +124,15 @@ const getRequesters = async (tenantId, scope = {}) => {
   const dealWhere = { tenant_id: tenantId };
   if (scope.scopeUserId) dealWhere.assigned_to = scope.scopeUserId;
   const rows = await db.DealInspectionRequest.findAll({
-    attributes: ['requested_by'],
+    attributes: ['id', 'requested_by'],
     include: [
-      { model: db.Deal, as: 'deal', where: dealWhere, required: true, attributes: [] },
+      { model: db.Deal, as: 'deal', where: dealWhere, required: true, attributes: ['id'] },
       { model: db.User, as: 'requestedByUser', attributes: ['id', 'first_name', 'last_name'], required: true },
     ],
-    group: ['requested_by', 'requestedByUser.id'],
   });
-  return rows
-    .map((r) => r.requestedByUser)
-    .filter(Boolean)
+  const unique = new Map();
+  rows.forEach((r) => { if (r.requestedByUser) unique.set(r.requestedByUser.id, r.requestedByUser); });
+  return [...unique.values()]
     .map((u) => ({ id: u.id, name: [u.first_name, u.last_name].filter(Boolean).join(' ') }))
     .sort((a, b) => a.name.localeCompare(b.name));
 };
