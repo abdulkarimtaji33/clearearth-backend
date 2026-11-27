@@ -192,6 +192,7 @@ const rejectRequest = async (tenantId, requestId, reason, scope = {}, actor = nu
 
 module.exports = {
   getAll,
+  getRequesters,
   getById,
   updateStatus,
   updatePriority,
