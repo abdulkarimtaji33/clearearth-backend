@@ -198,7 +198,7 @@ const { baseCurrency } = require('../utils/currency');
 
 /** Tax registration number shown as "TRN: <digits>" (the label is in the template). */
 function trnDigits(v) {
-  const x = String(v || '').replace(/^s*(TRN|VAT)s*(No.?)?s*[:-]?s*/i, '').trim();
+  const x = String(v || '').replace(/^\s*(TRN|VAT)\s*(No\.?)?\s*[:-]?\s*/i, '').trim();
   return x || '-';
 }
 
@@ -221,7 +221,7 @@ function getTermSortOrder(term) {
 }
 
 // Quote validity is shown as the quote expiry in the document details, never as a term (it makes no sense on invoices).
-const isQuoteValidityTerm = (t) => /valid(ity)?[^.]*days?|quotw*s+(iss+)?valid|valids+for|validity/i.test(String(t.title || ''));
+const isQuoteValidityTerm = (t) => /valid(ity)?\b[^.]*\bdays?|quot\w*\s+(is\s+)?valid|valid\s+for|validity/i.test(String(t.title || ''));
 
 function buildTermsSectionHtml(termsListAll) {
   const termsList = (termsListAll || []).filter((t) => !isQuoteValidityTerm(t));

@@ -171,7 +171,7 @@ const create = async (tenantId, data, scope = {}) => {
         deal_id: dealId,
         prepared_by: effectivePreparedBy,
         quotation_date: quotationDate,
-        expiry_date: /^d{4}-d{2}-d{2}$/.test(String(data.expiryDate || '')) ? data.expiryDate : null,
+        expiry_date: /^\d{4}-\d{2}-\d{2}$/.test(String(data.expiryDate || '')) ? data.expiryDate : null,
         quotation_amount: parseFloat(quotationAmount) || 0,
         currency,
         status: QUOTATION_STATUS.NEW,
